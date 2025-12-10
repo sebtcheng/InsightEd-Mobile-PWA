@@ -1,165 +1,247 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Pagination, Autoplay } from 'swiper/modules';
-import 'swiper/css';
-import 'swiper/css/pagination';
-
-// Components
-import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition';
-import { auth, db } from '../firebase';
+import { auth, db } from '../firebase'; 
 import { doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from "firebase/auth";
+import BottomNav from './BottomNav';
+import LoadingScreen from '../components/LoadingScreen';
 
 const SchoolHeadDashboard = () => {
     const navigate = useNavigate();
-    const [userName, setUserName] = useState('School Head'); // Default state
 
-    // 1. Fetch User Data (Restored from the second branch)
+    // --- STATE ---
+    const [loading, setLoading] = useState(true);
+    const [userName, setUserName] = useState('School Head');
+    
+    // Data States
+    const [schoolProfile, setSchoolProfile] = useState(null);
+    const [headProfile, setHeadProfile] = useState(null);
+    
+    // Calculated Stats
+    const [progress, setProgress] = useState(0);
+    const [completedForms, setCompletedForms] = useState(0);
+    const totalForms = 8; // Matches the 8 items in SchoolForms.jsx
+
+    // --- 1. FETCH DATA ---
     useEffect(() => {
-        const fetchUserData = async () => {
-            const user = auth.currentUser;
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const docRef = doc(db, "users", user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setUserName(docSnap.data().firstName);
+                try {
+                    // A. Get User Name (Firebase)
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) setUserName(userDoc.data().firstName);
+
+                    // B. Get School Profile & Enrolment (Neon)
+                    const profileRes = await fetch(`http://localhost:3000/api/school-by-user/${user.uid}`);
+                    const profileJson = await profileRes.json();
+                    
+                    if (profileJson.exists) {
+                        setSchoolProfile(profileJson.data);
+                    }
+
+                    // C. Get School Head Info (Neon)
+                    const headRes = await fetch(`http://localhost:3000/api/school-head/${user.uid}`);
+                    const headJson = await headRes.json();
+
+                    if (headJson.exists) {
+                        setHeadProfile(headJson.data);
+                    }
+
+                } catch (error) {
+                    console.error("Dashboard Load Error:", error);
                 }
             }
-        };
-        fetchUserData();
+            // Add slight delay for smooth UI
+            setTimeout(() => setLoading(false), 800);
+        });
+        return () => unsubscribe();
     }, []);
 
-    const goToSchoolForms = () => {
-        navigate('/school-forms');
+    // --- 2. CALCULATE PROGRESS (The "8 Forms" Logic) ---
+    useEffect(() => {
+        let count = 0;
+
+        // 1. School Profile
+        if (schoolProfile) count++;
+        
+        // 2. School Head Info
+        if (headProfile) count++;   
+        
+        // 3. Enrolment
+        if (schoolProfile && schoolProfile.total_enrollment > 0) count++; 
+        
+        // 4. Organized Classes (Not built yet)
+        // if (classesData) count++;
+
+        // 5. Teaching Personnel (Not built yet)
+        // if (teachersData) count++;
+
+        // 6. School Infrastructure (Not built yet)
+        // if (infraData) count++;
+
+        // 7. School Resources (Not built yet)
+        // if (resourcesData) count++;
+
+        // 8. Teacher Specialization (Not built yet)
+        // if (specializationData) count++;
+        
+        setCompletedForms(count);
+        setProgress(Math.round((count / totalForms) * 100));
+    }, [schoolProfile, headProfile]);
+
+    // --- HELPERS ---
+    const formatDate = (isoString) => {
+        if (!isoString) return 'Never';
+        return new Date(isoString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
-    // 2. Mock Data & Content (Kept the nicer UI version)
-    const stats = [
-        { label: "Pending Forms", value: "3", color: "text-orange-600", bg: "bg-orange-50" },
-        { label: "Total Teachers", value: "42", color: "text-blue-600", bg: "bg-blue-50" },
-        { label: "Enrolled", value: "1.2k", color: "text-green-600", bg: "bg-green-50" },
-    ];
-
-    const sliderContent = [
-        { 
-            id: 1, 
-            title: `Mabuhay, ${userName}!`, // Personalization added here
-            emoji: "🇵🇭", 
-            description: "Welcome to the new DepEd School Building Management System. Your dashboard is ready." 
-        },
-        { 
-            id: 2, 
-            title: "Report Submission", 
-            emoji: "📅", 
-            description: "The deadline for the Monthly Infrastructure Report is approaching on Friday." 
-        },
-        { 
-            id: 3, 
-            title: "Maintenance Check", 
-            emoji: "🛠️", 
-            description: "Review the recent repair requests submitted by your facilities coordinator." 
-        }
-    ];
+    if (loading) return <LoadingScreen message="Loading Command Center..." />;
 
     return (
-        <PageTransition>
-            <div className="min-h-screen bg-slate-50 font-sans pb-24">
+        <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
+            
+            {/* --- TOP HEADER (IDENTITY) --- */}
+            <div className="bg-[#004A99] px-6 pt-12 pb-32 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                {/* Background Decor */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 
-                {/* --- TOP HEADER (DepEd Blue Brand) --- */}
-                <div className="relative bg-[#004A99] pt-12 pb-20 px-6 rounded-b-[2.5rem] shadow-xl">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-blue-100 text-sm font-medium tracking-wide uppercase">Department of Education</p>
-                            <h1 className="text-3xl font-bold text-white mt-1">Dashboard</h1>
-                            <p className="text-blue-200 mt-2 text-sm">Hello, {userName}. Manage your school's data efficiently.</p>
-                        </div>
-                        {/* Profile Icon */}
-                        <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center border border-white/30 text-white text-xl">
-                            👤
-                        </div>
+                <div className="relative z-10 flex justify-between items-start">
+                    <div className="text-white">
+                        <p className="text-blue-200 text-xs font-bold tracking-widest uppercase mb-1">
+                            {schoolProfile ? `ID: ${schoolProfile.school_id}` : 'No School ID'}
+                        </p>
+                        <h1 className="text-2xl font-bold leading-tight max-w-[250px]">
+                            {schoolProfile ? schoolProfile.school_name : 'No School Profile Linked'}
+                        </h1>
+                        <p className="text-blue-100/80 text-sm mt-2">Principal {userName}</p>
+                    </div>
+                    {/* Progress Ring (Mini) */}
+                    <div className="relative w-16 h-16 flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-blue-900/30" />
+                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" 
+                                className={`${progress === 100 ? 'text-green-400' : 'text-[#FDB913]'}`}
+                                strokeDasharray={175} 
+                                strokeDashoffset={175 - (175 * progress) / 100} 
+                                strokeLinecap="round"
+                            />
+                        </svg>
+                        <span className="absolute text-xs font-bold text-white">{progress}%</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* --- MAIN CONTENT (OVERLAPPING) --- */}
+            <div className="px-5 -mt-24 relative z-20 space-y-5">
+
+                {/* 1. STATUS SUMMARY CARD */}
+                <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-gray-800 font-bold text-lg">Data Completion</h2>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {progress === 100 
+                                ? "Excellent! All reports are up to date." 
+                                : `You have completed ${completedForms} out of ${totalForms} required forms.`}
+                        </p>
+                    </div>
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-sm ${progress === 100 ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600 animate-pulse'}`}>
+                        {progress === 100 ? '✓' : '!'}
                     </div>
                 </div>
 
-                {/* --- MAIN CONTENT CONTAINER --- */}
-                <div className="px-6 -mt-10 relative z-10 space-y-6">
+                {/* 2. THE MAIN ACTION BUTTON */}
+                <button 
+                    onClick={() => navigate('/school-forms')}
+                    className="w-full bg-gradient-to-r from-[#CC0000] to-[#990000] text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-red-900/20 hover:scale-[1.02] transition-transform flex items-center justify-center gap-3"
+                >
+                    <span className="text-xl">📝</span>
+                    <span>Open School Forms Menu</span>
+                </button>
 
-                    {/* 1. Quick Stats Row */}
-                    <div className="grid grid-cols-3 gap-3">
-                        {stats.map((stat, index) => (
-                            <div key={index} className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center text-center">
-                                <span className={`text-xl font-bold ${stat.color}`}>{stat.value}</span>
-                                <span className="text-[10px] text-gray-500 font-medium uppercase tracking-tighter mt-1">{stat.label}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* 2. Announcements Slider (Swiper) */}
-                    <div className="w-full">
-                        <div className="flex items-center justify-between mb-3 px-1">
-                            <h2 className="text-gray-800 font-bold text-lg">Updates & Reminders</h2>
-                            <span className="text-xs text-[#004A99] font-medium">View All</span>
+                {/* 3. SMART SHORTCUTS GRID */}
+                <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-1">Quick Access</h3>
+                <div className="grid grid-cols-2 gap-4">
+                    
+                    {/* CARD A: SCHOOL PROFILE */}
+                    <div onClick={() => navigate('/school-profile')} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition cursor-pointer relative overflow-hidden group">
+                        <div className={`absolute top-0 left-0 w-1 h-full ${schoolProfile ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className="flex justify-between items-start mb-3">
+                            <span className="text-2xl">🏫</span>
+                            {schoolProfile && <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-bold">Updated</span>}
                         </div>
-                        
-                        <Swiper
-                            modules={[Pagination, Autoplay]}
-                            spaceBetween={15}
-                            slidesPerView={1}
-                            pagination={{ clickable: true, dynamicBullets: true }}
-                            autoplay={{ delay: 5000 }}
-                            className="w-full"
-                        >
-                            {sliderContent.map((item) => (
-                                <SwiperSlide key={item.id} className="pb-8">
-                                    <div className="bg-white p-6 rounded-2xl shadow-md border-l-4 border-[#FDB913] h-40 flex flex-col justify-center">
-                                        <h3 className="text-[#004A99] font-bold text-lg flex items-center mb-2">
-                                            <span className="text-2xl mr-3">{item.emoji}</span>
-                                            {item.title}
-                                        </h3>
-                                        <p className="text-gray-600 text-sm leading-relaxed">
-                                            {item.description}
-                                        </p>
-                                    </div>
-                                </SwiperSlide>
-                            ))}
-                        </Swiper>
-                    </div>
-
-                    {/* 3. Primary Action Card (Fill Forms) */}
-                    <div className="bg-gradient-to-br from-[#CC0000] to-[#990000] rounded-3xl p-6 text-white shadow-lg shadow-red-900/20 relative overflow-hidden">
-                        <div className="absolute -right-5 -top-5 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                        
-                        <h2 className="text-2xl font-bold mb-2 relative z-10">School Forms</h2>
-                        <p className="text-red-100 text-sm mb-6 relative z-10 max-w-[80%]">
-                            Access, update, and submit your school's profile, infrastructure, and personnel data.
+                        <h3 className="font-bold text-gray-800 text-sm">School Profile</h3>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                            {schoolProfile ? `Last: ${formatDate(schoolProfile.submitted_at)}` : 'Not Created Yet'}
                         </p>
-
-                        <button 
-                            onClick={goToSchoolForms} 
-                            className="w-full bg-white text-[#CC0000] font-bold py-3.5 px-4 rounded-xl shadow-sm hover:bg-gray-50 transition transform active:scale-[0.98] flex items-center justify-center gap-2"
-                        >
-                            <span>📝</span> Fill Up Forms Now
-                        </button>
                     </div>
 
-                    {/* 4. Secondary Description / Info */}
-                    <div className="bg-[#FFF8E1] border border-[#FFE082] p-4 rounded-xl">
-                        <div className="flex items-start gap-3">
-                            <span className="text-2xl mt-1">💡</span>
+                    {/* CARD B: SCHOOL HEAD INFO */}
+                    <div onClick={() => navigate('/school-information')} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 active:scale-95 transition cursor-pointer relative overflow-hidden">
+                        <div className={`absolute top-0 left-0 w-1 h-full ${headProfile ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <div className="flex justify-between items-start mb-3">
+                            <span className="text-2xl">👨‍💼</span>
+                            {headProfile && <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-bold">Verified</span>}
+                        </div>
+                        <h3 className="font-bold text-gray-800 text-sm">Head Info</h3>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                            {headProfile ? `${headProfile.position_title}` : 'Action Required'}
+                        </p>
+                    </div>
+
+                    {/* CARD C: ENROLMENT (LIVE DATA) */}
+                    <div onClick={() => navigate('/enrolment')} className="col-span-2 bg-gradient-to-r from-blue-600 to-blue-800 p-5 rounded-2xl shadow-lg text-white active:scale-95 transition cursor-pointer relative overflow-hidden">
+                        <div className="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                        
+                        <div className="flex justify-between items-center relative z-10">
                             <div>
-                                <h4 className="font-bold text-[#F57F17] text-sm">Did you know?</h4>
-                                <p className="text-[#F57F17]/80 text-xs mt-1 leading-relaxed">
-                                    You can now save your progress on forms and return to them later. All data is automatically synced with the Division Office.
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-2xl">📊</span>
+                                    <h3 className="font-bold text-lg">Enrolment</h3>
+                                </div>
+                                <p className="text-blue-100 text-xs">
+                                    {schoolProfile?.total_enrollment 
+                                        ? `Breakdown: ${schoolProfile.es_enrollment} ES • ${schoolProfile.jhs_enrollment} JHS • ${schoolProfile.shs_enrollment} SHS`
+                                        : 'Please encode learner data'}
                                 </p>
                             </div>
+                            <div className="text-right">
+                                <span className="block text-3xl font-bold">
+                                    {schoolProfile?.total_enrollment || 0}
+                                </span>
+                                <span className="text-[10px] text-blue-200 uppercase tracking-wider">Learners</span>
+                            </div>
                         </div>
                     </div>
+
                 </div>
 
-                {/* Bottom Navigation */}
-                <BottomNav homeRoute="/schoolhead-dashboard" />
+                {/* 4. RECENT ACTIVITY (LOGS) */}
+                {schoolProfile?.history_logs && schoolProfile.history_logs.length > 0 && (
+                    <div className="pt-2">
+                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-1 mb-3">Recent Activity</h3>
+                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
+                            {/* Take the last 2 logs and reverse them to show newest first */}
+                            {[...schoolProfile.history_logs].reverse().slice(0, 2).map((log, idx) => (
+                                <div key={idx} className="flex gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-xs">
+                                        {idx === 0 ? 'Now' : 'Old'}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-bold text-gray-700">{log.action}</p>
+                                        <p className="text-[10px] text-gray-400">
+                                            {new Date(log.timestamp).toLocaleString()} • {log.user === auth.currentUser?.uid ? 'You' : 'Admin'}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
-        </PageTransition>
+
+            {/* Bottom Navigation */}
+            <BottomNav homeRoute="/schoolhead-dashboard" />
+        </div>
     );
 };
 
