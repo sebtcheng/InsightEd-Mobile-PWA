@@ -1,8 +1,9 @@
-require('dotenv').config();
-const express = require('express');
-const { Pool } = require('pg');
-const cors = require('cors');
+import 'dotenv/config';
+import express from 'express';
+import pg from 'pg';
+import cors from 'cors';
 
+const { Pool } = pg;
 const app = express();
 const port = 3000;
 
@@ -154,8 +155,7 @@ app.get('/api/school-head/:uid', async (req, res) => {
   }
 });
 
-// --- 6. POST ROUTE: SAVE ENROLMENT ONLY (Prevents NULL Bug) ---
-// --- 6. NEW ROUTE: SAVE ENROLMENT (With SHS Tracks & Totals) ---
+// --- 6. POST ROUTE: SAVE ENROLMENT (With SHS Tracks & Totals) ---
 app.post('/api/save-enrolment', async (req, res) => {
   const data = req.body;
   
