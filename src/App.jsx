@@ -34,7 +34,8 @@ import EngineerSchoolResources from './forms/EngineerSchoolResources';          
 import DamageAssessment from './forms/DamageAssessment';
 import ProjectMonitoring from './forms/ProjectMonitoring';
 import SiteInspection from './forms/SiteInspection';
-import MaterialInventory from './forms/MaterialInventory';
+import MaterialInventory from './forms/MaterialInventory';import NewProjects from './modules/NewProjects';
+import DetailedProjInfo from './modules/DetailedProjInfo'; // <--- NEW IMPORT HERE
 
 
 function App() {
@@ -76,6 +77,8 @@ function App() {
         <Route path="/project-monitoring" element={<ProjectMonitoring />} />
         <Route path="/site-inspection" element={<SiteInspection />} />
         <Route path="/material-inventory" element={<MaterialInventory />} />
+        <Route path="/new-project" element={<NewProjects />} /> 
+        <Route path="/project-details/:id" element={<DetailedProjInfo />} /> 
 
       </Routes>
     </Router>
