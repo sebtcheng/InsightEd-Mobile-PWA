@@ -12,6 +12,7 @@ import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard'; 
 import UserProfile from './modules/UserProfile'; 
 import Activity from './modules/Activity'; 
+import ProjectGallery from './modules/ProjectGallery';
 import Outbox from './modules/Outbox';   
 
 // Forms Menus
@@ -27,10 +28,11 @@ import Enrolement from './forms/Enrolment';
 import OrganizedClasses from './forms/OrganizedClasses';
 import TeachingPersonnel from './forms/TeachingPersonnel';
 import ShiftingModalities from './forms/ShiftingModalities'; // <--- NEW IMPORT
+{/*import SchoolInfrastructure from './forms/SchoolInfrastructure';*/}
 import TeacherSpecialization from './forms/TeacherSpecialization';
 
 // 2. Engineer Forms
-import EngineerSchoolInfrastructure from './forms/EngineerSchoolInfrastructure';
+{/*import EngineerSchoolInfrastructure from './forms/EngineerSchoolInfrastructure';*/}
 import EngineerSchoolResources from './forms/EngineerSchoolResources';           
 import DamageAssessment from './forms/DamageAssessment';
 import ProjectMonitoring from './forms/ProjectMonitoring';
@@ -71,14 +73,15 @@ function App() {
         <Route path="/enrolment" element={<Enrolement />} />
         <Route path="/organized-classes" element={<OrganizedClasses />} />
         <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
-        
+         <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
+
         {/* 👇 UPDATED ROUTE 👇 */}
         <Route path="/shifting-modality" element={<ShiftingModalities />} />
         
-        <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
+        
 
         {/* Engineer Specific */}
-        <Route path="/school-infrastructure" element={<EngineerSchoolInfrastructure />} />
+        {/*<Route path="/school-infrastructure" element={<EngineerSchoolInfrastructure />} /> */}
         <Route path="/school-resources" element={<EngineerSchoolResources />} />
         <Route path="/damage-assessment" element={<DamageAssessment />} />
         <Route path="/project-monitoring" element={<ProjectMonitoring />} />
@@ -87,6 +90,9 @@ function App() {
         <Route path="/new-project" element={<NewProjects />} /> 
         <Route path="/project-details/:id" element={<DetailedProjInfo />} /> 
 
+
+ <Route path="/project-gallery" element={<ProjectGallery />} />
+<Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
       </Routes>
     </Router>
   );

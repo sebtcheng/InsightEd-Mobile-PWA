@@ -198,13 +198,6 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
                         VIEW
                     </button>
                     
-                    {/*<button 
-                        onClick={() => navigate(`/project-gallery/${project.id}`)} 
-                        className="w-full px-1 py-1 bg-amber-50 border border-amber-200 text-amber-600 text-[9px] font-bold rounded hover:bg-amber-100 transition"
-                    >
-                        GALLERY
-                    </button> */}
-
                     <button 
                         onClick={() => onEdit(project)} 
                         disabled={isLocked}
@@ -349,7 +342,7 @@ const EngineerDashboard = () => {
     const [aiLoading, setAiLoading] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState('');
 
-    // --- [UPDATED] Image Upload State & Refs ---
+    // --- Image Upload State & Refs ---
     const [isUploading, setIsUploading] = useState(false);
     const [showUploadOptions, setShowUploadOptions] = useState(false);
     const fileInputRef = useRef(null);
@@ -376,17 +369,17 @@ const EngineerDashboard = () => {
                     const data = await response.json();
                     
                     const mappedData = data.map(item => ({
-                        id: item.project_id,
-                        projectName: item.project_name,
-                        schoolName: item.school_name,
-                        schoolId: item.school_id,
+                        id: item.id,
+                        projectName: item.projectName,
+                        schoolName: item.schoolName,
+                        schoolId: item.schoolId,
                         status: item.status,
-                        accomplishmentPercentage: item.accomplishment_percentage,
-                        projectAllocation: item.project_allocation,
-                        targetCompletionDate: item.target_completion_date,
-                        statusAsOfDate: item.status_as_of,
-                        otherRemarks: item.other_remarks,
-                        contractorName: item.contractor_name
+                        accomplishmentPercentage: item.accomplishmentPercentage,
+                        projectAllocation: item.projectAllocation,
+                        targetCompletionDate: item.targetCompletionDate,
+                        statusAsOfDate: item.statusAsOfDate,
+                        otherRemarks: item.otherRemarks,
+                        contractorName: item.contractorName
                     }));
                     setProjects(mappedData);
                 } catch (err) {
@@ -429,6 +422,7 @@ const EngineerDashboard = () => {
         }, 2000);
     };
 
+    // --- UPDATED handleFileUpload to match your Backend Route ---
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -439,6 +433,7 @@ const EngineerDashboard = () => {
             return;
         }
 
+        // Determine which project to attach the image to
         const targetProject = selectedProject || projects[0];
         if (!targetProject) {
             alert("No projects found to attach image to.");
@@ -449,32 +444,44 @@ const EngineerDashboard = () => {
 
         const reader = new FileReader();
         reader.readAsDataURL(file);
+        
         reader.onload = async () => {
-            const base64Data = reader.result;
             try {
+                const base64Image = reader.result; 
                 const user = auth.currentUser;
+
+                // Sending data with keys your backend expects: projectId, imageData, uploadedBy
                 const response = await fetch(`${API_BASE}/api/upload-image`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        projectId: targetProject.id,
-                        imageData: base64Data,
-                        uploadedBy: user.uid
+                        projectId: targetProject.id,   // Matches backend 'projectId'
+                        imageData: base64Image,        // Matches backend 'imageData'
+                        uploadedBy: user?.uid          // Matches backend 'uploadedBy'
                     }),
                 });
 
                 if (response.ok) {
                     alert(`Site photo uploaded successfully for ${targetProject.schoolName}!`);
+                    setShowUploadOptions(false);
                 } else {
-                    throw new Error("Upload failed");
+                    const errorData = await response.json();
+                    console.error("Server error:", errorData);
+                    throw new Error(errorData.error || "Upload failed");
                 }
             } catch (err) {
                 console.error("Upload error:", err);
-                alert("Failed to upload image to database.");
+                alert(`Failed to upload: ${err.message}`);
             } finally {
                 setIsUploading(false);
-                e.target.value = null; // Reset input
+                e.target.value = null; 
             }
+        };
+        
+        reader.onerror = () => {
+            console.error("FileReader Error");
+            setIsUploading(false);
+            alert("Could not read the file.");
         };
     };
 
@@ -530,27 +537,26 @@ const EngineerDashboard = () => {
                         </Swiper>
                     </div>
 
-                  <div>
-    <div className="flex items-center justify-between mb-3 px-1">
-        <h2 className="text-slate-700 font-bold text-lg">Project Monitoring</h2>
-        
-        <div className="flex gap-2">
-            {/* NEW GALLERY BUTTON */}
-            <button 
-                onClick={() => navigate('/project-gallery')} 
-                className="text-[10px] bg-white border border-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold shadow-sm hover:bg-slate-50 transition flex items-center gap-1"
-            >
-                <span className="text-sm">🖼️</span> My Gallery
-            </button>
+                    <div>
+                        <div className="flex items-center justify-between mb-3 px-1">
+                            <h2 className="text-slate-700 font-bold text-lg">Project Monitoring</h2>
+                            
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => navigate('/project-gallery')} 
+                                    className="text-[10px] bg-white border border-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold shadow-sm hover:bg-slate-50 transition flex items-center gap-1"
+                                >
+                                    <span className="text-sm">🖼️</span> My Gallery
+                                </button>
 
-            <button 
-                onClick={() => navigate('/new-project')} 
-                className="text-[10px] bg-[#004A99] text-white px-3 py-1 rounded-full font-medium shadow-sm hover:bg-blue-800 transition flex items-center gap-1"
-            >
-                <span className="text-base leading-none">+</span> New Project
-            </button>
-        </div>
-    </div>
+                                <button 
+                                    onClick={() => navigate('/new-project')} 
+                                    className="text-[10px] bg-[#004A99] text-white px-3 py-1 rounded-full font-medium shadow-sm hover:bg-blue-800 transition flex items-center gap-1"
+                                >
+                                    <span className="text-base leading-none">+</span> New Project
+                                </button>
+                            </div>
+                        </div>
                         <ProjectTable 
                             projects={projects} 
                             onEdit={handleEditProject} 
@@ -564,9 +570,8 @@ const EngineerDashboard = () => {
                     </div>
                 </div>
 
-                {/* --- [UPDATED] FLOATING IMAGE UPLOAD SECTION --- */}
+                {/* --- FLOATING IMAGE UPLOAD SECTION --- */}
                 <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end">
-                    {/* Hidden Inputs */}
                     <input 
                         type="file" 
                         ref={fileInputRef} 
@@ -579,14 +584,12 @@ const EngineerDashboard = () => {
                         ref={cameraInputRef} 
                         onChange={handleFileUpload} 
                         accept="image/*" 
-                        capture="environment" // Forces camera on mobile
+                        capture="environment" 
                         className="hidden" 
                     />
 
-                    {/* Upload Options Menu */}
                     {showUploadOptions && (
                         <div className="mb-4 flex flex-col gap-3 animate-slide-up">
-                            {/* Take Photo Button */}
                             <button 
                                 onClick={() => { cameraInputRef.current.click(); setShowUploadOptions(false); }}
                                 className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95"
@@ -595,7 +598,6 @@ const EngineerDashboard = () => {
                                 <span className="text-xs font-bold uppercase">Take Photo</span>
                             </button>
 
-                            {/* Upload Gallery Button */}
                             <button 
                                 onClick={() => { fileInputRef.current.click(); setShowUploadOptions(false); }}
                                 className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all active:scale-95"
@@ -606,7 +608,6 @@ const EngineerDashboard = () => {
                         </div>
                     )}
 
-                    {/* Main Floating Toggle Button */}
                     <button 
                         onClick={() => setShowUploadOptions(!showUploadOptions)}
                         disabled={isUploading || projects.length === 0}
@@ -621,7 +622,6 @@ const EngineerDashboard = () => {
                         )}
                     </button>
 
-                    {/* Backdrop to close menu when clicking elsewhere */}
                     {showUploadOptions && (
                         <div 
                             className="fixed inset-0 z-[-1] bg-black/5 backdrop-blur-[1px]" 

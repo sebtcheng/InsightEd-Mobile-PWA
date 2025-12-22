@@ -11,7 +11,7 @@ const DetailedProjInfo = () => {
     useEffect(() => {
         const fetchProjectDetails = async () => {
             try {
-                const response = await fetch(`/api/projects/${id}`);
+                const response = await fetch(`http://localhost:3000/api/projects/${id}`);
                 if (!response.ok) throw new Error("Project not found");
                 const data = await response.json();
                 setProject(data);

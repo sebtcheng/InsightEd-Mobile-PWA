@@ -491,6 +491,55 @@ app.get('/api/projects/:id', async (req, res) => {
   }
 });
 
+// --- 20. POST: Upload Project Image (Base64) ---
+app.post('/api/upload-image', async (req, res) => {
+  const { projectId, imageData, uploadedBy } = req.body;
+  if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
+
+  try {
+    const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
+    const result = await pool.query(query, [projectId, imageData, uploadedBy]);
+
+    await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image`);
+    res.status(201).json({ success: true, imageId: result.rows[0].id });
+  } catch (err) {
+    console.error("❌ Image Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save image to database" });
+  }
+});
+
+// --- 21. GET: Fetch All Images for a Project ---
+app.get('/api/project-images/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const query = `SELECT id, image_data, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
+    const result = await pool.query(query, [projectId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error fetching project images:", err.message);
+    res.status(500).json({ error: "Failed to fetch images" });
+  }
+});
+
+// --- 22. GET: Fetch All Images for an Engineer ---
+app.get('/api/engineer-images/:engineerId', async (req, res) => {
+  const { engineerId } = req.params;
+  try {
+    const query = `
+      SELECT ei.id, ei.image_data, ei.created_at, ef.school_name 
+      FROM engineer_image ei
+      LEFT JOIN engineer_form ef ON ei.project_id = ef.project_id
+      WHERE ei.uploaded_by = $1 
+      ORDER BY ei.created_at DESC;
+    `;
+    const result = await pool.query(query, [engineerId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error fetching engineer gallery:", err.message);
+    res.status(500).json({ error: "Failed to fetch gallery" });
+  }
+});
+
 // --- 15. GET: Get Organized Classes Data ---
 app.get('/api/organized-classes/:uid', async (req, res) => {
     const { uid } = req.params;
