@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
-import { addToOutbox } from '../db'; // 👈 Added Import
+import { addToOutbox } from '../db'; // 👈 Import Outbox
 
 const ShiftingModalities = () => {
     const navigate = useNavigate();
@@ -110,6 +110,7 @@ const ShiftingModalities = () => {
         const cleanShifts = { ...shifts };
         const cleanModes = { ...modes };
 
+        // Clean up hidden fields based on offering
         if (!showElem()) { ["kinder", "g1", "g2", "g3", "g4", "g5", "g6"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
         if (!showJHS()) { ["g7", "g8", "g9", "g10"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
         if (!showSHS()) { ["g11", "g12"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
@@ -121,8 +122,16 @@ const ShiftingModalities = () => {
             ...adms 
         };
 
-        // 📴 OFFLINE CHECK
-        if (!navigator.onLine) {
+        // Helper to update UI on success
+        const handleSuccess = () => {
+            setShifts(cleanShifts);
+            setModes(cleanModes);
+            setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
+            setIsLocked(true);
+        };
+
+        // 🛡️ OFFLINE SAVE HELPER
+        const saveOffline = async () => {
             try {
                 await addToOutbox({
                     type: 'SHIFTING_MODALITIES',
@@ -130,17 +139,21 @@ const ShiftingModalities = () => {
                     url: '/api/save-learning-modalities',
                     payload: payload
                 });
-                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
-                setShifts(cleanShifts);
-                setModes(cleanModes);
-                setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
-                setIsLocked(true);
-            } catch (e) { alert("Failed to save offline."); } 
-            finally { setIsSaving(false); }
+                alert("⚠️ Connection unstable. \n\nData saved to Outbox! Sync when you have internet.");
+                handleSuccess();
+            } catch (e) { 
+                alert("Critical Error: Could not save locally."); 
+            }
+        };
+
+        // 1. Check Explicit Offline
+        if (!navigator.onLine) {
+            await saveOffline();
+            setIsSaving(false);
             return;
         }
 
-        // 🌐 ONLINE SAVE
+        // 2. Try Online Save
         try {
             const res = await fetch('/api/save-learning-modalities', {
                 method: 'POST',
@@ -150,12 +163,14 @@ const ShiftingModalities = () => {
 
             if (res.ok) {
                 alert('Saved successfully!');
-                setShifts(cleanShifts);
-                setModes(cleanModes);
-                setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
-                setIsLocked(true);
-            } else { alert('Failed to save.'); }
-        } catch (err) { alert('Network error.'); } 
+                handleSuccess();
+            } else { 
+                throw new Error("Server Error"); 
+            }
+        } catch (err) { 
+            console.log("Fetch failed, falling back to offline...", err);
+            await saveOffline(); 
+        } 
         finally { setIsSaving(false); }
     };
 
@@ -224,7 +239,7 @@ const ShiftingModalities = () => {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="font-bold text-gray-800 flex items-center gap-2">
-                            <span className="text-xl">投</span> Per Grade Strategy
+                            <span className="text-xl">🗓️</span> Per Grade Strategy
                         </h2>
                         {offering && <span className="text-[10px] bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold uppercase">{offering}</span>}
                     </div>
@@ -272,7 +287,7 @@ const ShiftingModalities = () => {
                 {/* 2. ADM CHECKLIST */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <h2 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                        <span className="text-xl">藤</span> Alternative Delivery Modes (ADMs)
+                        <span className="text-xl">📡</span> Alternative Delivery Modes (ADMs)
                     </h2>
                     <p className="text-xs text-gray-500 mb-4">Which ADMs are utilized during class suspensions or emergencies?</p>
                     
@@ -314,7 +329,7 @@ const ShiftingModalities = () => {
              <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                 {isLocked ? (
                     <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2">
-                        <span>Unlock to Edit</span>
+                        <span>🔓</span> Unlock to Edit
                     </button>
                 ) : (
                     <>

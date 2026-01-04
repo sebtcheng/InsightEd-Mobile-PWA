@@ -95,6 +95,24 @@ const TeachingPersonnel = () => {
         setIsLocked(true);
     };
 
+    // 🛡️ OFFLINE SAVE HELPER
+    const saveOffline = async (payload) => {
+        try {
+            await addToOutbox({
+                type: 'TEACHING_PERSONNEL',
+                label: 'Teaching Personnel',
+                url: '/api/save-teaching-personnel',
+                payload: payload
+            });
+            alert("⚠️ Connection unstable. \n\nData saved to Outbox! Sync when you have internet.");
+            setOriginalData({ ...formData });
+            setIsLocked(true);
+        } catch (e) {
+            alert("Critical Error: Could not save locally.");
+        }
+    };
+
+    // 💾 MAIN SAVE FUNCTION
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
@@ -105,24 +123,14 @@ const TeachingPersonnel = () => {
             shs: showSHS() ? formData.shs : 0
         };
 
-        // 📴 OFFLINE CHECK
+        // 1. Check Explicit Offline
         if (!navigator.onLine) {
-            try {
-                await addToOutbox({
-                    type: 'TEACHING_PERSONNEL',
-                    label: 'Teaching Personnel',
-                    url: '/api/save-teaching-personnel',
-                    payload: payload
-                });
-                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
-                setOriginalData({ ...formData });
-                setIsLocked(true);
-            } catch (e) { alert("Failed to save offline."); } 
-            finally { setIsSaving(false); }
+            await saveOffline(payload);
+            setIsSaving(false);
             return;
         }
 
-        // 🌐 ONLINE SAVE
+        // 2. Try Online Save
         try {
             const res = await fetch('/api/save-teaching-personnel', {
                 method: 'POST',
@@ -135,11 +143,13 @@ const TeachingPersonnel = () => {
                 setOriginalData({ ...formData });
                 setIsLocked(true); 
             } else {
-                alert('Failed to save data.');
+                // Force fallback if server error
+                throw new Error("Server rejected request");
             }
         } catch (err) {
-            console.error(err);
-            alert('Network error.');
+            // 3. Network Failure Fallback
+            console.log("Fetch failed, falling back to offline store...", err);
+            await saveOffline(payload);
         } finally {
             setIsSaving(false);
         }
@@ -219,7 +229,7 @@ const TeachingPersonnel = () => {
                         onClick={handleUpdateClick}
                         className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"
                     >
-                        <span>✏️</span> Unlock to Edit
+                        <span>🔓</span> Unlock to Edit
                     </button>
                 ) : (
                     <>
