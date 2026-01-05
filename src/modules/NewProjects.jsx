@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse'; 
 import { auth } from '../firebase'; 
+// --- IMPORT NEW DB LOGIC ---
+import { addEngineerToOutbox } from '../db';
 
 // Helper component for Section Headers
 const SectionHeader = ({ title, icon }) => (
@@ -131,73 +133,85 @@ const NewProjects = () => {
         });
     };
 
-    // --- 4. UPDATED SUBMIT LOGIC ---
-   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+    // --- 4. UPDATED SUBMIT LOGIC (WITH OFFLINE SUPPORT) ---
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true);
 
-    try {
-        // 1. Save Project Text Data
-        const response = await fetch('http://localhost:3000/api/save-project', {
+        const payload = {
+            url: 'https://insight-ed-frontend.vercel.app/api/save-project',
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: { 
                 ...formData, 
-                uid: auth.currentUser.uid,
-                modifiedBy: auth.currentUser.displayName || 'Engineer'
-            }),
-        });
+                uid: auth.currentUser?.uid,
+                modifiedBy: auth.currentUser?.displayName || 'Engineer'
+            },
+            formName: `Project: ${formData.projectName}`
+        };
 
-        const result = await response.json();
-
-        // 2. Capture the project_id returned from your SQL 'RETURNING' clause
-        if (response.ok && result.project?.project_id) {
-            const newProjectId = result.project.project_id;
-
-            // 3. Upload Images linked to this ID
-            if (selectedFiles.length > 0) {
-                for (const file of selectedFiles) {
-                    const reader = new FileReader();
-                    const base64Promise = new Promise(resolve => {
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(file);
-                    });
-                    const base64Image = await base64Promise;
-
-                    await fetch('http://localhost:3000/api/upload-image', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            projectId: newProjectId,
-                            imageData: base64Image,
-                            uploadedBy: auth.currentUser.uid
-                        }),
-                    });
-                }
-            }
-            alert('Project and photos saved successfully!');
+        // --- OFFLINE CHECK ---
+        if (!navigator.onLine) {
+            await addEngineerToOutbox(payload);
+            alert("📁 No internet. Project saved to Sync Center (Engineer Outbox).");
+            setIsSubmitting(false);
             navigate('/engineer-dashboard');
+            return;
         }
-    } catch (error) {
-        console.error("Error:", error);
-    } finally {
-        setIsSubmitting(false);
-    }
-};
 
-// Helper function to convert File objects to Base64 strings
-const convertToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = (error) => reject(error);
-  });
-};
+        try {
+            // 1. Save Project Text Data
+            const response = await fetch(payload.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload.body),
+            });
+
+            const result = await response.json();
+
+            // 2. Capture the project_id and handle images
+            if (response.ok && result.project?.project_id) {
+                const newProjectId = result.project.project_id;
+
+                if (selectedFiles.length > 0) {
+                    for (const file of selectedFiles) {
+                        const base64Image = await convertToBase64(file);
+                        await fetch('https://insight-ed-frontend.vercel.app/api/upload-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                projectId: newProjectId,
+                                imageData: base64Image,
+                                uploadedBy: auth.currentUser.uid
+                            }),
+                        });
+                    }
+                }
+                alert('Project and photos saved successfully!');
+                navigate('/engineer-dashboard');
+            }
+        } catch (error) {
+            console.error("Online Error, saving to outbox:", error);
+            await addEngineerToOutbox(payload);
+            alert("⚠️ Connection failed. Saved to Sync Center.");
+            navigate('/engineer-dashboard');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Helper function to convert File objects to Base64 strings
+    const convertToBase64 = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+      });
+    };
 
     return (
         <PageTransition>
-            <div className="min-h-screen bg-slate-50 font-sans pb-32"> {/* Added more padding for FAB */}
+            <div className="min-h-screen bg-slate-50 font-sans pb-32">
                 
                 <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl">
                     <div className="flex items-center gap-3 text-white mb-4">
@@ -325,7 +339,6 @@ const convertToBase64 = (file) => {
                             />
                         </div>
 
-                        {/* Display Number of Selected Images */}
                         {selectedFiles.length > 0 && (
                             <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
                                 <span className="text-lg">📸</span>
@@ -349,7 +362,6 @@ const convertToBase64 = (file) => {
                     </div>
                 </form>
 
-                {/* --- FLOATING ACTION BUTTON (FAB) UI --- */}
                 <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3">
                     <input 
                         type="file" 

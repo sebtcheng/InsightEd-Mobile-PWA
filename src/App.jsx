@@ -13,7 +13,8 @@ import AdminDashboard from './modules/AdminDashboard';
 import UserProfile from './modules/UserProfile'; 
 import Activity from './modules/Activity'; 
 import ProjectGallery from './modules/ProjectGallery';
-import Outbox from './modules/Outbox';   
+import Outbox from './modules/Outbox'; 
+import EngineerOutbox from './modules/EngineerOutbox';  
 
 // Forms Menus
 import SchoolForms from './modules/SchoolForms';
@@ -89,7 +90,7 @@ function App() {
         <Route path="/material-inventory" element={<MaterialInventory />} />
         <Route path="/new-project" element={<NewProjects />} /> 
         <Route path="/project-details/:id" element={<DetailedProjInfo />} /> 
-
+        <Route path="/engineer-outbox" element={<EngineerOutbox />} />
 
  <Route path="/project-gallery" element={<ProjectGallery />} />
 <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
