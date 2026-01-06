@@ -2,39 +2,79 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'InsightEd_Outbox';
-const STORE_NAME = 'pending_requests';
+// Store names to distinguish between user roles
+const SH_STORE = 'pending_requests'; // Original store for School Head
+const ENG_STORE = 'engineer_pending'; // New store for Engineer
 
 // 1. Initialize the Database
 export async function initDB() {
-  return openDB(DB_NAME, 1, {
+  // Version bumped to 2 to trigger the upgrade and create the new store
+  return openDB(DB_NAME, 2, {
     upgrade(db) {
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        // Create a store that uses an auto-incrementing ID
-        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      // Ensure School Head store exists
+      if (!db.objectStoreNames.contains(SH_STORE)) {
+        db.createObjectStore(SH_STORE, { keyPath: 'id', autoIncrement: true });
+      }
+      // Create Engineer-specific store
+      if (!db.objectStoreNames.contains(ENG_STORE)) {
+        db.createObjectStore(ENG_STORE, { keyPath: 'id', autoIncrement: true });
       }
     },
   });
 }
 
-// 2. Save a Request to the Outbox (Offline Mode)
+// ==========================================
+//        SCHOOL HEAD FUNCTIONS (Original)
+// ==========================================
+
 export async function addToOutbox(requestData) {
   const db = await initDB();
-  // requestData will contain: { url, method, body, uid }
-  return db.add(STORE_NAME, {
+  return db.add(SH_STORE, {
     ...requestData,
     timestamp: new Date().toISOString(),
     status: 'pending' 
   });
 }
 
-// 3. Get All Pending Requests (For the Sync Page)
 export async function getOutbox() {
   const db = await initDB();
-  return db.getAll(STORE_NAME);
+  return db.getAll(SH_STORE);
 }
 
-// 4. Delete a Request (After successful sync)
 export async function deleteFromOutbox(id) {
   const db = await initDB();
-  return db.delete(STORE_NAME, id);
+  return db.delete(SH_STORE, id);
+}
+
+// ==========================================
+//        ENGINEER FUNCTIONS (New)
+// ==========================================
+
+/**
+ * Saves an Engineer form request to the dedicated engineer outbox
+ * @param {Object} requestData - contains { url, method, body, formName }
+ */
+export async function addEngineerToOutbox(requestData) {
+  const db = await initDB();
+  return db.add(ENG_STORE, {
+    ...requestData,
+    timestamp: new Date().toISOString(),
+    status: 'pending' 
+  });
+}
+
+/**
+ * Retrieves all pending forms specifically for the Engineer Sync Center
+ */
+export async function getEngineerOutbox() {
+  const db = await initDB();
+  return db.getAll(ENG_STORE);
+}
+
+/**
+ * Deletes an Engineer request after successful sync to NeonSQL
+ */
+export async function deleteEngineerFromOutbox(id) {
+  const db = await initDB();
+  return db.delete(ENG_STORE, id);
 }

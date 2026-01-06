@@ -2,152 +2,115 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-// ICONS
-import { TbHomeEdit, TbCloudUpload } from "react-icons/tb"; 
-import { LuUser } from "react-icons/lu"; 
+// Icons 
+import { TbHomeEdit, TbCloudUpload } from "react-icons/tb";
+import { LuCompass } from "react-icons/lu";
+import { FiSettings } from "react-icons/fi"; // Changed to Gear icon
 
 const BottomNav = ({ homeRoute }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
+    // --- CONFIGURATION BY ROLE ---
+    const navConfigs = {
+        'Engineer': [
+            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit }, 
+            { label: 'Forms', path: '/new-project', icon: LuCompass },
+            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Settings', path: '/profile', icon: FiSettings }, 
+        ],
+        'School Head': [
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            { label: 'Home', path: '/schoolhead-dashboard', icon: TbHomeEdit },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Admin': [
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Human Resource': [
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ]
+    };
+
+    const currentNavItems = navConfigs[userRole] || navConfigs['Engineer'];
+
     return (
         <div style={styles.wrapper}>
-            {/* Background Curve */}
-            <div style={styles.curveContainer}>
-                <svg viewBox="0 0 375 70" preserveAspectRatio="none" style={styles.svg}>
-                    <path 
-                        d="M0,0 L137,0 C145,0 150,5 152,12 C157,35 180,45 187.5,45 C195,45 218,35 223,12 C225,5 230,0 238,0 L375,0 L375,70 L0,70 Z" 
-                        fill="white" 
-                        filter="drop-shadow(0px -5px 10px rgba(0,0,0,0.05))"
-                    />
-                </svg>
-            </div>
+            <div style={styles.navContainer}>
+                {currentNavItems.map((item) => {
+                    const isActive = location.pathname === item.path;
+                    const Icon = item.icon;
 
-            <div style={styles.navItems}>
-                
-                {/* 1. SYNC BUTTON (Replaces Activity) */}
-                <button 
-                    style={styles.sideButton} 
-                    onClick={() => navigate('/outbox')}
-                >
-                    <TbCloudUpload 
-                        size={24} 
-                        color={location.pathname === '/outbox' ? '#094684' : '#B0B0B0'}
-                        style={styles.icon}
-                    />
-                    <span style={{
-                        ...styles.label,
-                        color: location.pathname === '/outbox' ? '#094684' : '#B0B0B0'
-                    }}>Sync</span>
-                </button>
-
-                {/* 2. HOME BUTTON (Floating) */}
-                <div style={styles.centerButtonContainer}>
-                    <button 
-                        style={styles.floatingButton}
-                        onClick={() => navigate(homeRoute || '/schoolhead-dashboard')}
-                    >
-                        <TbHomeEdit size={30} color="#ffffffff" />
-                    </button>
-                </div>
-
-                {/* 3. PROFILE BUTTON (Restored to /profile) */}
-                <button 
-                    style={styles.sideButton} 
-                    onClick={() => navigate('/profile')}
-                >
-                    <LuUser 
-                        size={24} 
-                        color={location.pathname === '/profile' ? '#094684' : '#B0B0B0'}
-                        style={styles.icon}
-                    />
-                    <span style={{
-                        ...styles.label,
-                        color: location.pathname === '/profile' ? '#094684' : '#B0B0B0'
-                    }}>Profile</span>
-                </button>
+                    return (
+                        <button 
+                            key={item.label}
+                            style={styles.navButton} 
+                            onClick={() => navigate(item.path)}
+                        >
+                            <Icon
+                                size={24}
+                                color={isActive ? '#004A99' : '#B0B0B0'}
+                                style={styles.icon}
+                            />
+                            <span style={{ 
+                                ...styles.label, 
+                                color: isActive ? '#004A99' : '#B0B0B0' 
+                            }}>
+                                {item.label}
+                            </span>
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );
 };
 
 const styles = {
-    wrapper: {
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        width: '100%',
-        height: '70px',
-        zIndex: 1000,
+    wrapper: { 
+        position: 'fixed', 
+        bottom: 0, 
+        left: 0, 
+        width: '100%', 
+        height: '70px', 
+        zIndex: 1000, 
+        backgroundColor: '#ffffff',
+        borderTop: '1px solid #e2e8f0',
+        boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.05)',
         display: 'flex',
-        justifyContent: 'center',
-        pointerEvents: 'none',
+        alignItems: 'center'
     },
-    curveContainer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        width: '100%',
-        height: '70px',
-        zIndex: 1,
-        pointerEvents: 'none',
+    navContainer: { 
+        width: '100%', 
+        height: '100%', 
+        display: 'flex', 
+        justifyContent: 'space-around', 
+        alignItems: 'center' 
     },
-    svg: {
-        width: '100%',
-        height: '100%',
-        display: 'block',
-    },
-    navItems: {
-        position: 'relative',
-        zIndex: 2,
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        paddingBottom: '10px',
-        pointerEvents: 'auto',
-    },
-    sideButton: {
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'none',
-        border: 'none',
-        height: '100%',
-        paddingTop: '15px',
+    navButton: { 
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        background: 'none', 
+        border: 'none', 
         cursor: 'pointer',
+        height: '100%'
     },
-    centerButtonContainer: {
-        width: '80px',
-        display: 'flex',
-        justifyContent: 'center',
-        position: 'relative',
+    icon: { 
+        marginBottom: '4px',
+        transition: 'all 0.2s ease'
     },
-    floatingButton: {
-        position: 'absolute',
-        top: '-82px',
-        width: '60px',
-        height: '60px',
-        borderRadius: '50%',
-        backgroundColor: '#0c4885', // DepEd Blue
-        border: '4px solid #ffffffff', 
-        boxShadow: '0 4px 10px rgba(20, 20, 20, 0.4)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        transition: 'transform 0.2s',
-    },
-    icon: {
-        marginBottom: '4px', 
-        transition: 'color 0.3s',
-    },
-    label: {
-        fontSize: '10px',
-        fontWeight: '600',
+    label: { 
+        fontSize: '10px', 
+        fontWeight: '700', 
+        textTransform: 'uppercase', 
+        letterSpacing: '0.02em' 
     }
 };
 

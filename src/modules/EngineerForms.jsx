@@ -1,8 +1,43 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+// --- NEW IMPORT FOR OFFLINE SYNC ---
+import { addEngineerToOutbox } from '../db';
 
 const EngineerForms = () => {
     const navigate = useNavigate();
+
+    // --- NEW HANDLESUBMIT LOGIC ---
+    // This function can be called by your forms to handle online/offline logic
+    const handleSubmit = async (formData, endpoint, formDisplayName) => {
+        const payload = {
+            url: `http://localhost:5000/api/${endpoint}`, // Your NeonSQL endpoint
+            method: 'POST',
+            body: formData,
+            formName: formDisplayName
+        };
+
+        if (navigator.onLine) {
+            try {
+                // Direct save to Neon via index.js routes
+                const response = await fetch(payload.url, {
+                    method: 'POST',
+                    body: JSON.stringify(formData),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (response.ok) {
+                    alert(`${formDisplayName} submitted successfully!`);
+                }
+            } catch (error) {
+                console.error("Online submission failed, saving to outbox:", error);
+                await addEngineerToOutbox(payload);
+                alert("Saved to Sync Center due to connection error.");
+            }
+        } else {
+            // Save to offline outbox
+            await addEngineerToOutbox(payload);
+            alert("Offline: Form saved to your Sync Center.");
+        }
+    };
 
     // --- CONFIGURATION: Engineer Specific Data ---
     // Note: I have linked 'School Infrastructure' and 'Resources' to your existing routes.
@@ -36,75 +71,34 @@ const EngineerForms = () => {
             description: "Safety checklists and site validation reports.",
             route: "/site-inspection", // Placeholder for future form
         },
-        // { 
-        //     id: 5, 
-        //     name: "School Resources", 
-        //     emoji: "⚡",
-        //     description: "Inventory of electrical, water, and sanitation facilities.",
-        //     route: "/school-resources", // Existing route
-        // },
         { 
-            id: 6, 
+            id: 5, 
             name: "Material Inventory", 
             emoji: "🧱",
-            description: "Stockpile of construction materials and equipment.",
+            description: "Audit of construction materials available on-site.",
             route: "/material-inventory", // Placeholder for future form
         },
     ];
 
-    const handleFormClick = (form) => {
-        navigate(form.route); 
-    };
-
-    // UPDATED: Goes back to Engineer Dashboard
-    const goBack = () => {
-        navigate('/engineer-dashboard');
-    };
-
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-24 relative overflow-hidden">
-            
-            {/* Background Decorative Blob */}
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-100/40 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
-
-            {/* --- TOP HEADER --- */}
-            <div className="bg-[#004A99] pt-10 pb-24 px-6 rounded-b-[3rem] shadow-xl relative z-10">
-                <div className="max-w-6xl mx-auto flex items-center gap-5">
-                    <button 
-                        onClick={goBack} 
-                        className="bg-white/10 hover:bg-white/20 text-white rounded-xl p-3 transition-all duration-300 backdrop-blur-md border border-white/10 group"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 group-hover:-translate-x-1 transition-transform">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                        </svg>
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="h-1 w-8 bg-[#FDB913] rounded-full"></span>
-                            <p className="text-blue-100 text-xs font-bold tracking-widest uppercase">Department of Education</p>
-                        </div>
-                        <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">Engineer Forms</h1>
-                    </div>
-                </div>
+        <div className="min-h-screen bg-gray-50 pb-24">
+            {/* Header */}
+            <div className="bg-[#004A99] text-white p-6 rounded-b-3xl shadow-lg mb-6">
+                <h1 className="text-2xl font-bold">Engineering Forms</h1>
+                <p className="text-blue-100 text-sm opacity-90">Select a form to fill out and submit.</p>
             </div>
 
-            {/* --- MAIN CONTENT CONTAINER --- */}
-            <div className="px-6 -mt-16 relative z-20 max-w-6xl mx-auto">
-                
-                {/* --- FORMS GRID --- */}
-                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            <div className="px-5">
+                <div className="grid gap-4">
                     {formsData.map((form) => (
                         <div 
                             key={form.id}
-                            onClick={() => handleFormClick(form)} 
-                            className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 cursor-pointer group hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+                            onClick={() => navigate(form.route)}
+                            className="group bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 active:scale-[0.98] transition-all duration-200 hover:shadow-md hover:border-blue-200"
                         >
-                            {/* Decorative Top Accent Line (Blue default, Red on hover) */}
-                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-100 to-blue-50 group-hover:from-[#CC0000] group-hover:to-[#FF5555] transition-all duration-500"></div>
-
-                            <div className="flex items-start justify-between mb-4">
-                                {/* Icon Container */}
-                                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl shadow-sm border border-slate-100 group-hover:scale-110 group-hover:bg-blue-50 transition-all duration-300">
+                            {/* Icon/Emoji Container */}
+                            <div className="flex-shrink-0">
+                                <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl group-hover:bg-blue-50 transition-all duration-300">
                                     {form.emoji}
                                 </div>
                                 

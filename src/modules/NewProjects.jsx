@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
-import Papa from 'papaparse'; // Import PapaParse
-import { auth } from '../firebase'; // <--- NEW: Added to get the logged-in engineer's ID
+import Papa from 'papaparse'; 
+import { auth } from '../firebase'; 
+// --- IMPORT NEW DB LOGIC ---
+import { addEngineerToOutbox } from '../db';
 
 // Helper component for Section Headers
 const SectionHeader = ({ title, icon }) => (
@@ -116,58 +118,85 @@ const NewProjects = () => {
         });
     };
 
-    // --- 4. UPDATED SUBMIT LOGIC (STEP 2) ---
+    // --- 4. UPDATED SUBMIT LOGIC (WITH OFFLINE SUPPORT) ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
-        
-        // Get the current logged-in engineer
-        const currentUser = auth.currentUser;
 
-        if (!currentUser) {
-            alert("Session expired. Please log in again to save the project.");
+        const payload = {
+            url: 'https://insight-ed-frontend.vercel.app/api/save-project',
+            method: 'POST',
+            body: { 
+                ...formData, 
+                uid: auth.currentUser?.uid,
+                modifiedBy: auth.currentUser?.displayName || 'Engineer'
+            },
+            formName: `Project: ${formData.projectName}`
+        };
+
+        // --- OFFLINE CHECK ---
+        if (!navigator.onLine) {
+            await addEngineerToOutbox(payload);
+            alert("📁 No internet. Project saved to Sync Center (Engineer Outbox).");
             setIsSubmitting(false);
+            navigate('/engineer-dashboard');
             return;
         }
 
-        // Validation: Ensure School ID is 6 digits
-        if (formData.schoolId && formData.schoolId.length !== 6) {
-             alert("Warning: School ID must be exactly 6 digits.");
-             setIsSubmitting(false);
-             return;
-        }
-
         try {
-            // Prepare the final payload with the engineer's ID and log data
-            const payload = {
-                ...formData,
-                engineer_id: currentUser.uid, // <--- New column created in Step 1
-                uid: currentUser.uid,        // For your logActivity function
-                modifiedBy: currentUser.displayName || currentUser.email // For activity logs
-            };
-
-            const response = await fetch('http://localhost:3000/api/save-project', {
+            // 1. Save Project Text Data
+            const response = await fetch(payload.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+                body: JSON.stringify(payload.body),
             });
 
-            if (!response.ok) throw new Error('Failed to save project');
+            const result = await response.json();
 
-            alert('Project saved successfully!');
-            navigate('/engineer-dashboard');
-            
+            // 2. Capture the project_id and handle images
+            if (response.ok && result.project?.project_id) {
+                const newProjectId = result.project.project_id;
+
+                if (selectedFiles.length > 0) {
+                    for (const file of selectedFiles) {
+                        const base64Image = await convertToBase64(file);
+                        await fetch('https://insight-ed-frontend.vercel.app/api/upload-image', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                projectId: newProjectId,
+                                imageData: base64Image,
+                                uploadedBy: auth.currentUser.uid
+                            }),
+                        });
+                    }
+                }
+                alert('Project and photos saved successfully!');
+                navigate('/engineer-dashboard');
+            }
         } catch (error) {
-            console.error('Submission Error:', error);
-            alert(`Failed to save project. Error: ${error.message}`);
+            console.error("Online Error, saving to outbox:", error);
+            await addEngineerToOutbox(payload);
+            alert("⚠️ Connection failed. Saved to Sync Center.");
+            navigate('/engineer-dashboard');
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    // Helper function to convert File objects to Base64 strings
+    const convertToBase64 = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+      });
+    };
+
     return (
         <PageTransition>
-            <div className="min-h-screen bg-slate-50 font-sans pb-24">
+            <div className="min-h-screen bg-slate-50 font-sans pb-32">
                 
                 <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl">
                     <div className="flex items-center gap-3 text-white mb-4">
@@ -295,6 +324,13 @@ const NewProjects = () => {
                             />
                         </div>
 
+                        {selectedFiles.length > 0 && (
+                            <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
+                                <span className="text-lg">📸</span>
+                                <span className="text-xs font-bold">{selectedFiles.length} project image(s) attached</span>
+                            </div>
+                        )}
+
                     </div>
 
                     <div className="pt-4 flex gap-3 sticky bottom-0 bg-white pb-2 border-t border-slate-50">
@@ -310,6 +346,47 @@ const NewProjects = () => {
                         </button>
                     </div>
                 </form>
+
+                <div className="fixed bottom-24 right-6 z-50 flex flex-col items-end gap-3">
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        multiple 
+                        accept="image/*" 
+                        className="hidden" 
+                    />
+                    
+                    {showUploadOptions && (
+                        <div className="flex flex-col gap-3 mb-2 animate-in slide-in-from-bottom-4 duration-200">
+                            <button 
+                                type="button"
+                                onClick={() => triggerFilePicker('camera')} 
+                                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all"
+                            >
+                                <span className="text-lg">📸</span>
+                                <span className="text-xs font-bold uppercase">Take Photo</span>
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => triggerFilePicker('gallery')} 
+                                className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-lg border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all"
+                            >
+                                <span className="text-lg">🖼️</span>
+                                <span className="text-xs font-bold uppercase">From Gallery</span>
+                            </button>
+                        </div>
+                    )}
+
+                    <button 
+                        type="button"
+                        onClick={() => setShowUploadOptions(!showUploadOptions)} 
+                        className={`bg-[#FDB913] hover:bg-yellow-500 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center text-white transition-all transform ${showUploadOptions ? 'rotate-45 bg-red-500' : ''} border-4 border-white`}
+                    >
+                        <span className="text-2xl">{showUploadOptions ? '✕' : '📸'}</span>
+                    </button>
+                </div>
+
             </div>
         </PageTransition>
     );
