@@ -59,7 +59,7 @@ const DetailedProjInfo = () => {
 
                 {/* Content */}
                 <div className="px-5 -mt-8 relative z-10 space-y-4">
-                    
+
                     {/* Status Card */}
                     <div className="bg-white p-5 rounded-2xl shadow-md border-l-4 border-blue-500 flex justify-between items-center">
                         <div>

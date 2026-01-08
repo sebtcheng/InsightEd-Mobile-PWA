@@ -49,7 +49,7 @@ const DashboardStats = ({ projects }) => {
   const isProjectDelayed = (p) => {
     if (p.status === ProjectStatus.Completed) return false; // Completed is never delayed
     if (!p.targetCompletionDate) return false; // No date, can't be delayed
-    
+
     const target = new Date(p.targetCompletionDate);
     // It is delayed if NOW is past Target AND it's not 100% done
     return now > target && p.accomplishmentPercentage < 100;
@@ -57,14 +57,14 @@ const DashboardStats = ({ projects }) => {
 
   const stats = {
     total: projects.length,
-    
+
     completed: projects.filter((p) => p.status === ProjectStatus.Completed).length,
-    
+
     // UPDATED: Count strictly "Delayed" projects
     delayed: projects.filter((p) => isProjectDelayed(p)).length,
 
     // UPDATED: Count "Ongoing" as ONLY those active AND NOT delayed
-    ongoing: projects.filter((p) => 
+    ongoing: projects.filter((p) =>
       p.status === ProjectStatus.Ongoing && !isProjectDelayed(p)
     ).length,
 
@@ -104,24 +104,21 @@ const DashboardStats = ({ projects }) => {
           <p className="text-xl font-bold text-slate-800 mt-1">{stats.total}</p>
         </div>
         <div
-          className={`p-3 rounded-xl shadow-sm border flex flex-col justify-center items-center text-center ${
-            stats.delayed > 0
-              ? "bg-red-50 border-red-100"
-              : "bg-white border-slate-200"
-          }`}
+          className={`p-3 rounded-xl shadow-sm border flex flex-col justify-center items-center text-center ${stats.delayed > 0
+            ? "bg-red-50 border-red-100"
+            : "bg-white border-slate-200"
+            }`}
         >
           <p
-            className={`text-[10px] font-bold uppercase tracking-wide ${
-              stats.delayed > 0 ? "text-red-500" : "text-slate-500"
-            }`}
+            className={`text-[10px] font-bold uppercase tracking-wide ${stats.delayed > 0 ? "text-red-500" : "text-slate-500"
+              }`}
           >
             Delayed
           </p>
           <div className="flex items-center gap-1 mt-1">
             <p
-              className={`text-xl font-bold ${
-                stats.delayed > 0 ? "text-red-600" : "text-slate-800"
-              }`}
+              className={`text-xl font-bold ${stats.delayed > 0 ? "text-red-600" : "text-slate-800"
+                }`}
             >
               {stats.delayed}
             </p>
@@ -279,15 +276,14 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
                     </div>
 
                     {project.status === ProjectStatus.Ongoing ||
-                    project.status === ProjectStatus.Completed ? (
+                      project.status === ProjectStatus.Completed ? (
                       <>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1">
                           <div
-                            className={`h-1.5 rounded-full ${
-                              project.accomplishmentPercentage === 100
-                                ? "bg-emerald-500"
-                                : "bg-blue-600"
-                            }`}
+                            className={`h-1.5 rounded-full ${project.accomplishmentPercentage === 100
+                              ? "bg-emerald-500"
+                              : "bg-blue-600"
+                              }`}
                             style={{
                               width: `${project.accomplishmentPercentage}%`,
                             }}
@@ -332,20 +328,19 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
                     >
                       VIEW
                     </button>
-            <button 
-    onClick={() => navigate(`/project-gallery/${project.id}`)} // Use .id here
-    className="w-full px-1 py-1 bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-bold rounded hover:bg-amber-100 transition"
->
-    GALLERY
-</button>
+                    <button
+                      onClick={() => navigate(`/project-gallery/${project.id}`)} // Use .id here
+                      className="w-full px-1 py-1 bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-bold rounded hover:bg-amber-100 transition"
+                    >
+                      GALLERY
+                    </button>
                     <button
                       onClick={() => onEdit(project)}
                       disabled={isLocked}
-                      className={`w-full px-1 py-1 text-[9px] font-bold rounded transition ${
-                        isLocked
-                          ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
-                          : "bg-[#004A99] text-white hover:bg-blue-800"
-                      }`}
+                      className={`w-full px-1 py-1 text-[9px] font-bold rounded transition ${isLocked
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300"
+                        : "bg-[#004A99] text-white hover:bg-blue-800"
+                        }`}
                     >
                       {isLocked ? "LOCKED" : "UPDATE"}
                     </button>
@@ -361,16 +356,16 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
 };
 
 
-const EditProjectModal = ({ 
-  project, 
-  isOpen, 
-  onClose, 
-  onSave, 
-  onCameraClick, 
-  onGalleryClick, 
-  previews, 
-  onRemoveFile, 
-  isUploading 
+const EditProjectModal = ({
+  project,
+  isOpen,
+  onClose,
+  onSave,
+  onCameraClick,
+  onGalleryClick,
+  previews,
+  onRemoveFile,
+  isUploading
 }) => {
   const [formData, setFormData] = useState(null);
 
@@ -465,11 +460,10 @@ const EditProjectModal = ({
                 min="0"
                 max="100"
                 disabled={isDisabledPercentageInput}
-                className={`w-full p-2 border border-slate-300 rounded-lg text-sm font-bold ${
-                  isDisabledPercentageInput
-                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                    : "text-[#004A99]"
-                }`}
+                className={`w-full p-2 border border-slate-300 rounded-lg text-sm font-bold ${isDisabledPercentageInput
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : "text-[#004A99]"
+                  }`}
               />
             </div>
           </div>
@@ -503,15 +497,15 @@ const EditProjectModal = ({
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
               Project Photos
             </label>
-            
+
             <div className="flex gap-3 mb-3">
-              <button 
+              <button
                 onClick={onCameraClick}
                 className="flex-1 py-2 bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-slate-200 transition"
               >
                 <span>📷</span> Take Photo
               </button>
-              <button 
+              <button
                 onClick={onGalleryClick}
                 className="flex-1 py-2 bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-slate-200 transition"
               >
@@ -523,12 +517,12 @@ const EditProjectModal = ({
               <div className="grid grid-cols-4 gap-2">
                 {previews.map((url, index) => (
                   <div key={index} className="relative group aspect-square">
-                    <img 
-                      src={url} 
-                      alt="preview" 
+                    <img
+                      src={url}
+                      alt="preview"
                       className="w-full h-full object-cover rounded-lg border border-slate-200"
                     />
-                    <button 
+                    <button
                       onClick={() => onRemoveFile(index)}
                       className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center shadow-sm hover:bg-red-600 transition-colors z-10"
                     >
@@ -700,107 +694,106 @@ const EngineerDashboard = () => {
     const user = auth.currentUser;
     if (!user) return;
 
-    setIsUploading(true); 
+    setIsUploading(true);
 
     try {
-        // Step A: Prepare Body
-        const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
-        
-        // --- OFFLINE CHECK ---
-        if (!navigator.onLine) {
-            // 1. Save Project Update to Outbox
-            await addEngineerToOutbox({
-                url: `${API_BASE}/api/update-project/${updatedProject.id}`,
-                method: 'PUT',
-                body: body,
-                formName: `Update: ${updatedProject.schoolName}`
-            });
+      // Step A: Prepare Body
+      const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
 
-            // 2. Save Images to Outbox
-            if (selectedFiles.length > 0) {
-                for (const file of selectedFiles) {
-                    const reader = new FileReader();
-                    const base64Promise = new Promise(resolve => {
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(file);
-                    });
-                    const base64Image = await base64Promise;
-
-                    await addEngineerToOutbox({
-                        url: `${API_BASE}/api/upload-image`,
-                        method: 'POST',
-                        body: {
-                            projectId: updatedProject.id,
-                            imageData: base64Image,
-                            uploadedBy: user.uid,
-                        },
-                        formName: `Photo: ${updatedProject.schoolName}`
-                    });
-                }
-            }
-
-            alert("⚠️ You are offline. Changes saved to Sync Center.");
-            setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-            setSelectedFiles([]); 
-            setEditModalOpen(false);
-            return; // EXIT EARLY
-        }
-
-        // --- ONLINE FLOW ---
-        // Step A: Save the text fields (Status, %, etc.)
-        const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+      // --- OFFLINE CHECK ---
+      if (!navigator.onLine) {
+        // 1. Save Project Update to Outbox
+        await addEngineerToOutbox({
+          url: `${API_BASE}/api/update-project/${updatedProject.id}`,
+          method: 'PUT',
+          body: body,
+          formName: `Update: ${updatedProject.schoolName}`
         });
 
-        if (!response.ok) throw new Error("Failed to update project data");
-
-        // Step B: Upload any photos picked during this update session
+        // 2. Save Images to Outbox
         if (selectedFiles.length > 0) {
-            for (const file of selectedFiles) {
-                const reader = new FileReader();
-                const base64Promise = new Promise(resolve => {
-                    reader.onload = () => resolve(reader.result);
-                    reader.readAsDataURL(file);
-                });
-                const base64Image = await base64Promise;
+          for (const file of selectedFiles) {
+            const reader = new FileReader();
+            const base64Promise = new Promise(resolve => {
+              reader.onload = () => resolve(reader.result);
+              reader.readAsDataURL(file);
+            });
+            const base64Image = await base64Promise;
 
-                await fetch(`${API_BASE}/api/upload-image`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        projectId: updatedProject.id, // Links photo to this project
-                        imageData: base64Image,
-                        uploadedBy: user.uid,
-                    }),
-                });
-            }
+            await addEngineerToOutbox({
+              url: `${API_BASE}/api/upload-image`,
+              method: 'POST',
+              body: {
+                projectId: updatedProject.id,
+                imageData: base64Image,
+                uploadedBy: user.uid,
+              },
+              formName: `Photo: ${updatedProject.schoolName}`
+            });
+          }
         }
 
-        // Update the local list so the changes appear immediately
+        alert("⚠️ You are offline. Changes saved to Sync Center.");
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-        
-        alert("Project updates and photos saved successfully!");
-        
-        // IMPORTANT: Clear the staging area so the next project update starts fresh
-        setSelectedFiles([]); 
+        setSelectedFiles([]);
         setEditModalOpen(false);
+        return; // EXIT EARLY
+      }
+
+      // --- ONLINE FLOW ---
+      // Step A: Save the text fields (Status, %, etc.)
+      const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) throw new Error("Failed to update project data");
+
+      // Step B: Upload any photos picked during this update session
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          const reader = new FileReader();
+          const base64Promise = new Promise(resolve => {
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(file);
+          });
+          const base64Image = await base64Promise;
+
+          await fetch(`${API_BASE}/api/upload-image`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId: updatedProject.id, // Links photo to this project
+              imageData: base64Image,
+              uploadedBy: user.uid,
+            }),
+          });
+        }
+      }
+
+      // Update the local list so the changes appear immediately
+      setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+
+      alert("Project updates and photos saved successfully!");
+
+      // IMPORTANT: Clear the staging area so the next project update starts fresh
+      setSelectedFiles([]);
+      setEditModalOpen(false);
     } catch (err) {
-        console.error("Save Error:", err);
-        alert("An error occurred while saving. Please check your connection.");
+      console.error("Save Error:", err);
+      alert("An error occurred while saving. Please check your connection.");
     } finally {
-        setIsUploading(false);
+      setIsUploading(false);
     }
-};
+  };
   const handleAnalyzeRisk = (project) => {
     setSelectedProject(project);
     setAiModalOpen(true);
     setAiLoading(true);
     setTimeout(() => {
       setAiAnalysis(
-        `RISK ASSESSMENT: HIGH\n\n1. **Delay Risk**: The project is ${
-          100 - (project.accomplishmentPercentage || 0)
+        `RISK ASSESSMENT: HIGH\n\n1. **Delay Risk**: The project is ${100 - (project.accomplishmentPercentage || 0)
         }% remaining vs timeline.\n2. **Budget**: Allocation of ${formatAllocation(
           project.projectAllocation
         )} is under review.`
@@ -810,7 +803,7 @@ const EngineerDashboard = () => {
   };
 
   // --- handleFileUpload logic ---
-const handleFileUpload = (e) => {
+  const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
@@ -819,18 +812,18 @@ const handleFileUpload = (e) => {
 
     // Create Previews (This is the 'Effect' you want)
     const newPreviews = validFiles.map(file => URL.createObjectURL(file));
-    
+
     setSelectedFiles(prev => [...prev, ...validFiles]);
     setPreviews(prev => [...prev, ...newPreviews]); // Add to the visual list
     setShowUploadOptions(false);
     e.target.value = null;
-};
+  };
 
-// Function to remove a photo if the engineer picked the wrong one
-const removeFile = (index) => {
+  // Function to remove a photo if the engineer picked the wrong one
+  const removeFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
     setPreviews(prev => prev.filter((_, i) => i !== index));
-};
+  };
 
   return (
     <PageTransition>
@@ -972,11 +965,11 @@ const removeFile = (index) => {
           project={selectedProject}
           isOpen={editModalOpen}
           onClose={() => {
-             setEditModalOpen(false);
-             setShowUploadOptions(false);
-             // Optionally clear previews if you want to reset on close
-             // setPreviews([]); 
-             // setSelectedFiles([]);
+            setEditModalOpen(false);
+            setShowUploadOptions(false);
+            // Optionally clear previews if you want to reset on close
+            // setPreviews([]); 
+            // setSelectedFiles([]);
           }}
           onSave={handleSaveProject}
           onCameraClick={() => cameraInputRef.current?.click()}

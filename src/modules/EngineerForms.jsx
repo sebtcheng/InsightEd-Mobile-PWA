@@ -10,7 +10,7 @@ const EngineerForms = () => {
     // This function can be called by your forms to handle online/offline logic
     const handleSubmit = async (formData, endpoint, formDisplayName) => {
         const payload = {
-            url: `http://localhost:5000/api/${endpoint}`, // Your NeonSQL endpoint
+            url: `/api/${endpoint}`,
             method: 'POST',
             body: formData,
             formName: formDisplayName
@@ -50,30 +50,30 @@ const EngineerForms = () => {
         //     description: "Detailed status of classrooms, buildings, and buildable space.",
         //     route: "/school-infrastructure", // Existing route
         // },
-        { 
-            id: 2, 
-            name: "Damage Assessment", 
+        {
+            id: 2,
+            name: "Damage Assessment",
             emoji: "🏚️",
             description: "Log major/minor damages needing immediate repair or funding.",
             route: "/damage-assessment", // Placeholder for future form
         },
-        { 
-            id: 3, 
-            name: "Project Monitoring", 
+        {
+            id: 3,
+            name: "Project Monitoring",
             emoji: "🚧",
             description: "Track progress of ongoing construction and repair projects.",
             route: "/project-monitoring", // Placeholder for future form
         },
-        { 
-            id: 4, 
-            name: "Site Inspection", 
+        {
+            id: 4,
+            name: "Site Inspection",
             emoji: "📋",
             description: "Safety checklists and site validation reports.",
             route: "/site-inspection", // Placeholder for future form
         },
-        { 
-            id: 5, 
-            name: "Material Inventory", 
+        {
+            id: 5,
+            name: "Material Inventory",
             emoji: "🧱",
             description: "Audit of construction materials available on-site.",
             route: "/material-inventory", // Placeholder for future form
@@ -91,7 +91,7 @@ const EngineerForms = () => {
             <div className="px-5">
                 <div className="grid gap-4">
                     {formsData.map((form) => (
-                        <div 
+                        <div
                             key={form.id}
                             onClick={() => navigate(form.route)}
                             className="group bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 active:scale-[0.98] transition-all duration-200 hover:shadow-md hover:border-blue-200"
@@ -101,7 +101,7 @@ const EngineerForms = () => {
                                 <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center text-3xl group-hover:bg-blue-50 transition-all duration-300">
                                     {form.emoji}
                                 </div>
-                                
+
                                 {/* Arrow Indicator */}
                                 <div className="text-gray-300 group-hover:text-[#CC0000] transition-colors duration-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
@@ -109,7 +109,7 @@ const EngineerForms = () => {
                                     </svg>
                                 </div>
                             </div>
-                            
+
                             {/* Text Content */}
                             <div>
                                 <h2 className="text-xl font-bold text-gray-800 leading-tight mb-2 group-hover:text-[#004A99] transition-colors">

@@ -25,7 +25,7 @@ const ProjectGallery = () => {
 
                 // LOGIC: If we have a projectId in the URL, fetch project-specific images. 
                 // Otherwise, fetch ALL images uploaded by this specific engineer.
-                const endpoint = projectId 
+                const endpoint = projectId
                     ? `${API_BASE}/api/project-images/${projectId}`
                     : `${API_BASE}/api/engineer-images/${user.uid}`;
 
@@ -68,22 +68,22 @@ const ProjectGallery = () => {
                             <span className="text-4xl block mb-4">📷</span>
                             <p className="text-slate-600 font-medium">No photos found</p>
                             <p className="text-[11px] text-slate-400 mt-1">
-                                {projectId 
-                                    ? "No photos have been uploaded for this specific project yet." 
+                                {projectId
+                                    ? "No photos have been uploaded for this specific project yet."
                                     : "You haven't uploaded or taken any photos yet."}
                             </p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 gap-3">
                             {images.map((img) => (
-                                <div 
-                                    key={img.id} 
+                                <div
+                                    key={img.id}
                                     className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200 active:scale-95 transition-transform"
                                     onClick={() => setSelectedImage(img)}
                                 >
-                                    <img 
-                                        src={img.image_data} 
-                                        alt="Site progress" 
+                                    <img
+                                        src={img.image_data}
+                                        alt="Site progress"
                                         className="w-full h-40 object-cover cursor-pointer"
                                     />
                                     <div className="p-2 bg-white">
@@ -94,7 +94,7 @@ const ProjectGallery = () => {
                                             </p>
                                         )}
                                         <p className="text-[9px] text-slate-400">
-                                            {new Date(img.created_at).toLocaleDateString()} at {new Date(img.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            {new Date(img.created_at).toLocaleDateString()} at {new Date(img.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </p>
                                     </div>
                                 </div>
@@ -105,11 +105,11 @@ const ProjectGallery = () => {
 
                 {/* FULLSCREEN IMAGE PREVIEW MODAL */}
                 {selectedImage && (
-                    <div 
+                    <div
                         className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
                         onClick={() => setSelectedImage(null)}
                     >
-                        <button 
+                        <button
                             className="absolute top-10 right-6 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white text-2xl"
                             onClick={() => setSelectedImage(null)}
                         >
@@ -117,9 +117,9 @@ const ProjectGallery = () => {
                         </button>
 
                         <div className="w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
-                            <img 
-                                src={selectedImage.image_data} 
-                                alt="Zoomed progress" 
+                            <img
+                                src={selectedImage.image_data}
+                                alt="Zoomed progress"
                                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                                 onClick={(e) => e.stopPropagation()}
                             />
@@ -131,15 +131,15 @@ const ProjectGallery = () => {
                             )}
                             <p className="text-sm font-bold">Captured on</p>
                             <p className="text-xs text-slate-400">
-                                {new Date(selectedImage.created_at).toLocaleDateString('en-US', { 
-                                    weekday: 'long', 
-                                    year: 'numeric', 
-                                    month: 'long', 
-                                    day: 'numeric' 
+                                {new Date(selectedImage.created_at).toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
                                 })}
                             </p>
                             <p className="text-xs text-slate-400 mt-1">
-                                {new Date(selectedImage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                {new Date(selectedImage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                         </div>
                     </div>

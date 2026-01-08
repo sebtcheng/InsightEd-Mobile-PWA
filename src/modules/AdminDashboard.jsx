@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition'; 
-import { auth, db } from '../firebase'; 
+import PageTransition from '../components/PageTransition';
+import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase } from "react-icons/fi";
 
