@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
-import { addToOutbox } from '../db'; // 👈 Added Import
+import { addToOutbox } from '../db';
+import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav'; // Ensure correct path
 
 const OrganizedClasses = () => {
     const navigate = useNavigate();
@@ -30,20 +31,33 @@ const OrganizedClasses = () => {
 
     const goBack = () => navigate('/school-forms');
 
-    // --- FETCH DATA ---
+    // --- FETCH DATA (Updated for Offline Recovery) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // 1. OFFLINE RECOVERY: Load offering from LocalStorage first
+                const storedSchoolId = localStorage.getItem('schoolId');
+                const storedOffering = localStorage.getItem('schoolOffering');
+
+                if (storedSchoolId) setSchoolId(storedSchoolId);
+                if (storedOffering) setOffering(storedOffering);
+
                 try {
+                    // 2. ONLINE FETCH
                     const res = await fetch(`/api/organized-classes/${user.uid}`);
                     const json = await res.json();
 
                     if (json.exists) {
                         setSchoolId(json.schoolId);
-                        setOffering(json.offering || '');
+                        setOffering(json.offering || storedOffering || '');
                         
+                        // Sync storage to keep data fresh
+                        localStorage.setItem('schoolId', json.schoolId);
+                        localStorage.setItem('schoolOffering', json.offering || '');
+
                         const db = json.data;
-                        const hasData = db.kinder !== undefined || db.grade_1 !== undefined;
+                        // Check if data actually exists in DB to lock the form
+                        const hasData = Object.values(db).some(val => val !== null && val !== 0);
 
                         const initialData = {
                             kinder: db.kinder || 0,
@@ -60,7 +74,8 @@ const OrganizedClasses = () => {
                         }
                     }
                 } catch (error) {
-                    console.error("Error fetching classes:", error);
+                    console.error("Offline or Error fetching classes:", error);
+                    // UI will rely on storedOffering loaded in step 1
                 }
             }
             setLoading(false);
@@ -94,12 +109,47 @@ const OrganizedClasses = () => {
         setIsLocked(true);
     };
 
+    // 🛡️ OFFLINE SAVE HELPER
+    const saveOffline = async (payload) => {
+        try {
+            await addToOutbox({
+                type: 'ORGANIZED_CLASSES',
+                label: 'Organized Classes',
+                url: '/api/save-organized-classes',
+                payload: payload
+            });
+            alert("⚠️ Connection unstable. \n\nData saved to Outbox! Sync when you have internet.");
+            
+            setOriginalData({ ...formData });
+            setIsLocked(true);
+        } catch (e) {
+            alert("Critical Error: Could not save locally.");
+        }
+    };
+
+    // 💾 MAIN SAVE FUNCTION
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
-        const payload = { schoolId, ...formData };
 
-        // 📴 OFFLINE CHECK
+        // Sanitize payload based on active sections
+        const payload = { 
+            schoolId, 
+            kinder: showElem() ? formData.kinder : 0,
+            g1: showElem() ? formData.g1 : 0,
+            g2: showElem() ? formData.g2 : 0,
+            g3: showElem() ? formData.g3 : 0,
+            g4: showElem() ? formData.g4 : 0,
+            g5: showElem() ? formData.g5 : 0,
+            g6: showElem() ? formData.g6 : 0,
+            g7: showJHS() ? formData.g7 : 0,
+            g8: showJHS() ? formData.g8 : 0,
+            g9: showJHS() ? formData.g9 : 0,
+            g10: showJHS() ? formData.g10 : 0,
+            g11: showSHS() ? formData.g11 : 0,
+            g12: showSHS() ? formData.g12 : 0
+        };
+
         if (!navigator.onLine) {
             try {
                 await addToOutbox({
@@ -116,7 +166,6 @@ const OrganizedClasses = () => {
             return;
         }
 
-        // 🌐 ONLINE SAVE
         try {
             const res = await fetch('/api/save-organized-classes', {
                 method: 'POST',
@@ -129,11 +178,10 @@ const OrganizedClasses = () => {
                 setOriginalData({ ...formData });
                 setIsLocked(true); 
             } else {
-                alert('Failed to save data.');
+                throw new Error("Server Error");
             }
         } catch (err) {
-            console.error(err);
-            alert('Network error.');
+            await saveOffline(payload);
         } finally {
             setIsSaving(false);
         }
@@ -146,7 +194,6 @@ const OrganizedClasses = () => {
 
     if (loading) return <LoadingScreen message="Loading Class Data..." />;
 
-    // Helper Input
     const ClassInput = ({ label, name }) => (
         <div>
             <label className={labelClass}>{label}</label>
@@ -164,7 +211,6 @@ const OrganizedClasses = () => {
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-32 relative"> 
             
-            {/* --- TOP HEADER --- */}
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -176,14 +222,11 @@ const OrganizedClasses = () => {
                 </div>
             </div>
 
-            {/* --- MAIN CONTENT --- */}
             <div className="px-5 -mt-12 relative z-20">
-                
-                {/* Info Card */}
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex justify-between items-center">
                     <div>
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Curricular Offering</p>
-                        <p className="text-blue-900 font-bold text-sm">{offering || 'Not Set'}</p>
+                        <p className="text-blue-900 font-bold text-sm uppercase">{offering || 'Not Set'}</p>
                     </div>
                     <div className="text-right">
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Sections</p>
@@ -192,7 +235,6 @@ const OrganizedClasses = () => {
                 </div>
 
                 <form onSubmit={(e) => e.preventDefault()}>
-                    {/* Elementary */}
                     {showElem() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
@@ -210,7 +252,6 @@ const OrganizedClasses = () => {
                         </div>
                     )}
 
-                    {/* JHS */}
                     {showJHS() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
@@ -225,7 +266,6 @@ const OrganizedClasses = () => {
                         </div>
                     )}
 
-                    {/* SHS */}
                     {showSHS() && (
                         <div className={sectionClass}>
                             <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">
@@ -240,14 +280,13 @@ const OrganizedClasses = () => {
 
                     {!showElem() && !showJHS() && !showSHS() && (
                          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-                            <p className="text-gray-400 font-bold">No grade levels found.</p>
-                            <p className="text-xs text-gray-400 mt-2">Please go to <b>Enrolment</b> and set your offering.</p>
+                            <p className="text-gray-400 font-bold">No offering details found.</p>
+                            <p className="text-xs text-gray-400 mt-2">Please ensure your <b>School Profile</b> is complete.</p>
                         </div>
                     )}
                 </form>
             </div>
 
-            {/* --- FLOATING ACTION BAR --- */}
             <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                 {isLocked ? (
                     <button 
@@ -259,7 +298,6 @@ const OrganizedClasses = () => {
                 ) : (
                     <>
                         {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
-                        
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
                             {isSaving ? "Saving..." : "Save Changes"}
                         </button>
@@ -267,11 +305,11 @@ const OrganizedClasses = () => {
                 )}
             </div>
 
-            {/* --- MODALS --- */}
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Classes?</h3><p className="text-gray-500 text-sm mt-2">You are about to modify the organized classes data.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Classes?</h3><p className="text-gray-500 text-sm mt-2">Modify the section counts in the database.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
             
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><p className="text-gray-500 text-sm mt-2">This will update the section counts in the database.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><p className="text-gray-500 text-sm mt-2">This will update the records in the database.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
 
+            <SchoolHeadBottomNav />
         </div>
     );
 };

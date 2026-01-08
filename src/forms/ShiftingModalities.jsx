@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 import LoadingScreen from '../components/LoadingScreen';
-import { addToOutbox } from '../db'; // 👈 Added Import
+import { addToOutbox } from '../db';
+import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
 
 const ShiftingModalities = () => {
     const navigate = useNavigate();
@@ -12,8 +13,6 @@ const ShiftingModalities = () => {
     // --- STATE ---
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
-    // UI States
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
@@ -32,21 +31,31 @@ const ShiftingModalities = () => {
     const [originalData, setOriginalData] = useState(null);
     const goBack = () => navigate('/school-forms');
 
-    // --- FETCH DATA ---
+    // --- FETCH DATA (With Offline Offering Recovery) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // 1. OFFLINE RECOVERY: Load from LocalStorage first
+                const storedSchoolId = localStorage.getItem('schoolId');
+                const storedOffering = localStorage.getItem('schoolOffering');
+
+                if (storedSchoolId) setSchoolId(storedSchoolId);
+                if (storedOffering) setOffering(storedOffering);
+
                 try {
+                    // 2. ONLINE FETCH
                     const res = await fetch(`/api/learning-modalities/${user.uid}`);
                     const json = await res.json();
 
                     if (json.exists) {
-                        setSchoolId(json.schoolId);
-                        setOffering(json.offering || '');
+                        setSchoolId(json.schoolId || storedSchoolId);
+                        setOffering(json.offering || storedOffering || '');
                         
+                        // Keep cache in sync
+                        localStorage.setItem('schoolId', json.schoolId);
+                        localStorage.setItem('schoolOffering', json.offering || '');
+
                         const db = json.data;
-                        
-                        // Parse DB Data to State
                         const loadedShifts = {};
                         const loadedModes = {};
                         const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
@@ -67,20 +76,23 @@ const ShiftingModalities = () => {
                         setShifts(loadedShifts);
                         setModes(loadedModes);
                         setAdms(loadedAdms);
-
                         setOriginalData({ shifts: loadedShifts, modes: loadedModes, adms: loadedAdms });
 
-                        // Lock if data exists
-                        if (db.shift_g1 || db.adm_others || db.adm_mdl) setIsLocked(true);
+                        // Lock if any data exists in DB
+                        const hasData = Object.values(db).some(v => v === true || (v && v !== ''));
+                        if (hasData) setIsLocked(true);
                     }
-                } catch (error) { console.error("Fetch error:", error); }
+                } catch (error) {
+                    console.error("Offline or Error fetching modalities:", error);
+                    // UI will rely on storedOffering from step 1
+                }
             }
             setLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
-    // --- VISIBILITY HELPERS ---
+    // --- VISIBILITY HELPERS (Uses 'offering' which is now offline-available) ---
     const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
     const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
     const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
@@ -91,7 +103,6 @@ const ShiftingModalities = () => {
     const handleAdmCheck = (e) => setAdms({ ...adms, [e.target.name]: e.target.checked });
     const handleAdmText = (e) => setAdms({ ...adms, adm_others: e.target.value });
 
-    // --- ACTIONS ---
     const handleUpdateClick = () => setShowEditModal(true);
     const handleConfirmEdit = () => { setIsLocked(false); setShowEditModal(false); };
     const handleCancelEdit = () => {
@@ -103,6 +114,7 @@ const ShiftingModalities = () => {
         setIsLocked(true);
     };
 
+    // --- SAVE LOGIC ---
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
@@ -110,19 +122,19 @@ const ShiftingModalities = () => {
         const cleanShifts = { ...shifts };
         const cleanModes = { ...modes };
 
+        // Payload sanitization based on current offering
         if (!showElem()) { ["kinder", "g1", "g2", "g3", "g4", "g5", "g6"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
         if (!showJHS()) { ["g7", "g8", "g9", "g10"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
         if (!showSHS()) { ["g11", "g12"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
 
         const payload = { 
-            schoolId, 
+            schoolId: schoolId || localStorage.getItem('schoolId'), 
             ...cleanShifts, 
             ...cleanModes, 
             ...adms 
         };
 
-        // 📴 OFFLINE CHECK
-        if (!navigator.onLine) {
+        const saveOffline = async () => {
             try {
                 await addToOutbox({
                     type: 'SHIFTING_MODALITIES',
@@ -130,17 +142,18 @@ const ShiftingModalities = () => {
                     url: '/api/save-learning-modalities',
                     payload: payload
                 });
-                alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
-                setShifts(cleanShifts);
-                setModes(cleanModes);
+                alert("📴 Saved to Outbox! Sync when you are online.");
                 setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
                 setIsLocked(true);
-            } catch (e) { alert("Failed to save offline."); } 
-            finally { setIsSaving(false); }
+            } catch (e) { alert("Error saving locally."); }
+        };
+
+        if (!navigator.onLine) {
+            await saveOffline();
+            setIsSaving(false);
             return;
         }
 
-        // 🌐 ONLINE SAVE
         try {
             const res = await fetch('/api/save-learning-modalities', {
                 method: 'POST',
@@ -149,33 +162,29 @@ const ShiftingModalities = () => {
             });
 
             if (res.ok) {
-                alert('Saved successfully!');
-                setShifts(cleanShifts);
-                setModes(cleanModes);
+                alert('Success: Modalities updated!');
                 setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
                 setIsLocked(true);
-            } else { alert('Failed to save.'); }
-        } catch (err) { alert('Network error.'); } 
-        finally { setIsSaving(false); }
+            } else { throw new Error(); }
+        } catch (err) {
+            await saveOffline();
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    if (loading) return <LoadingScreen message="Loading Modalities..." />;
-
-    // --- SUB-COMPONENT ---
     const GradeRow = ({ label, lvl }) => (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-gray-100 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
             <div className="flex items-center">
                 <span className="font-bold text-gray-700 text-sm">{label}</span>
             </div>
-            
-            {/* Shifting */}
             <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Shifting Strategy</label>
                 <select 
-                    value={shifts[`shift_${lvl}`]} 
+                    value={shifts[`shift_${lvl}`] || ''} 
                     onChange={(e) => handleShiftChange(e, lvl)} 
                     disabled={isLocked}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#004A99]"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#004A99] disabled:bg-gray-50"
                 >
                     <option value="">Select...</option>
                     <option value="Single Shift">Single Shift</option>
@@ -183,15 +192,13 @@ const ShiftingModalities = () => {
                     <option value="Triple Shift">Triple Shift</option>
                 </select>
             </div>
-
-            {/* Modality */}
             <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Learning Delivery</label>
                 <select 
-                    value={modes[`mode_${lvl}`]} 
+                    value={modes[`mode_${lvl}`] || ''} 
                     onChange={(e) => handleModeChange(e, lvl)} 
                     disabled={isLocked}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#004A99]"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#004A99] disabled:bg-gray-50"
                 >
                     <option value="">Select...</option>
                     <option value="In-Person Classes">In-Person Classes</option>
@@ -203,13 +210,14 @@ const ShiftingModalities = () => {
         </div>
     );
 
+    if (loading) return <LoadingScreen message="Loading Modalities..." />;
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
-             {/* --- HEADER --- */}
              <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                    <button onClick={goBack} className="text-white text-2xl">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Shifting & Modality</h1>
                         <p className="text-blue-200 text-xs mt-1">Manage schedules and delivery modes</p>
@@ -217,15 +225,10 @@ const ShiftingModalities = () => {
                 </div>
             </div>
 
-            {/* --- MAIN CONTENT --- */}
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
-                
-                {/* 1. PER GRADE STRATEGIES */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-bold text-gray-800 flex items-center gap-2">
-                            <span className="text-xl">投</span> Per Grade Strategy
-                        </h2>
+                        <h2 className="font-bold text-gray-800 flex items-center gap-2">🗓️ Per Grade Strategy</h2>
                         {offering && <span className="text-[10px] bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold uppercase">{offering}</span>}
                     </div>
                     
@@ -259,79 +262,49 @@ const ShiftingModalities = () => {
                             <GradeRow label="Grade 12" lvl="g12" />
                         </div>
                     )}
-
-                     {/* Empty State if no offering matches */}
-                     {!showElem() && !showJHS() && !showSHS() && (
-                        <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                            <p className="font-bold text-gray-500">No levels available.</p>
-                            <p className="text-xs text-gray-400 mt-1">Please set your "Curricular Offering" in Enrolment.</p>
-                        </div>
-                    )}
                 </div>
 
-                {/* 2. ADM CHECKLIST */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
-                        <span className="text-xl">藤</span> Alternative Delivery Modes (ADMs)
-                    </h2>
-                    <p className="text-xs text-gray-500 mb-4">Which ADMs are utilized during class suspensions or emergencies?</p>
-                    
-                    <div className="space-y-3">
-                        <label className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" name="adm_mdl" checked={adms.adm_mdl} onChange={handleAdmCheck} disabled={isLocked} className="w-5 h-5 accent-[#004A99]" />
-                            <span className="text-sm font-semibold text-gray-700">Modular Distance Learning (MDL)</span>
-                        </label>
-                        <label className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" name="adm_odl" checked={adms.adm_odl} onChange={handleAdmCheck} disabled={isLocked} className="w-5 h-5 accent-[#004A99]" />
-                            <span className="text-sm font-semibold text-gray-700">Online Distance Learning (ODL)</span>
-                        </label>
-                        <label className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" name="adm_tvi" checked={adms.adm_tvi} onChange={handleAdmCheck} disabled={isLocked} className="w-5 h-5 accent-[#004A99]" />
-                            <span className="text-sm font-semibold text-gray-700">TV/Radio-Based Instruction (TVI/RBI)</span>
-                        </label>
-                        <label className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer">
-                            <input type="checkbox" name="adm_blended" checked={adms.adm_blended} onChange={handleAdmCheck} disabled={isLocked} className="w-5 h-5 accent-[#004A99]" />
-                            <span className="text-sm font-semibold text-gray-700">Blended Learning</span>
-                        </label>
+                    <h2 className="font-bold text-gray-800 mb-2 flex items-center gap-2">📡 Emergency ADMs</h2>
+                    <p className="text-xs text-gray-400 mb-4 tracking-tight">Utilized during class suspensions or emergencies.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {['adm_mdl', 'adm_odl', 'adm_tvi', 'adm_blended'].map(adm => (
+                            <label key={adm} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:bg-gray-50 cursor-pointer transition">
+                                <input type="checkbox" name={adm} checked={adms[adm]} onChange={handleAdmCheck} disabled={isLocked} className="w-5 h-5 accent-[#004A99]" />
+                                <span className="text-xs font-bold text-gray-600 uppercase">
+                                    {adm === 'adm_mdl' ? 'Modular' : adm === 'adm_odl' ? 'Online' : adm === 'adm_tvi' ? 'TV/Radio' : 'Blended'}
+                                </span>
+                            </label>
+                        ))}
                     </div>
-
-                    <div className="mt-6">
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Other ADMs (Aside from above)</label>
+                    <div className="mt-4">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Other Strategies</label>
                         <textarea 
-                            value={adms.adm_others} 
-                            onChange={handleAdmText} 
-                            disabled={isLocked}
-                            placeholder="If none, put N/A"
-                            className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#004A99] focus:outline-none"
-                            rows="2"
-                        ></textarea>
+                            value={adms.adm_others} onChange={handleAdmText} disabled={isLocked}
+                            placeholder="Specify other modes..."
+                            className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" rows="2"
+                        />
                     </div>
                 </div>
-
             </div>
 
-             {/* --- FLOATING ACTION BAR --- */}
-             <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+            <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 pb-10 z-50 flex gap-3 shadow-lg">
                 {isLocked ? (
-                    <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2">
-                        <span>Unlock to Edit</span>
-                    </button>
+                    <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
                 ) : (
                     <>
-                        {/* Only show Cancel if we have data to revert to */}
-                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
-                        
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
+                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-500 font-bold py-4 rounded-xl">Cancel</button>}
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg">
                             {isSaving ? "Saving..." : "Save Changes"}
                         </button>
                     </>
                 )}
             </div>
 
-            {/* --- MODALS --- */}
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><p className="text-gray-500 text-sm mt-2">Unlock fields to modify strategies.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><p className="text-gray-500 text-sm mt-2">This will update the database records.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
-
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
+            
+            <SchoolHeadBottomNav />
         </div>
     );
 };

@@ -35,8 +35,7 @@ const UserProfile = () => {
 
     // --- INITIAL FETCH ---
     useEffect(() => {
-        const fetchData = async () => {
-            const user = auth.currentUser;
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 // 1. Fetch Basic Info from Firebase
                 const docRef = doc(db, "users", user.uid);
@@ -60,14 +59,24 @@ const UserProfile = () => {
 
                 // 2. Fetch Assigned School from Neon
                 try {
-                    const response = await fetch(`/api/school-by-user/${user.uid}`);
-                    const result = await response.json();
-                    if (result.exists) {
-                        setSchoolId(result.data.school_id);
+                    // Fetch extended user info from Firestore (Users collection)
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) {
+                        setUserData(userDoc.data());
+                    } else {
+                        // Fallback to Auth data if Firestore doc isn't found
+                        setUserData({
+                            firstName: user.displayName?.split(' ')[0] || 'User',
+                            lastName: user.displayName?.split(' ')[1] || '',
+                            email: user.email,
+                            role: 'School Head'
+                        });
                     }
                 } catch (error) {
-                    console.error("Failed to fetch school ID:", error);
+                    console.error("Error fetching profile:", error);
                 }
+            } else {
+                navigate('/login');
             }
         };
         fetchData();
@@ -90,11 +99,17 @@ const UserProfile = () => {
 
     // --- HANDLERS ---
     const handleLogout = async () => {
-        if (window.confirm("Are you sure you want to log out?")) {
-            await auth.signOut();
-            navigate('/');
-        }
-    };
+    try {
+        await signOut(auth);
+        localStorage.clear();
+        sessionStorage.clear();
+        // Use window.location.href to force a full browser reload to the login page
+        // This clears any "stuck" React states that cause white screens
+        window.location.href = '/login'; 
+    } catch (error) {
+        console.error("Logout Error:", error);
+    }
+};
 
     const handleSaveProfile = async () => {
         setLoading(true);
@@ -149,6 +164,7 @@ const UserProfile = () => {
                         </button>
                     )}
                 </div>
+            </div>
 
                 {/* --- READ ONLY FIELDS (Cannot be edited) --- */}
                 <div style={styles.readOnlyGroup}>
@@ -387,9 +403,6 @@ const UserProfile = () => {
 
                 <BottomNav homeRoute={homeRoute} userRole={userData?.role} />
             </div>
-        </PageTransition>
-    );
-};
 
 // --- STYLING ---
 const styles = {

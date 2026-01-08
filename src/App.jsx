@@ -29,7 +29,8 @@ import SchoolInformation from './forms/SchoolInformation';
 import Enrolement from './forms/Enrolment';
 import OrganizedClasses from './forms/OrganizedClasses';
 import TeachingPersonnel from './forms/TeachingPersonnel';
-import ShiftingModalities from './forms/ShiftingModalities'; // <--- NEW IMPORT
+import ShiftingModalities from './forms/ShiftingModalities';
+import SchoolResources from './forms/SchoolResources'; // <--- NEW IMPORT
 {/*import SchoolInfrastructure from './forms/SchoolInfrastructure';*/}
 import TeacherSpecialization from './forms/TeacherSpecialization';
 
@@ -75,6 +76,7 @@ function App() {
         <Route path="/enrolment" element={<Enrolement />} />
         <Route path="/organized-classes" element={<OrganizedClasses />} />
         <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
+        <Route path="/school-resources" element={<SchoolResources />} />
          <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
 
         {/* 👇 UPDATED ROUTE 👇 */}

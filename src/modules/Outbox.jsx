@@ -1,7 +1,8 @@
+// src/modules/Outbox.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getOutbox, deleteFromOutbox } from '../db';
-import BottomNav from './BottomNav';
+import SchoolHeadBottomNav from './SchoolHeadBottomNav'; // ✅ UPDATED IMPORT
 
 const Outbox = () => {
     const navigate = useNavigate();
@@ -43,9 +44,7 @@ const Outbox = () => {
 
         setIsSyncing(true);
 
-        // Process sequentially to avoid overwhelming the server/connection
         for (const item of items) {
-            // Update UI to 'syncing'
             setStatusMap(prev => ({ ...prev, [item.id]: 'syncing' }));
 
             try {
@@ -56,25 +55,20 @@ const Outbox = () => {
                 });
 
                 if (response.ok) {
-                    // Success: Mark green, then delete from DB
                     setStatusMap(prev => ({ ...prev, [item.id]: 'success' }));
                     await deleteFromOutbox(item.id);
                 } else {
-                    // Server Error
                     setStatusMap(prev => ({ ...prev, [item.id]: 'error' }));
                 }
             } catch (error) {
-                // Network Error
                 console.error("Sync error:", error);
                 setStatusMap(prev => ({ ...prev, [item.id]: 'error' }));
             }
             
-            // Small delay for visual feedback
             await new Promise(r => setTimeout(r, 500));
         }
 
         setIsSyncing(false);
-        // Reload list to remove successfully synced items
         loadItems();
     };
 
@@ -127,7 +121,6 @@ const Outbox = () => {
                     {items.map((item) => (
                         <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between group">
                             
-                            {/* Icon & Details */}
                             <div className="flex items-center gap-4">
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold
                                     ${statusMap[item.id] === 'success' ? 'bg-green-100 text-green-600' : 
@@ -149,20 +142,17 @@ const Outbox = () => {
                                         {new Date(item.timestamp).toLocaleString()}
                                     </p>
                                     
-                                    {/* Status Text */}
                                     {statusMap[item.id] === 'syncing' && <p className="text-[10px] text-blue-500 font-bold animate-pulse">Uploading...</p>}
                                     {statusMap[item.id] === 'success' && <p className="text-[10px] text-green-500 font-bold">Synced!</p>}
                                     {statusMap[item.id] === 'error' && <p className="text-[10px] text-red-500 font-bold">Failed. Try again.</p>}
                                 </div>
                             </div>
 
-                            {/* Action Icons */}
                             <div className="flex items-center gap-2">
                                 {statusMap[item.id] === 'success' ? (
                                     <span className="text-green-500 text-xl">✓</span>
                                 ) : (
                                     <>
-                                        {/* Trash Button (Only show if not syncing) */}
                                         {!isSyncing && (
                                             <button 
                                                 onClick={() => handleDelete(item.id)}
@@ -180,8 +170,8 @@ const Outbox = () => {
                 </div>
             </div>
 
-            {/* Bottom Nav (Active = Outbox) */}
-            <BottomNav />
+            {/* ✅ UPDATED NAVIGATION CALL */}
+            <SchoolHeadBottomNav />
         </div>
     );
 };
