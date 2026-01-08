@@ -10,6 +10,71 @@ body {
   font-family: 'Poppins', sans-serif;
   background-color: #f8fafc;
   color: #1e293b;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Global Dark Mode Styles */
+.dark body {
+  background-color: #1a202c;
+  color: #ffffff !important;
+  /* Pure White text for Dark Mode */
+}
+
+/* Base Surface Colors */
+.dark .bg-white {
+  background-color: #2d3748 !important;
+  border-color: #4a5568 !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #1a202c !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: #2d3748 !important;
+}
+
+/* Text Colors - Force White/Light */
+.dark .text-gray-800,
+.dark .text-gray-700,
+.dark .text-gray-600 {
+  color: #ffffff !important;
+}
+
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: #cbd5e0 !important;
+}
+
+.dark .text-blue-600 {
+  color: #90cdf4 !important;
+}
+
+/* Borders & Dividers */
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .divide-gray-100> :not([hidden])~ :not([hidden]) {
+  border-color: #4a5568 !important;
+}
+
+/* Inputs & Form Elements (Global) */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #2d3748;
+  color: #ffffff;
+  border-color: #4a5568;
+}
+
+.dark input::placeholder {
+  color: #a0aec0;
+}
+
+/* Shadows */
+.dark .shadow-sm,
+.dark .shadow-md,
+.dark .shadow-xl {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Ensure inputs use Poppins too */
@@ -20,23 +85,32 @@ button {
   font-family: 'Poppins', sans-serif;
 }
 
-/* --- Global Cute Select Style --- */
-/* This applies to all selects that don't have the custom wrapper component yet */
-select:not([class*="rounded-2xl"]) {
-  appearance: none;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2360a5fa' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.5rem center;
-  background-repeat: no-repeat;
-  background-size: 1.5em 1.5em;
-  padding-right: 2.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
-  /* rounded-xl */
+/* --- AUTH SCREEN OVERRIDES (FORCE LIGHT MODE APPEARANCE) --- */
+/* These ensure Login/Register always look like "Light Mode" regardless of global .dark class */
+
+.login-container,
+.register-container {
+  isolation: isolate;
+  /* Create new stacking context */
 }
 
-select:not([class*="rounded-2xl"]):focus {
-  outline: none;
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+.login-container *,
+.register-container * {
+  color: #1e293b !important;
+  /* Force Dark Slate/Black Text */
+}
+
+.login-container input,
+.register-container input,
+.login-container select,
+.register-container select {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Exception for Primary Buttons to keep them readable */
+.login-container .btn-primary,
+.register-container .btn-primary {
+  color: #ffffff !important;
 }

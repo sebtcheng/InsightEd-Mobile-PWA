@@ -144,6 +144,22 @@ const Register = () => {
             createdAt: new Date()
         }, { merge: true });
         
+        // --- AUDIT LOG: REGISTER ---
+        try {
+            fetch('/api/log-activity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userUid: user.uid,
+                    userName: isGoogle ? firstName : formData.firstName,
+                    role: formData.role,
+                    actionType: 'REGISTER',
+                    targetEntity: 'System',
+                    details: 'New user registered via ' + (isGoogle ? 'Google' : 'Email')
+                })
+            });
+        } catch (e) { console.warn("Register Log Failed", e); }
+
         // --- 🚀 NEW REDIRECT LOGIC ---
         if (formData.role === 'School Head') {
             // Force School Heads to create a School Profile immediately
@@ -157,7 +173,7 @@ const Register = () => {
     };
 
     return (
-        <div className="register-container">
+        <div className="register-container" style={{ color: '#1a202c' }}>
             <div className="register-card">
                 <div className="register-header">
                     <img src={logo} alt="InsightEd Logo" className="app-logo" />

@@ -11,7 +11,7 @@ const ProjectGallery = () => {
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState(null);
 
-    const API_BASE = '/api';
+    const API_BASE = ''; 
 
     useEffect(() => {
         const fetchImages = async () => {

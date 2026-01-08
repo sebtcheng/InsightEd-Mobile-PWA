@@ -89,6 +89,22 @@ const Login = () => {
                 console.log("Saving role to storage:", role);
                 localStorage.setItem('userRole', role);
 
+                // --- AUDIT LOG: LOGIN ---
+                try {
+                    fetch('/api/log-activity', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userUid: uid,
+                            userName: userData.firstName || 'User',
+                            role: role,
+                            actionType: 'LOGIN',
+                            targetEntity: 'System',
+                            details: 'User logged in successfully'
+                        })
+                    });
+                } catch (e) { console.warn("Login Log Failed", e); }
+
                 // --- B. THE GATEKEEPER (School Heads Only) ---
                 if (role === 'School Head') {
                     try {
@@ -145,7 +161,7 @@ const Login = () => {
     }
 
     return (
-        <div className="login-container">
+        <div className="login-container" style={{ color: '#1a202c' }}>
             <div className="login-card" style={{ zIndex: 10 }}>
                 <div className="login-header">
                     <img src={logo} alt="InsightEd Logo" className="app-logo" />

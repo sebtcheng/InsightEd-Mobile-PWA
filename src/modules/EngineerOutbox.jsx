@@ -37,12 +37,15 @@ const EngineerOutbox = () => {
 
     // --- HELPER TO FIX URLS AUTOMATICALLY ---
     const getCorrectEndpoint = (savedUrl) => {
-        // Always try to use the relative /api path
-        try {
-            // If it's a full URL (http...), extract the pathname (e.g., /api/damage-assessment)
-            if (savedUrl.startsWith('http')) {
+        let path = savedUrl;
+        
+        // If savedUrl is absolute (starts with http), strip the domain to make it relative
+        if (savedUrl.startsWith('http')) {
+            try {
                 const urlObj = new URL(savedUrl);
-                return urlObj.pathname;
+                path = urlObj.pathname;
+            } catch (e) {
+                console.error("URL parsing error:", e);
             }
             // If it's safe to assume it's already a path or needs /api prefix
             if (!savedUrl.startsWith('/api')) {
@@ -54,6 +57,7 @@ const EngineerOutbox = () => {
             // Fallback: just return it, hoping it works or user cleans it later
             return savedUrl;
         }
+        return path;
     };
 
     const handleSyncAll = async () => {
