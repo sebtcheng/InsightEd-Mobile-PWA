@@ -11,7 +11,7 @@ const ProjectGallery = () => {
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState(null);
 
-    const API_BASE = 'http://localhost:3000'; 
+    const API_BASE = ''; 
 
     useEffect(() => {
         const fetchImages = async () => {

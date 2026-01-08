@@ -11,7 +11,7 @@ const Activity = () => {
         const fetchActivities = async () => {
             try {
                 // Ensure this matches your backend endpoint
-                const response = await fetch('http://localhost:3000/api/activities');
+                const response = await fetch('/api/activities');
                 if (response.ok) {
                     const data = await response.json();
                     setActivities(data);

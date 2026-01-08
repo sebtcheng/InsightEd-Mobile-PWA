@@ -81,15 +81,27 @@ app.get('/api/activities', async (req, res) => {
     const result = await pool.query(`
             SELECT 
                 log_id, user_name, role, action_type, target_entity, details, 
-                TO_CHAR(timestamp, 'Mon DD, HH12:MI AM') as formatted_time 
+                TO_CHAR(timestamp, 'Mon DD, HH:MI AM') as formatted_time 
             FROM activity_logs 
             ORDER BY timestamp DESC 
-            LIMIT 50
+            LIMIT 100
         `);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Error fetching activities" });
+  }
+});
+
+// --- 1b. POST: Generic Log Activity (For Frontend Actions) ---
+app.post('/api/log-activity', async (req, res) => {
+  const { userUid, userName, role, actionType, targetEntity, details } = req.body;
+  try {
+    await logActivity(userUid, userName, role, actionType, targetEntity, details);
+    res.status(200).json({ success: true });
+  } catch (err) {
+    console.error("Log Error:", err);
+    res.status(500).json({ error: "Failed to log" });
   }
 });
 
@@ -117,6 +129,25 @@ app.get('/api/check-school/:id', async (req, res) => {
     res.json({ exists: result.rows.length > 0 });
   } catch (err) {
     res.status(500).json({ error: "Check failed" });
+  }
+});
+
+// --- 3b. GET: Fetch All Schools (For Admin Dashboard) ---
+app.get('/api/schools', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        school_id AS "id", 
+        school_name AS "name", 
+        district, 
+        'Submitted' AS "status" 
+      FROM school_profiles 
+      ORDER BY school_name ASC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Schools Error:", err);
+    res.status(500).json({ error: "Failed to fetch schools" });
   }
 });
 
@@ -227,11 +258,20 @@ app.post('/api/save-school', async (req, res) => {
     await client.query(query, values);
     await client.query('COMMIT');
 
-    // Optional: Log to your separate activity_logs table too if you want centralized logs
-    /* if (changes.length > 0) {
-       await logActivity(data.submittedBy, 'User', 'School Head', 'UPDATE', `School ${data.schoolId}`, `Changed ${changes.length} fields`);
+    // --- CENTRALIZED AUDIT LOGGING ---
+    // Log to activity_logs table for Admin Dashboard visibility
+    try {
+      await logActivity(
+        data.submittedBy,
+        'School Head',
+        'School Head',
+        actionType === 'Profile Created' ? 'CREATE' : 'UPDATE',
+        `School Profile: ${data.schoolId}`,
+        `Submitted profile for ${data.schoolName}`
+      );
+    } catch (logErr) {
+      console.error("Failed to log activity centrally:", logErr);
     }
-    */
 
     res.status(200).json({ message: "Profile saved successfully!", changes: changes });
 
@@ -291,6 +331,16 @@ app.post('/api/save-school-head', async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "School Profile not found. Please create the School Profile first." });
     }
+
+    // --- CENTRALIZED AUDIT LOG ---
+    await logActivity(
+      data.uid,
+      'School Head', // Ideally pass name from frontend, but role suffices if unknown
+      'School Head',
+      'UPDATE',
+      'School Head Info',
+      'Updated personal information'
+    );
 
     res.json({ success: true, message: "School Head information updated successfully!" });
   } catch (err) {
@@ -384,6 +434,16 @@ app.post('/api/save-enrolment', async (req, res) => {
       return res.status(404).json({ message: "School Profile not found." });
     }
 
+    // --- CENTRALIZED AUDIT LOG ---
+    await logActivity(
+      data.submittedBy,
+      'School Head',
+      'School Head',
+      'UPDATE',
+      `Enrolment Data: ${data.schoolId}`,
+      `Updated enrolment (Total: ${data.grandTotal})`
+    );
+
     res.status(200).json({ message: "Enrolment updated successfully!" });
 
   } catch (err) {
@@ -391,6 +451,7 @@ app.post('/api/save-enrolment', async (req, res) => {
     res.status(500).json({ message: "Database error", error: err.message });
   }
 });
+
 
 // ==================================================================
 //                    ENGINEER FORMS ROUTES
@@ -444,7 +505,7 @@ app.post('/api/save-project', async (req, res) => {
         INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
         VALUES ($1, $2, $3)
       `;
-      
+
       // Loop through images and insert them linked to the newProjectId
       for (const imgBase64 of data.images) {
         await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
@@ -457,12 +518,12 @@ app.post('/api/save-project', async (req, res) => {
     // Note: Ensure logActivity uses 'pool' internally or pass 'client' if you want it in the transaction. 
     // Assuming logActivity works independently:
     await logActivity(
-        data.uid, 
-        data.modifiedBy, 
-        'Engineer', 
-        'CREATE', 
-        `Project: ${newProject.project_name}`, 
-        `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
+      data.uid,
+      data.modifiedBy,
+      'Engineer',
+      'CREATE',
+      `Project: ${newProject.project_name}`,
+      `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
     );
 
     res.status(200).json({ message: "Project and images saved!", project: newProject });

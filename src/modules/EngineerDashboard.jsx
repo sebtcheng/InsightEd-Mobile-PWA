@@ -642,7 +642,8 @@ const EngineerDashboard = () => {
   const cameraInputRef = useRef(null);
 
   // API Base URL
-  const API_BASE = "http://localhost:3000";
+  // API Base URL
+  const API_BASE = "";
 
   // Fetch User & Projects
   useEffect(() => {

@@ -37,33 +37,18 @@ const EngineerOutbox = () => {
 
     // --- HELPER TO FIX URLS AUTOMATICALLY ---
     const getCorrectEndpoint = (savedUrl) => {
-        // 1. If we are testing locally (localhost), FORCE request to port 3000
-        if (window.location.hostname === 'localhost') {
-            let path = savedUrl;
-            
-            // If savedUrl is absolute (starts with http), strip the domain
-            if (savedUrl.startsWith('http')) {
-                try {
-                    const urlObj = new URL(savedUrl);
-                    path = urlObj.pathname;
-                } catch (e) {
-                    console.error("URL parsing error:", e);
-                }
-            }
-            // Return the Local Backend URL (Port 3000)
-            return `http://localhost:3000${path}`;
-        }
-
-        // 2. If in Production (Vercel), ensure we use the relative path
+        let path = savedUrl;
+        
+        // If savedUrl is absolute (starts with http), strip the domain to make it relative
         if (savedUrl.startsWith('http')) {
-             try {
+            try {
                 const urlObj = new URL(savedUrl);
-                return urlObj.pathname;
+                path = urlObj.pathname;
             } catch (e) {
-                return savedUrl;
+                console.error("URL parsing error:", e);
             }
         }
-        return savedUrl;
+        return path;
     };
 
     const handleSyncAll = async () => {
