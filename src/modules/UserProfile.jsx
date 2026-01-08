@@ -1,22 +1,23 @@
 // src/modules/UserProfile.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase'; 
+import { auth, db } from '../firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore'; // Added updateDoc
 import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition'; 
+import PageTransition from '../components/PageTransition';
+import SchoolHeadBottomNav from './SchoolHeadBottomNav';
 
 // Icons
 import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3 } from "react-icons/fi";
 
 const UserProfile = () => {
     const navigate = useNavigate();
-    
+
     // --- STATE MANAGEMENT ---
     const [userData, setUserData] = useState(null);
     const [schoolId, setSchoolId] = useState(null);
     const [homeRoute, setHomeRoute] = useState('/');
-    
+
     // UI State
     const [activeTab, setActiveTab] = useState('settings'); // 'settings', 'profile', 'about'
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -35,17 +36,18 @@ const UserProfile = () => {
 
     // --- INITIAL FETCH ---
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const fetchData = async () => {
+            const user = auth.currentUser;
             if (user) {
                 // 1. Fetch Basic Info from Firebase
                 const docRef = doc(db, "users", user.uid);
                 const docSnap = await getDoc(docRef);
-                
+
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setUserData(data);
                     setHomeRoute(getDashboardPath(data.role));
-                    
+
                     // Initialize form data with existing values
                     setFormData({
                         firstName: data.firstName || '',
@@ -59,24 +61,14 @@ const UserProfile = () => {
 
                 // 2. Fetch Assigned School from Neon
                 try {
-                    // Fetch extended user info from Firestore (Users collection)
-                    const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) {
-                        setUserData(userDoc.data());
-                    } else {
-                        // Fallback to Auth data if Firestore doc isn't found
-                        setUserData({
-                            firstName: user.displayName?.split(' ')[0] || 'User',
-                            lastName: user.displayName?.split(' ')[1] || '',
-                            email: user.email,
-                            role: 'School Head'
-                        });
+                    const response = await fetch(`/api/school-by-user/${user.uid}`);
+                    const result = await response.json();
+                    if (result.exists) {
+                        setSchoolId(result.data.school_id);
                     }
                 } catch (error) {
-                    console.error("Error fetching profile:", error);
+                    console.error("Failed to fetch school ID:", error);
                 }
-            } else {
-                navigate('/login');
             }
         };
         fetchData();
@@ -99,17 +91,11 @@ const UserProfile = () => {
 
     // --- HANDLERS ---
     const handleLogout = async () => {
-    try {
-        await signOut(auth);
-        localStorage.clear();
-        sessionStorage.clear();
-        // Use window.location.href to force a full browser reload to the login page
-        // This clears any "stuck" React states that cause white screens
-        window.location.href = '/login'; 
-    } catch (error) {
-        console.error("Logout Error:", error);
-    }
-};
+        if (window.confirm("Are you sure you want to log out?")) {
+            await auth.signOut();
+            navigate('/');
+        }
+    };
 
     const handleSaveProfile = async () => {
         setLoading(true);
@@ -118,7 +104,7 @@ const UserProfile = () => {
             if (!user) return;
 
             const docRef = doc(db, "users", user.uid);
-            
+
             // Only update the allowed fields in Firestore
             await updateDoc(docRef, {
                 firstName: formData.firstName,
@@ -164,7 +150,6 @@ const UserProfile = () => {
                         </button>
                     )}
                 </div>
-            </div>
 
                 {/* --- READ ONLY FIELDS (Cannot be edited) --- */}
                 <div style={styles.readOnlyGroup}>
@@ -178,7 +163,7 @@ const UserProfile = () => {
                     </div>
                     <div style={styles.row}>
                         <span style={styles.label}>School ID</span>
-                        <span style={{...styles.readOnlyValue, color: schoolId ? '#004A99' : '#999'}}>
+                        <span style={{ ...styles.readOnlyValue, color: schoolId ? '#004A99' : '#999' }}>
                             {schoolId || "Not Assigned"}
                         </span>
                     </div>
@@ -187,12 +172,12 @@ const UserProfile = () => {
                 <div style={styles.divider}></div>
 
                 {/* --- EDITABLE FIELDS --- */}
-                
+
                 {/* NAME SECTION */}
                 <h4 style={styles.subTitle}>Identity</h4>
                 <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>First Name</label>
-                    <input 
+                    <input
                         style={isEditing ? styles.input : styles.inputDisabled}
                         name="firstName"
                         value={formData.firstName}
@@ -202,7 +187,7 @@ const UserProfile = () => {
                 </div>
                 <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>Last Name</label>
-                    <input 
+                    <input
                         style={isEditing ? styles.input : styles.inputDisabled}
                         name="lastName"
                         value={formData.lastName}
@@ -212,12 +197,12 @@ const UserProfile = () => {
                 </div>
 
                 <div style={styles.divider}></div>
-                
+
                 {/* ADDRESS SECTION */}
                 <h4 style={styles.subTitle}>Address</h4>
                 <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>Region</label>
-                    <input 
+                    <input
                         style={isEditing ? styles.input : styles.inputDisabled}
                         name="region"
                         value={formData.region}
@@ -225,9 +210,9 @@ const UserProfile = () => {
                         disabled={!isEditing}
                     />
                 </div>
-                 <div style={styles.inputGroup}>
+                <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>Province</label>
-                    <input 
+                    <input
                         style={isEditing ? styles.input : styles.inputDisabled}
                         name="province"
                         value={formData.province}
@@ -237,7 +222,7 @@ const UserProfile = () => {
                 </div>
                 <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>City/Municipality</label>
-                    <input 
+                    <input
                         style={isEditing ? styles.input : styles.inputDisabled}
                         name="city"
                         value={formData.city}
@@ -247,7 +232,7 @@ const UserProfile = () => {
                 </div>
                 <div style={styles.inputGroup}>
                     <label style={styles.inputLabel}>Barangay</label>
-                    <input 
+                    <input
                         style={isEditing ? styles.input : styles.inputDisabled}
                         name="barangay"
                         value={formData.barangay}
@@ -263,17 +248,17 @@ const UserProfile = () => {
     const renderAbout = () => (
         <div style={styles.subPageContainer}>
             <div style={styles.card}>
-                <div style={{textAlign: 'center', marginBottom: '20px'}}>
-                     {/* Placeholder Logo / Brand */}
-                    <div style={{width: '60px', height: '60px', background: '#004A99', borderRadius: '15px', margin: '0 auto 15px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '24px'}}>
+                <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                    {/* Placeholder Logo / Brand */}
+                    <div style={{ width: '60px', height: '60px', background: '#004A99', borderRadius: '15px', margin: '0 auto 15px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold', fontSize: '24px' }}>
                         IE
                     </div>
-                    <h2 style={{color: '#004A99', marginBottom: '5px'}}>InsightEd</h2>
-                    <p style={{color: '#888', fontSize: '12px'}}>Version 1.0.0 (Beta)</p>
+                    <h2 style={{ color: '#004A99', marginBottom: '5px' }}>InsightEd</h2>
+                    <p style={{ color: '#888', fontSize: '12px' }}>Version 1.0.0 (Beta)</p>
                 </div>
-                
+
                 <p style={styles.paragraph}>
-                    <strong>InsightEd</strong> is a comprehensive monitoring and management tool designed for the Department of Education. 
+                    <strong>InsightEd</strong> is a comprehensive monitoring and management tool designed for the Department of Education.
                     It bridges the gap between School Heads, Engineers, HR, and Admin by providing real-time data on school infrastructure, resources, and personnel.
                 </p>
                 <p style={styles.paragraph}>
@@ -281,8 +266,8 @@ const UserProfile = () => {
                 </p>
 
                 <div style={styles.divider}></div>
-                <p style={{textAlign: 'center', fontSize: '11px', color: '#aaa'}}>
-                    © 2024 InsightEd Development Team. <br/>All rights reserved.
+                <p style={{ textAlign: 'center', fontSize: '11px', color: '#aaa' }}>
+                    © 2024 InsightEd Development Team. <br />All rights reserved.
                 </p>
             </div>
         </div>
@@ -309,7 +294,7 @@ const UserProfile = () => {
                 <h4 style={styles.groupTitle}>Account</h4>
                 <button style={styles.menuItem} onClick={() => setActiveTab('profile')}>
                     <div style={styles.menuItemLeft}>
-                        <div style={{...styles.iconBox, background: '#E3F2FD', color: '#004A99'}}>
+                        <div style={{ ...styles.iconBox, background: '#E3F2FD', color: '#004A99' }}>
                             <FiUser size={20} />
                         </div>
                         <span style={styles.menuText}>My Profile</span>
@@ -320,28 +305,28 @@ const UserProfile = () => {
 
             <div style={styles.menuGroup}>
                 <h4 style={styles.groupTitle}>General</h4>
-                
+
                 {/* Dark Mode Toggle */}
                 <div style={styles.menuItem}>
                     <div style={styles.menuItemLeft}>
-                        <div style={{...styles.iconBox, background: '#F3E5F5', color: '#7B1FA2'}}>
+                        <div style={{ ...styles.iconBox, background: '#F3E5F5', color: '#7B1FA2' }}>
                             <FiMoon size={20} />
                         </div>
                         <span style={styles.menuText}>Dark Mode</span>
                     </div>
                     {/* Toggle Switch UI */}
-                    <div 
+                    <div
                         onClick={() => setIsDarkMode(!isDarkMode)}
                         style={{
-                            width: '44px', height: '24px', 
-                            background: isDarkMode ? '#004A99' : '#e0e0e0', 
+                            width: '44px', height: '24px',
+                            background: isDarkMode ? '#004A99' : '#e0e0e0',
                             borderRadius: '20px', position: 'relative', cursor: 'pointer', transition: '0.3s'
                         }}
                     >
                         <div style={{
                             width: '18px', height: '18px', background: 'white', borderRadius: '50%',
-                            position: 'absolute', top: '3px', 
-                            left: isDarkMode ? '23px' : '3px', 
+                            position: 'absolute', top: '3px',
+                            left: isDarkMode ? '23px' : '3px',
                             transition: '0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                         }} />
                     </div>
@@ -349,7 +334,7 @@ const UserProfile = () => {
 
                 <button style={styles.menuItem} onClick={() => setActiveTab('about')}>
                     <div style={styles.menuItemLeft}>
-                        <div style={{...styles.iconBox, background: '#FFF3E0', color: '#E65100'}}>
+                        <div style={{ ...styles.iconBox, background: '#FFF3E0', color: '#E65100' }}>
                             <FiInfo size={20} />
                         </div>
                         <span style={styles.menuText}>About InsightEd</span>
@@ -359,23 +344,25 @@ const UserProfile = () => {
             </div>
 
             <div style={styles.menuGroup}>
-                <button style={{...styles.menuItem, color: '#D32F2F'}} onClick={handleLogout}>
+                <button style={{ ...styles.menuItem, color: '#D32F2F' }} onClick={handleLogout}>
                     <div style={styles.menuItemLeft}>
-                        <div style={{...styles.iconBox, background: '#FFEBEE', color: '#D32F2F'}}>
+                        <div style={{ ...styles.iconBox, background: '#FFEBEE', color: '#D32F2F' }}>
                             <FiLogOut size={20} />
                         </div>
-                        <span style={{...styles.menuText, color: '#D32F2F', fontWeight: '600'}}>Logout</span>
+                        <span style={{ ...styles.menuText, color: '#D32F2F', fontWeight: '600' }}>Logout</span>
                     </div>
                 </button>
             </div>
         </div>
     );
 
+    // Added Import
+
     // --- MAIN RENDER ---
     return (
         <PageTransition>
-            <div style={{...styles.container, backgroundColor: isDarkMode ? '#1a202c' : '#f5f7fa'}}>
-                
+            <div style={{ ...styles.container, backgroundColor: isDarkMode ? '#1a202c' : '#f5f7fa' }}>
+
                 {/* DYNAMIC HEADER */}
                 <div style={styles.header}>
                     {activeTab !== 'settings' && (
@@ -387,11 +374,11 @@ const UserProfile = () => {
                         </button>
                     )}
                     <h2 style={styles.headerTitle}>
-                        {activeTab === 'settings' ? 'Settings' : 
-                         activeTab === 'profile' ? 'Edit Profile' : 'About'}
+                        {activeTab === 'settings' ? 'Settings' :
+                            activeTab === 'profile' ? 'Edit Profile' : 'About'}
                     </h2>
                     {/* Spacer to balance header if back button exists */}
-                    {activeTab !== 'settings' && <div style={{width: '24px'}}></div>}
+                    {activeTab !== 'settings' && <div style={{ width: '24px' }}></div>}
                 </div>
 
                 {/* CONTENT AREA */}
@@ -401,38 +388,46 @@ const UserProfile = () => {
                     {activeTab === 'about' && renderAbout()}
                 </div>
 
-                <BottomNav homeRoute={homeRoute} userRole={userData?.role} />
+                {/* CONDITIONAL BOTTOM NAV */}
+                {userData?.role === 'School Head' ? (
+                    <SchoolHeadBottomNav />
+                ) : (
+                    <BottomNav homeRoute={homeRoute} userRole={userData?.role} />
+                )}
             </div>
+        </PageTransition>
+    );
+};
 
 // --- STYLING ---
 const styles = {
     container: { minHeight: '100vh', paddingBottom: '80px', fontFamily: 'Poppins, sans-serif', transition: 'background-color 0.3s' },
-    header: { 
-        background: 'linear-gradient(135deg, #004A99 0%, #003366 100%)', 
-        padding: '20px', 
-        height: '80px', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'space-between', 
-        color: 'white', 
-        borderBottomLeftRadius: '20px', 
+    header: {
+        background: 'linear-gradient(135deg, #004A99 0%, #003366 100%)',
+        padding: '20px',
+        height: '80px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        color: 'white',
+        borderBottomLeftRadius: '20px',
         borderBottomRightRadius: '20px',
-        boxShadow: '0 4px 15px rgba(0,0,0,0.1)' 
+        boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
     },
     headerTitle: { margin: 0, fontSize: '20px', fontWeight: '600', flex: 1, textAlign: 'center' },
     backButton: { background: 'none', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' },
-    
+
     // Menu Styles
     menuContainer: { padding: '20px' },
-    miniProfile: { 
-        backgroundColor: 'white', padding: '15px', borderRadius: '15px', 
+    miniProfile: {
+        backgroundColor: 'white', padding: '15px', borderRadius: '15px',
         display: 'flex', alignItems: 'center', marginBottom: '25px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
     },
-    miniAvatar: { 
-        width: '50px', height: '50px', backgroundColor: '#004A99', color: 'white', 
-        borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center', 
-        fontSize: '20px', fontWeight: 'bold', marginRight: '15px' 
+    miniAvatar: {
+        width: '50px', height: '50px', backgroundColor: '#004A99', color: 'white',
+        borderRadius: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center',
+        fontSize: '20px', fontWeight: 'bold', marginRight: '15px'
     },
     miniDetails: { display: 'flex', flexDirection: 'column' },
     miniName: { margin: 0, fontSize: '16px', fontWeight: '600', color: '#333' },
@@ -440,8 +435,8 @@ const styles = {
 
     groupTitle: { fontSize: '12px', color: '#888', textTransform: 'uppercase', marginBottom: '10px', paddingLeft: '5px', fontWeight: '700' },
     menuGroup: { backgroundColor: 'white', borderRadius: '15px', padding: '5px 0', marginBottom: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', overflow: 'hidden' },
-    menuItem: { 
-        width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+    menuItem: {
+        width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '15px 20px', border: 'none', background: 'white', cursor: 'pointer',
         borderBottom: '1px solid #f0f0f0'
     },
@@ -457,25 +452,25 @@ const styles = {
     subTitle: { fontSize: '12px', color: '#888', textTransform: 'uppercase', fontWeight: '700', marginTop: '10px', marginBottom: '10px' },
     iconButton: { background: 'none', border: 'none', cursor: 'pointer', padding: '5px' },
     saveButton: { background: '#004A99', color: 'white', border: 'none', borderRadius: '5px', padding: '5px 10px', cursor: 'pointer' },
-    
+
     // Read Only Section
     readOnlyGroup: { backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '10px', marginBottom: '15px' },
     row: { display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' },
     label: { color: '#666', fontWeight: '500' },
     readOnlyValue: { color: '#333', fontWeight: '600' },
-    
+
     divider: { height: '1px', backgroundColor: '#eee', margin: '20px 0' },
     paragraph: { fontSize: '14px', color: '#555', lineHeight: '1.6', marginBottom: '15px' },
 
     // Forms
     inputGroup: { marginBottom: '15px' },
     inputLabel: { display: 'block', fontSize: '12px', color: '#666', marginBottom: '5px' },
-    input: { 
-        width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #004A99', 
-        fontSize: '14px', outline: 'none', transition: '0.3s', backgroundColor: '#fff' 
+    input: {
+        width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #004A99',
+        fontSize: '14px', outline: 'none', transition: '0.3s', backgroundColor: '#fff'
     },
-    inputDisabled: { 
-        width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid transparent', 
+    inputDisabled: {
+        width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid transparent',
         fontSize: '14px', backgroundColor: '#f5f5f5', color: '#555'
     }
 };
