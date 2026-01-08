@@ -19,6 +19,22 @@ const EngineerOutbox = () => {
         setItems(data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
     };
 
+    // --- NEW: DELETE HANDLER ---
+    const handleDelete = async (id) => {
+        const confirmDelete = window.confirm("Are you sure you want to delete this item? This data will be lost permanently.");
+        
+        if (confirmDelete) {
+            try {
+                await deleteEngineerFromOutbox(id);
+                // Refresh list immediately after deleting
+                loadItems();
+            } catch (error) {
+                console.error("Error deleting item:", error);
+                alert("Failed to delete item.");
+            }
+        }
+    };
+
     // --- HELPER TO FIX URLS AUTOMATICALLY ---
     const getCorrectEndpoint = (savedUrl) => {
         // 1. If we are testing locally (localhost), FORCE request to port 3000
@@ -39,11 +55,10 @@ const EngineerOutbox = () => {
         }
 
         // 2. If in Production (Vercel), ensure we use the relative path
-        // This makes it work automatically on the live site
         if (savedUrl.startsWith('http')) {
              try {
                 const urlObj = new URL(savedUrl);
-                return urlObj.pathname; // e.g. "/api/save-project"
+                return urlObj.pathname;
             } catch (e) {
                 return savedUrl;
             }
@@ -59,13 +74,10 @@ const EngineerOutbox = () => {
 
         setIsSyncing(true);
 
-        // We use a simple loop to process items one by one
         for (const item of items) {
-            // Update UI to show 'Syncing...'
             setStatusMap(prev => ({ ...prev, [item.id]: 'syncing' }));
 
             try {
-                // USE THE HELPER FUNCTION HERE
                 const targetUrl = getCorrectEndpoint(item.url);
                 console.log(`Syncing item ${item.id} to: ${targetUrl}`);
 
@@ -76,28 +88,21 @@ const EngineerOutbox = () => {
                 });
 
                 if (response.ok) {
-                    // If successful, show checkmark and delete from DB
                     setStatusMap(prev => ({ ...prev, [item.id]: 'success' }));
-                    
-                    // Small delay to let user see the success checkmark before it vanishes (optional)
                     await new Promise(r => setTimeout(r, 500)); 
-                    
                     await deleteEngineerFromOutbox(item.id);
                 } else {
-                    // Handle server errors (like 500 or 400)
                     console.error(`Server error for item ${item.id}:`, response.status);
                     setStatusMap(prev => ({ ...prev, [item.id]: 'error' }));
                 }
 
             } catch (err) {
-                // Handle network errors (like Connection Refused)
                 console.error(`Network error for item ${item.id}:`, err);
                 setStatusMap(prev => ({ ...prev, [item.id]: 'error' }));
             }
         }
 
         setIsSyncing(false);
-        // Refresh the list to remove the deleted items
         loadItems();
     };
 
@@ -132,17 +137,36 @@ const EngineerOutbox = () => {
                         <div className="mt-4 space-y-3">
                             {items.map(item => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
-                                    <div>
+                                    {/* Left side: Info */}
+                                    <div className="flex-1">
                                         <h3 className="font-bold text-slate-700 text-sm">{item.formName || 'Engineer Form'}</h3>
                                         <p className="text-xs text-slate-400">
                                             {new Date(item.timestamp).toLocaleTimeString()} • {new Date(item.timestamp).toLocaleDateString()}
                                         </p>
                                     </div>
-                                    <div className="text-xl">
-                                        {statusMap[item.id] === 'syncing' && <span className="animate-spin inline-block">⏳</span>}
-                                        {statusMap[item.id] === 'success' && <span>✅</span>}
-                                        {statusMap[item.id] === 'error' && <span>❌</span>}
-                                        {!statusMap[item.id] && <span>☁️</span>}
+                                    
+                                    {/* Right side: Status Icon & Delete Button */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-xl">
+                                            {statusMap[item.id] === 'syncing' && <span className="animate-spin inline-block">⏳</span>}
+                                            {statusMap[item.id] === 'success' && <span>✅</span>}
+                                            {statusMap[item.id] === 'error' && <span>❌</span>}
+                                            {!statusMap[item.id] && <span className="text-slate-400">☁️</span>}
+                                        </div>
+
+                                        {/* DELETE BUTTON */}
+                                        <button 
+                                            onClick={() => handleDelete(item.id)}
+                                            disabled={isSyncing || statusMap[item.id] === 'syncing'}
+                                            className={`p-2 rounded-full transition-colors ${
+                                                isSyncing 
+                                                    ? 'opacity-30 cursor-not-allowed' 
+                                                    : 'bg-red-50 text-red-500 hover:bg-red-100'
+                                            }`}
+                                            title="Delete this item"
+                                        >
+                                            🗑️
+                                        </button>
                                     </div>
                                 </div>
                             ))}

@@ -12,6 +12,7 @@ import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { addEngineerToOutbox } from "../db";
 
 // --- CONSTANTS ---
 const ProjectStatus = {
@@ -360,7 +361,17 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading }) => {
 };
 
 
-const EditProjectModal = ({ project, isOpen, onClose, onSave }) => {
+const EditProjectModal = ({ 
+  project, 
+  isOpen, 
+  onClose, 
+  onSave, 
+  onCameraClick, 
+  onGalleryClick, 
+  previews, 
+  onRemoveFile, 
+  isUploading 
+}) => {
   const [formData, setFormData] = useState(null);
 
   useEffect(() => {
@@ -409,9 +420,10 @@ const EditProjectModal = ({ project, isOpen, onClose, onSave }) => {
     formData.status === ProjectStatus.ForFinalInspection;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-[60] p-0 sm:p-4 backdrop-blur-sm">
-      <div className="bg-white w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-xl shadow-2xl animate-slide-up">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white z-10">
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-[1100] p-0 sm:p-4 backdrop-blur-sm">
+      <div className="bg-white w-full sm:max-w-lg max-h-[90vh] flex flex-col rounded-t-2xl sm:rounded-xl shadow-2xl animate-slide-up">
+        {/* --- HEADER (Fixed) --- */}
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center shrink-0">
           <h2 className="text-lg font-bold text-slate-800">Update Project</h2>
           <button
             onClick={onClose}
@@ -420,7 +432,9 @@ const EditProjectModal = ({ project, isOpen, onClose, onSave }) => {
             ✕
           </button>
         </div>
-        <div className="p-4 space-y-4">
+
+        {/* --- BODY (Scrollable) --- */}
+        <div className="p-4 space-y-4 overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
@@ -483,8 +497,52 @@ const EditProjectModal = ({ project, isOpen, onClose, onSave }) => {
               className="w-full p-2 border rounded-lg text-sm"
             />
           </div>
+
+          {/* --- NEW PHOTO UPLOAD SECTION INSIDE MODAL --- */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+              Project Photos
+            </label>
+            
+            <div className="flex gap-3 mb-3">
+              <button 
+                onClick={onCameraClick}
+                className="flex-1 py-2 bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-slate-200 transition"
+              >
+                <span>📷</span> Take Photo
+              </button>
+              <button 
+                onClick={onGalleryClick}
+                className="flex-1 py-2 bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center justify-center gap-2 hover:bg-slate-200 transition"
+              >
+                <span>🖼️</span> Upload Gallery
+              </button>
+            </div>
+
+            {previews && previews.length > 0 && (
+              <div className="grid grid-cols-4 gap-2">
+                {previews.map((url, index) => (
+                  <div key={index} className="relative group aspect-square">
+                    <img 
+                      src={url} 
+                      alt="preview" 
+                      className="w-full h-full object-cover rounded-lg border border-slate-200"
+                    />
+                    <button 
+                      onClick={() => onRemoveFile(index)}
+                      className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center shadow-sm hover:bg-red-600 transition-colors z-10"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="p-4 border-t border-slate-100 flex gap-3">
+
+        {/* --- FOOTER (Fixed) --- */}
+        <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0 bg-white sm:rounded-b-xl">
           <button
             onClick={onClose}
             className="flex-1 py-3 text-slate-600 font-bold text-sm bg-slate-100 rounded-xl"
@@ -496,9 +554,17 @@ const EditProjectModal = ({ project, isOpen, onClose, onSave }) => {
               onSave(formData);
               onClose();
             }}
-            className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20"
+            disabled={isUploading}
+            className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20 disabled:bg-slate-400 disabled:shadow-none flex items-center justify-center gap-2"
           >
-            Save Updates
+            {isUploading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Saving...
+              </>
+            ) : (
+              "Save Updates"
+            )}
           </button>
         </div>
       </div>
@@ -515,7 +581,7 @@ const AIInsightModal = ({
 }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm">
+    <div className="fixed inset-0 bg-black/60 z-[1200] flex items-center justify-center p-6 backdrop-blur-sm">
       <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white">
           <div className="flex items-center gap-2 mb-1">
@@ -636,8 +702,51 @@ const EngineerDashboard = () => {
     setIsUploading(true); 
 
     try {
-        // Step A: Save the text fields (Status, %, etc.)
+        // Step A: Prepare Body
         const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
+        
+        // --- OFFLINE CHECK ---
+        if (!navigator.onLine) {
+            // 1. Save Project Update to Outbox
+            await addEngineerToOutbox({
+                url: `${API_BASE}/api/update-project/${updatedProject.id}`,
+                method: 'PUT',
+                body: body,
+                formName: `Update: ${updatedProject.schoolName}`
+            });
+
+            // 2. Save Images to Outbox
+            if (selectedFiles.length > 0) {
+                for (const file of selectedFiles) {
+                    const reader = new FileReader();
+                    const base64Promise = new Promise(resolve => {
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(file);
+                    });
+                    const base64Image = await base64Promise;
+
+                    await addEngineerToOutbox({
+                        url: `${API_BASE}/api/upload-image`,
+                        method: 'POST',
+                        body: {
+                            projectId: updatedProject.id,
+                            imageData: base64Image,
+                            uploadedBy: user.uid,
+                        },
+                        formName: `Photo: ${updatedProject.schoolName}`
+                    });
+                }
+            }
+
+            alert("⚠️ You are offline. Changes saved to Sync Center.");
+            setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+            setSelectedFiles([]); 
+            setEditModalOpen(false);
+            return; // EXIT EARLY
+        }
+
+        // --- ONLINE FLOW ---
+        // Step A: Save the text fields (Status, %, etc.)
         const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -647,7 +756,6 @@ const EngineerDashboard = () => {
         if (!response.ok) throw new Error("Failed to update project data");
 
         // Step B: Upload any photos picked during this update session
-        // This loop is copied from your NewProjects.jsx logic
         if (selectedFiles.length > 0) {
             for (const file of selectedFiles) {
                 const reader = new FileReader();
@@ -679,7 +787,7 @@ const EngineerDashboard = () => {
         setEditModalOpen(false);
     } catch (err) {
         console.error("Save Error:", err);
-        alert("An error occurred while saving.");
+        alert("An error occurred while saving. Please check your connection.");
     } finally {
         setIsUploading(false);
     }
@@ -723,23 +831,6 @@ const removeFile = (index) => {
     setPreviews(prev => prev.filter((_, i) => i !== index));
 };
 
-  const sliderContent = [
-    {
-      id: 1,
-      title: `Welcome, Engr. ${userName}!`,
-      emoji: "👷",
-      description:
-        "Your dashboard is ready. Track ongoing construction and validate school infrastructure data.",
-    },
-    {
-      id: 2,
-      title: "Site Inspection",
-      emoji: "🏗️",
-      description:
-        "Scheduled inspection for Building A is due this Thursday. Please review the checklist.",
-    },
-  ];
-
   return (
     <PageTransition>
       <div className="min-h-screen bg-slate-50 font-sans pb-24">
@@ -774,19 +865,64 @@ const removeFile = (index) => {
               autoplay={{ delay: 5000 }}
               className="w-full"
             >
-              {sliderContent.map((item) => (
-                <SwiperSlide key={item.id} className="pb-8">
-                  <div className="bg-white p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[120px]">
-                    <h3 className="text-[#004A99] font-bold text-sm flex items-center mb-1">
-                      <span className="text-xl mr-2">{item.emoji}</span>
-                      {item.title}
-                    </h3>
-                    <p className="text-slate-500 text-xs leading-relaxed ml-7">
-                      {item.description}
-                    </p>
+              {/* --- SLIDE 1: WELCOME --- */}
+              <SwiperSlide className="pb-8">
+                <div className="bg-white p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
+                  <h3 className="text-[#004A99] font-bold text-sm flex items-center mb-1">
+                    <span className="text-xl mr-2">👷</span>
+                    Welcome, Engr. {userName}!
+                  </h3>
+                  <p className="text-slate-500 text-xs leading-relaxed ml-7">
+                    Your dashboard is ready. Track ongoing construction and validate school infrastructure data.
+                  </p>
+                </div>
+              </SwiperSlide>
+
+              {/* --- SLIDE 2: PROJECTS LIST --- */}
+              <SwiperSlide className="pb-8">
+                <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500 flex flex-col h-[140px]">
+                  <h3 className="text-emerald-700 font-bold text-sm flex items-center mb-2 shrink-0">
+                    <span className="text-xl mr-2">🏗️</span>
+                    Active Projects ({projects.length})
+                  </h3>
+                  <div className="overflow-y-auto flex-1 pr-1 space-y-2 custom-scrollbar">
+                    {projects.length > 0 ? (
+                      projects.map((p) => (
+                        <div key={p.id} className="flex justify-between items-center text-xs border-b border-slate-100 last:border-0 pb-1">
+                          <span className="text-slate-700 font-medium truncate w-[70%]">{p.schoolName}</span>
+                          <span className={`font-bold ${p.accomplishmentPercentage === 100 ? "text-emerald-600" : "text-blue-600"}`}>
+                            {p.accomplishmentPercentage || 0}%
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-400 text-xs italic ml-7">No active projects found.</p>
+                    )}
                   </div>
-                </SwiperSlide>
-              ))}
+                </div>
+              </SwiperSlide>
+
+              {/* --- SLIDE 3: REMARKS --- */}
+              <SwiperSlide className="pb-8">
+                <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 flex flex-col h-[140px]">
+                  <h3 className="text-blue-700 font-bold text-sm flex items-center mb-2 shrink-0">
+                    <span className="text-xl mr-2">📢</span>
+                    Latest Remarks
+                  </h3>
+                  <div className="overflow-y-auto flex-1 pr-1 space-y-2 custom-scrollbar">
+                    {projects.some(p => p.otherRemarks) ? (
+                      projects.filter(p => p.otherRemarks).map((p) => (
+                        <div key={p.id} className="text-xs border-b border-slate-100 last:border-0 pb-2">
+                          <p className="font-bold text-slate-700 truncate">{p.schoolName}</p>
+                          <p className="text-slate-500 line-clamp-2">{p.otherRemarks}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-slate-400 text-xs italic ml-7">No remarks available.</p>
+                    )}
+                  </div>
+                </div>
+              </SwiperSlide>
             </Swiper>
           </div>
 
@@ -826,67 +962,9 @@ const removeFile = (index) => {
         </div>
 
         {/* --- FLOATING IMAGE UPLOAD SECTION --- */}
-       {/* --- NEW FLOATING IMAGE UPLOAD SECTION --- */}
-        {editModalOpen && selectedProject && (
-          <div className="fixed bottom-28 right-6 z-[100] flex flex-col items-end">
-            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
-            <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
-
-{/* --- PHOTO PREVIEW LIST --- */}
-{previews.length > 0 && (
-    <div className="mb-4 flex flex-col gap-2 items-end max-h-48 overflow-y-auto p-2">
-        {previews.map((url, index) => (
-            <div key={index} className="relative group animate-slide-in">
-                <img 
-                    src={url} 
-                    alt="preview" 
-                    className="w-16 h-16 object-cover rounded-lg border-2 border-white shadow-md"
-                />
-                <button 
-                    onClick={() => removeFile(index)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center shadow-lg hover:bg-red-600 transition-colors"
-                >
-                    ✕
-                </button>
-            </div>
-        ))}
-    </div>
-)}
-            {showUploadOptions && (
-              <div className="mb-4 flex flex-col gap-3 animate-bounce-in">
-                <button 
-                  onClick={() => { cameraInputRef.current.click(); setShowUploadOptions(false); }} 
-                  className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-full shadow-2xl border border-slate-200 text-slate-700 active:scale-95 transition-transform"
-                >
-                  <span className="text-xl">📷</span>
-                  <span className="text-[10px] font-black uppercase tracking-wider">Take Site Photo</span>
-                </button>
-                <button 
-                  onClick={() => { fileInputRef.current.click(); setShowUploadOptions(false); }} 
-                  className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-full shadow-2xl border border-slate-200 text-slate-700 active:scale-95 transition-transform"
-                >
-                  <span className="text-xl">🖼️</span>
-                  <span className="text-[10px] font-black uppercase tracking-wider">Upload Gallery</span>
-                </button>
-              </div>
-            )}
-
-            <button 
-              onClick={() => setShowUploadOptions(!showUploadOptions)} 
-              disabled={isUploading} 
-              className={`${isUploading ? 'bg-slate-400' : 'bg-[#FDB913]'} w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-white transition-all border-4 border-white active:scale-90`}
-            >
-              {isUploading ? (
-                <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl">{showUploadOptions ? '✕' : '📸'}</span>
-                  {!showUploadOptions && <span className="text-[8px] font-bold">ADD PHOTO</span>}
-                </div>
-              )}
-            </button>
-          </div>
-        )}
+        {/* --- HIDDEN INPUTS --- */}
+        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
+        <input type="file" ref={cameraInputRef} onChange={handleFileUpload} accept="image/*" capture="environment" className="hidden" />
 
         {/* --- MODALS --- */}
         <EditProjectModal
@@ -894,9 +972,17 @@ const removeFile = (index) => {
           isOpen={editModalOpen}
           onClose={() => {
              setEditModalOpen(false);
-             setShowUploadOptions(false); // Clean up FAB state when closing
+             setShowUploadOptions(false);
+             // Optionally clear previews if you want to reset on close
+             // setPreviews([]); 
+             // setSelectedFiles([]);
           }}
           onSave={handleSaveProject}
+          onCameraClick={() => cameraInputRef.current?.click()}
+          onGalleryClick={() => fileInputRef.current?.click()}
+          previews={previews}
+          onRemoveFile={removeFile}
+          isUploading={isUploading}
         />
         <AIInsightModal
           isOpen={aiModalOpen}
