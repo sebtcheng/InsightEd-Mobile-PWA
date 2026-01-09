@@ -180,8 +180,8 @@ const SchoolProfile = () => {
                         const dbData = result.data;
                         const loadedData = mapDbToForm(dbData);
 
-                        // We pass empty objects for maps if CSV failed
-                        applyDataToState(loadedData, regionDivMap, divDistMap);
+                        // We pass the LOCALLY computed maps because state update is async/not guaranteed yet
+                        applyDataToState(loadedData, processedRegDiv, processedDivDist);
                         setLastUpdated(dbData.submitted_at);
                         setHasSavedData(true);
                         saveToLocalCache(loadedData);
@@ -401,7 +401,7 @@ const SchoolProfile = () => {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
             });
             if (response.ok) {
-                alert('Saved successfully!');
+                alert(hasSavedData ? 'Changes Saved!' : 'Profile Created Successfully!');
                 finalize();
             } else {
                 const err = await response.json();
@@ -464,7 +464,7 @@ const SchoolProfile = () => {
 
                     {/* 2. CLASSIFICATION */}
                     <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📊</span> Classification</h2>
+                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">📊</span> Classification</h2>
                         <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
                             <p className="text-xs text-blue-800 italic">This setting determines which fields appear in other Forms.</p>
                         </div>
@@ -524,7 +524,7 @@ const SchoolProfile = () => {
 
                     <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                         <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                            {isSaving ? "Saving..." : "Save Changes"}
+                            {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
                         </button>
                     </div>
                 </form>
@@ -533,7 +533,7 @@ const SchoolProfile = () => {
             {showSaveModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="font-bold text-lg">Review Changes</h3>
+                        <h3 className="font-bold text-lg">{hasSavedData ? "Review Changes" : "Confirm Submission"}</h3>
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 my-4 text-xs max-h-32 overflow-y-auto">
                             {getChanges().length > 0 ? getChanges().map((c, i) => (
                                 <div key={i} className="flex justify-between border-b pb-1 mb-1 last:border-0"><span className="font-bold text-gray-500">{c.field}</span><span className="text-gray-800">{c.newVal}</span></div>

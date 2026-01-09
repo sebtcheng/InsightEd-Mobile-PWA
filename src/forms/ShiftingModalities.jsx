@@ -5,7 +5,7 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
+// SchoolHeadBottomNav import removed
 
 const ShiftingModalities = () => {
     const navigate = useNavigate();
@@ -16,6 +16,7 @@ const ShiftingModalities = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [hasSavedData, setHasSavedData] = useState(false);
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -78,9 +79,21 @@ const ShiftingModalities = () => {
                         setAdms(loadedAdms);
                         setOriginalData({ shifts: loadedShifts, modes: loadedModes, adms: loadedAdms });
 
-                        // Lock if any data exists in DB
-                        const hasData = Object.values(db).some(v => v === true || (v && v !== ''));
-                        if (hasData) setIsLocked(true);
+                        // Check if specifically Modalities data exists
+                        const relevantKeys = [
+                            ...levels.map(l => `shift_${l}`),
+                            ...levels.map(l => `mode_${l}`),
+                            "adm_mdl", "adm_odl", "adm_tvi", "adm_blended", "adm_others"
+                        ];
+                        const hasModalitiesData = relevantKeys.some(k => db[k] && db[k] !== '' && db[k] !== false);
+
+                        if (hasModalitiesData) {
+                            setIsLocked(true);
+                            setHasSavedData(true);
+                        } else {
+                            setHasSavedData(false);
+                            setIsLocked(false);
+                        }
                     }
                 } catch (error) {
                     console.error("Offline or Error fetching modalities:", error);
@@ -114,7 +127,7 @@ const ShiftingModalities = () => {
         setIsLocked(true);
     };
 
-    // --- SAVE LOGIC ---
+    // --- SAVE ---
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
@@ -162,9 +175,10 @@ const ShiftingModalities = () => {
             });
 
             if (res.ok) {
-                alert('Success: Modalities updated!');
+                alert(hasSavedData ? 'Settings Updated!' : 'Settings Saved!');
                 setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
                 setIsLocked(true);
+                setHasSavedData(true);
             } else { throw new Error(); }
         } catch (err) {
             await saveOffline();
@@ -293,18 +307,18 @@ const ShiftingModalities = () => {
                     <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
                 ) : (
                     <>
-                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-500 font-bold py-4 rounded-xl">Cancel</button>}
+                        {originalData && hasSavedData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-500 font-bold py-4 rounded-xl">Cancel</button>}
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg">
-                            {isSaving ? "Saving..." : "Save Changes"}
+                            {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Settings")}
                         </button>
                     </>
                 )}
             </div>
 
             {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">{hasSavedData ? "Confirm Update?" : "Confirm Save?"}</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
 
-            <SchoolHeadBottomNav />
+            {/* <SchoolHeadBottomNav /> removed as per request */}
         </div>
     );
 };

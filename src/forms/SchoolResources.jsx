@@ -5,7 +5,7 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
+// SchoolHeadBottomNav import removed
 
 const SchoolResources = () => {
     const navigate = useNavigate();
@@ -241,7 +241,7 @@ const SchoolResources = () => {
                 </div>
             )}
 
-            <SchoolHeadBottomNav />
+            {/* <SchoolHeadBottomNav /> removed as per request */}
         </div>
     );
 };

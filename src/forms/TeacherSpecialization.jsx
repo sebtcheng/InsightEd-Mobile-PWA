@@ -5,7 +5,20 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
+// SchoolHeadBottomNav import removed
+
+const SUBJECTS = ['english', 'filipino', 'math', 'science', 'ap', 'mapeh', 'esp', 'tle'];
+const ANCILLARY = ['guidance', 'librarian', 'ict_coord', 'drrm_coord'];
+
+const getInitialFields = () => {
+    const fields = {};
+    SUBJECTS.forEach(s => {
+        fields[`spec_${s}_major`] = 0;
+        fields[`spec_${s}_teaching`] = 0;
+    });
+    ANCILLARY.forEach(a => { fields[`spec_${a}`] = 0; });
+    return fields;
+};
 
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
@@ -16,21 +29,10 @@ const TeacherSpecialization = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
 
     const [schoolId, setSchoolId] = useState(null);
-    const [formData, setFormData] = useState({});
+    const [formData, setFormData] = useState(getInitialFields());
     const [originalData, setOriginalData] = useState(null);
 
     const goBack = () => navigate('/school-forms');
-
-    // Init Data Structure
-    const subjects = ['english', 'filipino', 'math', 'science', 'ap', 'mapeh', 'esp', 'tle'];
-    const ancillary = ['guidance', 'librarian', 'ict_coord', 'drrm_coord'];
-
-    const initialFields = {};
-    subjects.forEach(s => {
-        initialFields[`spec_${s}_major`] = 0;
-        initialFields[`spec_${s}_teaching`] = 0;
-    });
-    ancillary.forEach(a => { initialFields[`spec_${a}`] = 0; });
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -49,7 +51,9 @@ const TeacherSpecialization = () => {
                         const db = json.data;
                         const loaded = {};
 
-                        Object.keys(initialFields).forEach(key => {
+                        // Use getInitialFields keys to ensure all are present
+                        const defaults = getInitialFields();
+                        Object.keys(defaults).forEach(key => {
                             loaded[key] = db[key] !== null ? db[key] : 0;
                         });
 
@@ -59,11 +63,11 @@ const TeacherSpecialization = () => {
                         // Lock if data exists
                         if (db.spec_math_major > 0 || db.spec_guidance > 0) setIsLocked(true);
                     } else {
-                        setFormData(initialFields);
+                        setFormData(getInitialFields());
                     }
                 } catch (e) {
                     console.error("Fetch error:", e);
-                    setFormData(initialFields);
+                    setFormData(getInitialFields());
                 }
             }
             setLoading(false);
@@ -226,7 +230,7 @@ const TeacherSpecialization = () => {
             {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Modify Data?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
             {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
 
-            <SchoolHeadBottomNav />
+            {/* <SchoolHeadBottomNav /> removed as per request */}
         </div>
     );
 };
