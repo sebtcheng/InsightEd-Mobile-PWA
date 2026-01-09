@@ -1,105 +1,104 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion'; // <--- IMPORT THIS
 
 // Auth
 import Login from './Login';
 import Register from './Register';
 
 // Dashboards
-import EngineerDashboard from './modules/EngineerDashboard'; 
-import EngineerProjects from './modules/EngineerProjects'; 
+import EngineerDashboard from './modules/EngineerDashboard';
+import EngineerProjects from './modules/EngineerProjects';
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
-import AdminDashboard from './modules/AdminDashboard'; 
-import UserProfile from './modules/UserProfile'; 
-import Activity from './modules/Activity'; 
+import AdminDashboard from './modules/AdminDashboard';
+import UserProfile from './modules/UserProfile';
+import Activity from './modules/Activity';
 import ProjectGallery from './modules/ProjectGallery';
-import Outbox from './modules/Outbox'; 
-import EngineerOutbox from './modules/EngineerOutbox';  
+import Outbox from './modules/Outbox';
+import EngineerOutbox from './modules/EngineerOutbox';
 
-// Forms Menus
+// Forms
 import SchoolForms from './modules/SchoolForms';
-import EngineerForms from './modules/EngineerForms'; 
+import EngineerForms from './modules/EngineerForms';
 
-// --- FORMS IMPORTS ---
-
-// 1. School Head Forms
+// Form Imports (School Head)
 import SchoolProfile from './forms/SchoolProfile';
 import SchoolInformation from './forms/SchoolInformation';
 import Enrolement from './forms/Enrolment';
 import OrganizedClasses from './forms/OrganizedClasses';
 import TeachingPersonnel from './forms/TeachingPersonnel';
 import ShiftingModalities from './forms/ShiftingModalities';
-import SchoolResources from './forms/SchoolResources'; // <--- NEW IMPORT
-{/*import SchoolInfrastructure from './forms/SchoolInfrastructure';*/}
+import SchoolResources from './forms/SchoolResources';
 import TeacherSpecialization from './forms/TeacherSpecialization';
 
-// 2. Engineer Forms
-{/*import EngineerSchoolInfrastructure from './forms/EngineerSchoolInfrastructure';*/}
-import EngineerSchoolResources from './forms/EngineerSchoolResources';           
+// Form Imports (Engineer)
+import EngineerSchoolResources from './forms/EngineerSchoolResources';
 import DamageAssessment from './forms/DamageAssessment';
 import ProjectMonitoring from './forms/ProjectMonitoring';
 import SiteInspection from './forms/SiteInspection';
 import MaterialInventory from './forms/MaterialInventory';
 import NewProjects from './modules/NewProjects';
-import DetailedProjInfo from './modules/DetailedProjInfo'; 
+import DetailedProjInfo from './modules/DetailedProjInfo';
 
+// --- WRAPPER COMPONENT TO HANDLE LOCATION ---
+const AnimatedRoutes = () => {
+  const location = useLocation();
 
-function App() {
   return (
-    <Router>
-      <Routes>
+    // 'mode="wait"' ensures the old page leaves before the new one enters
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
         {/* Authentication */}
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
         <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        
-        {/* Form Menus */}
+
+        {/* Menus */}
         <Route path="/school-forms" element={<SchoolForms />} />
         <Route path="/engineer-forms" element={<EngineerForms />} />
-        
-        {/* User Utilities */}
+
+        {/* Utilities */}
         <Route path="/profile" element={<UserProfile />} />
         <Route path="/activities" element={<Activity />} />
         <Route path="/outbox" element={<Outbox />} />
-          
-        {/* --- INDIVIDUAL FORM ROUTES --- */}
-        
-        {/* School Head Specific */}
+        <Route path="/engineer-outbox" element={<EngineerOutbox />} />
+
+        {/* School Head Forms */}
         <Route path="/school-profile" element={<SchoolProfile />} />
         <Route path="/school-information" element={<SchoolInformation />} />
         <Route path="/enrolment" element={<Enrolement />} />
         <Route path="/organized-classes" element={<OrganizedClasses />} />
         <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
         <Route path="/school-resources" element={<SchoolResources />} />
-         <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
-
-        {/* 👇 UPDATED ROUTE 👇 */}
+        <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
         <Route path="/shifting-modality" element={<ShiftingModalities />} />
-        
-        
 
-        {/* Engineer Specific */}
-        {/*<Route path="/school-infrastructure" element={<EngineerSchoolInfrastructure />} /> */}
-        <Route path="/school-resources" element={<EngineerSchoolResources />} />
+        {/* Engineer Forms */}
+        <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
         <Route path="/damage-assessment" element={<DamageAssessment />} />
         <Route path="/project-monitoring" element={<ProjectMonitoring />} />
         <Route path="/site-inspection" element={<SiteInspection />} />
         <Route path="/material-inventory" element={<MaterialInventory />} />
-        <Route path="/new-project" element={<NewProjects />} /> 
-        <Route path="/project-details/:id" element={<DetailedProjInfo />} /> 
-        <Route path="/engineer-outbox" element={<EngineerOutbox />} />
-
- <Route path="/project-gallery" element={<ProjectGallery />} />
-<Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
+        <Route path="/new-project" element={<NewProjects />} />
+        <Route path="/project-details/:id" element={<DetailedProjInfo />} />
+        <Route path="/project-gallery" element={<ProjectGallery />} />
+        <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
       </Routes>
+    </AnimatePresence>
+  );
+};
+
+function App() {
+  return (
+    <Router>
+      <AnimatedRoutes />
     </Router>
   );
 }

@@ -47,7 +47,7 @@ const UserProfile = () => {
     const [userData, setUserData] = useState(null);
     const [schoolId, setSchoolId] = useState(null);
     const [homeRoute, setHomeRoute] = useState('/');
-    
+
     // UI State
     const [activeTab, setActiveTab] = useState('settings'); // 'settings', 'profile', 'about', 'faq'
     const [isEditing, setIsEditing] = useState(false);
@@ -74,12 +74,12 @@ const UserProfile = () => {
                 // 1. Fetch Basic Info from Firebase
                 const docRef = doc(db, "users", user.uid);
                 const docSnap = await getDoc(docRef);
-                
+
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setUserData(data);
                     setHomeRoute(getDashboardPath(data.role));
-                    
+
                     // Initialize form data with existing values
                     setFormData({
                         firstName: data.firstName || '',
@@ -161,7 +161,7 @@ const UserProfile = () => {
             if (!user) return;
 
             const docRef = doc(db, "users", user.uid);
-            
+
             // Only update the allowed fields in Firestore
             await updateDoc(docRef, {
                 firstName: formData.firstName,
@@ -229,7 +229,7 @@ const UserProfile = () => {
                 <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
 
                 {/* --- EDITABLE FIELDS --- */}
-                
+
                 {/* NAME SECTION */}
                 <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Identity</h4>
                 <div className="mb-4">
