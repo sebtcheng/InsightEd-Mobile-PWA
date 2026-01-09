@@ -5,7 +5,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
 import SchoolHeadBottomNav from './SchoolHeadBottomNav';
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 
 const SchoolHeadDashboard = () => {
     const navigate = useNavigate();
@@ -15,9 +15,44 @@ const SchoolHeadDashboard = () => {
     const [userName, setUserName] = useState('School Head');
     const [schoolProfile, setSchoolProfile] = useState(null);
     const [headProfile, setHeadProfile] = useState(null);
-    const [progress, setProgress] = useState(0);
-    const [completedForms, setCompletedForms] = useState(0);
-    const totalForms = 8;
+
+    // --- SEARCH STATE ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+
+    const SEARCHABLE_ITEMS = [
+        { name: "School Profile", route: "/school-profile", type: "Form" },
+        { name: "School Information (Head)", route: "/school-information", type: "Form" },
+        { name: "Enrollment per Grade Level", route: "/enrolment", type: "Form" },
+        { name: "Organized Classes", route: "/organized-classes", type: "Form" },
+        { name: "Teaching Personnel", route: "/teaching-personnel", type: "Form" },
+        { name: "Shifting & Modality", route: "/shifting-modality", type: "Form" },
+        { name: "School Resources", route: "/school-resources", type: "Form" },
+        { name: "Teacher Specialization", route: "/teacher-specialization", type: "Form" },
+    ];
+
+    const handleSearch = (e) => {
+        const query = e.target.value;
+        setSearchQuery(query);
+
+        if (query.trim() === '') {
+            setSearchResults([]);
+            return;
+        }
+
+        const filtered = SEARCHABLE_ITEMS.filter(item =>
+            item.name.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(filtered);
+    };
+
+    // Stats for the "cards"
+    const [stats, setStats] = useState({
+        completedForms: 0,
+        totalForms: 8,
+        enrollment: 0,
+        teachers: 0
+    });
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -42,16 +77,7 @@ const SchoolHeadDashboard = () => {
         return () => unsubscribe();
     }, []);
 
-    useEffect(() => {
-        let count = 0;
-        if (schoolProfile) count++;
-        if (headProfile) count++;
-        if (schoolProfile && schoolProfile.total_enrollment > 0) count++;
-        setCompletedForms(count);
-        setProgress(Math.round((count / totalForms) * 100));
-    }, [schoolProfile, headProfile]);
-
-    if (loading) return <LoadingScreen message="Loading Command Center..." />;
+    // LoadingScreen check removed
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
@@ -68,17 +94,53 @@ const SchoolHeadDashboard = () => {
                         </h1>
                         <p className="text-blue-100/80 text-sm mt-2">Principal {userName}</p>
                     </div>
-                    <div className="relative w-16 h-16 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90">
-                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" className="text-blue-900/30" />
-                            <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="4" fill="transparent" 
-                                className={`${progress === 100 ? 'text-green-400' : 'text-[#FDB913]'}`}
-                                strokeDasharray={175} 
-                                strokeDashoffset={175 - (175 * progress) / 100} 
-                                strokeLinecap="round"
+
+                    {/* Quick Search / Filter Placeholder (Visual only for now) */}
+                    {/* Quick Search */}
+                    <div className="relative z-50">
+                        <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-3 flex items-center gap-3">
+                            <span className="text-blue-200 text-lg">🔍</span>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={handleSearch}
+                                placeholder="Search forms (e.g., Enrolment, Teachers)..."
+                                className="bg-transparent border-none text-white text-sm w-full placeholder-blue-200/50 focus:outline-none"
                             />
-                        </svg>
-                        <span className="absolute text-xs font-bold text-white">{progress}%</span>
+                            {searchQuery && (
+                                <button onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-blue-200 hover:text-white">✕</button>
+                            )}
+                        </div>
+
+                        {/* Search Results Dropdown */}
+                        {searchQuery && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                {searchResults.length > 0 ? (
+                                    <ul>
+                                        {searchResults.map((item, idx) => (
+                                            <li key={idx}>
+                                                <button
+                                                    onClick={() => navigate(item.route)}
+                                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-[#004A99] flex items-center justify-center text-xs font-bold">
+                                                            {item.type === 'Form' ? '📝' : '📄'}
+                                                        </div>
+                                                        <span className="text-sm font-semibold text-gray-700 group-hover:text-[#004A99]">{item.name}</span>
+                                                    </div>
+                                                    <span className="text-gray-300 group-hover:text-[#004A99] text-xs">Jump &rarr;</span>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="p-4 text-center text-gray-400 text-xs italic">
+                                        No results found for "{searchQuery}"
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

@@ -1,9 +1,9 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 import { addToOutbox } from '../db';
 import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
 
@@ -14,7 +14,7 @@ const TeacherSpecialization = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
-    
+
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
@@ -24,11 +24,11 @@ const TeacherSpecialization = () => {
     // Init Data Structure
     const subjects = ['english', 'filipino', 'math', 'science', 'ap', 'mapeh', 'esp', 'tle'];
     const ancillary = ['guidance', 'librarian', 'ict_coord', 'drrm_coord'];
-    
+
     const initialFields = {};
-    subjects.forEach(s => { 
-        initialFields[`spec_${s}_major`] = 0; 
-        initialFields[`spec_${s}_teaching`] = 0; 
+    subjects.forEach(s => {
+        initialFields[`spec_${s}_major`] = 0;
+        initialFields[`spec_${s}_teaching`] = 0;
     });
     ancillary.forEach(a => { initialFields[`spec_${a}`] = 0; });
 
@@ -48,20 +48,20 @@ const TeacherSpecialization = () => {
                         setSchoolId(json.schoolId || cachedId);
                         const db = json.data;
                         const loaded = {};
-                        
+
                         Object.keys(initialFields).forEach(key => {
                             loaded[key] = db[key] !== null ? db[key] : 0;
                         });
-                        
+
                         setFormData(loaded);
                         setOriginalData(loaded);
-                        
+
                         // Lock if data exists
                         if (db.spec_math_major > 0 || db.spec_guidance > 0) setIsLocked(true);
                     } else {
                         setFormData(initialFields);
                     }
-                } catch (e) { 
+                } catch (e) {
                     console.error("Fetch error:", e);
                     setFormData(initialFields);
                 }
@@ -81,12 +81,12 @@ const TeacherSpecialization = () => {
         setIsSaving(true);
 
         const user = auth.currentUser;
-        
+
         // 🔑 PAYLOAD: Using UID as the primary identifier for the UPDATE
-        const payload = { 
+        const payload = {
             uid: user.uid,
-            schoolId: schoolId || localStorage.getItem('schoolId'), 
-            ...formData 
+            schoolId: schoolId || localStorage.getItem('schoolId'),
+            ...formData
         };
 
         const handleOfflineSave = async () => {
@@ -98,7 +98,7 @@ const TeacherSpecialization = () => {
                     payload: payload
                 });
                 alert("📴 Saved to Outbox! Data will sync when you are online.");
-                setOriginalData({...formData});
+                setOriginalData({ ...formData });
                 setIsLocked(true);
             } catch (e) { alert("Offline save failed."); }
         };
@@ -118,17 +118,17 @@ const TeacherSpecialization = () => {
 
             if (res.ok) {
                 alert('✅ Saved successfully to Neon!');
-                setOriginalData({...formData});
+                setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
                 const err = await res.json();
                 throw new Error(err.error || "Save failed");
             }
-        } catch (e) { 
+        } catch (e) {
             console.log("Network error, moving to outbox...");
             await handleOfflineSave();
-        } finally { 
-            setIsSaving(false); 
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -136,7 +136,7 @@ const TeacherSpecialization = () => {
     const SubjectRow = ({ label, id }) => {
         const major = formData[`spec_${id}_major`];
         const teaching = formData[`spec_${id}_teaching`];
-        const mismatch = teaching > major; 
+        const mismatch = teaching > major;
 
         return (
             <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 py-4 last:border-0">
@@ -154,7 +154,7 @@ const TeacherSpecialization = () => {
         );
     };
 
-    if (loading) return <LoadingScreen message="Loading Specializations..." />;
+    // LoadingScreen check removed
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-32 relative text-sm">
@@ -170,7 +170,7 @@ const TeacherSpecialization = () => {
             </div>
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
-                
+
                 {/* 1. ANCILLARY SERVICES */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2"><span className="text-xl">🛠️</span> Ancillary Services</h2>
@@ -196,7 +196,7 @@ const TeacherSpecialization = () => {
                             <span className="text-green-600">Load</span>
                         </div>
                     </div>
-                    
+
                     <SubjectRow label="English" id="english" />
                     <SubjectRow label="Filipino" id="filipino" />
                     <SubjectRow label="Mathematics" id="math" />

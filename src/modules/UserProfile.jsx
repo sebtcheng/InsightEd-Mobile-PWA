@@ -1,10 +1,11 @@
 // src/modules/UserProfile.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase'; 
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
+import { auth, db } from '../firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
-import PageTransition from '../components/PageTransition'; 
+import SchoolHeadBottomNav from './SchoolHeadBottomNav';
+import PageTransition from '../components/PageTransition';
 import { useTheme } from '../context/ThemeContext'; // Import Hook
 
 // Icons
@@ -40,8 +41,8 @@ const FAQ_DATA = [
 
 const UserProfile = () => {
     const navigate = useNavigate();
-    const { isDarkMode, toggleTheme } = useTheme(); 
-    
+    const { isDarkMode, toggleTheme } = useTheme();
+
     // --- STATE MANAGEMENT ---
     const [userData, setUserData] = useState(null);
     const [schoolId, setSchoolId] = useState(null);
@@ -51,7 +52,7 @@ const UserProfile = () => {
     const [activeTab, setActiveTab] = useState('settings'); // 'settings', 'profile', 'about', 'faq'
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(false);
-    
+
     // FAQ Accordion State
     const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
@@ -123,8 +124,9 @@ const UserProfile = () => {
     // --- HANDLERS ---
     const handleLogout = async () => {
         if (window.confirm("Are you sure you want to log out?")) {
+            // 1. Log safely without blocking user (Fire & Forget)
             try {
-                await fetch('/api/log-activity', {
+                fetch('/api/log-activity', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -138,8 +140,17 @@ const UserProfile = () => {
                 });
             } catch (e) { console.warn("Logout Log Failed", e); }
 
-            await auth.signOut();
-            navigate('/');
+            // 2. Perform Logout
+            try {
+                await auth.signOut();
+                localStorage.clear(); // Clear all session data
+                navigate('/');
+            } catch (error) {
+                console.error("Logout Error:", error);
+                // Fallback: Force reload to login if firebase fails
+                localStorage.clear();
+                window.location.href = '/';
+            }
         }
     };
 
@@ -223,12 +234,11 @@ const UserProfile = () => {
                 <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Identity</h4>
                 <div className="mb-4">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">First Name</label>
-                    <input 
-                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${
-                            isEditing 
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400" 
+                    <input
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
                             : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                        }`}
+                            }`}
                         name="firstName"
                         value={formData.firstName}
                         onChange={handleInputChange}
@@ -237,12 +247,11 @@ const UserProfile = () => {
                 </div>
                 <div className="mb-4">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Last Name</label>
-                    <input 
-                         className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${
-                            isEditing 
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400" 
+                    <input
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
                             : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                        }`}
+                            }`}
                         name="lastName"
                         value={formData.lastName}
                         onChange={handleInputChange}
@@ -251,31 +260,29 @@ const UserProfile = () => {
                 </div>
 
                 <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
-                
+
                 {/* ADDRESS SECTION */}
                 <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Address</h4>
                 <div className="mb-4">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Region</label>
-                    <input 
-                         className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${
-                            isEditing 
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400" 
+                    <input
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
                             : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                        }`}
+                            }`}
                         name="region"
                         value={formData.region}
                         onChange={handleInputChange}
                         disabled={!isEditing}
                     />
                 </div>
-                 <div className="mb-4">
+                <div className="mb-4">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Province</label>
-                    <input 
-                         className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${
-                            isEditing 
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400" 
+                    <input
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
                             : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                        }`}
+                            }`}
                         name="province"
                         value={formData.province}
                         onChange={handleInputChange}
@@ -284,12 +291,11 @@ const UserProfile = () => {
                 </div>
                 <div className="mb-4">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">City/Municipality</label>
-                    <input 
-                         className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${
-                            isEditing 
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400" 
+                    <input
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
                             : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                        }`}
+                            }`}
                         name="city"
                         value={formData.city}
                         onChange={handleInputChange}
@@ -298,12 +304,11 @@ const UserProfile = () => {
                 </div>
                 <div className="mb-4">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Barangay</label>
-                    <input 
-                         className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${
-                            isEditing 
-                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400" 
+                    <input
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
                             : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
-                        }`}
+                            }`}
                         name="barangay"
                         value={formData.barangay}
                         onChange={handleInputChange}
@@ -318,15 +323,15 @@ const UserProfile = () => {
     const renderAbout = () => (
         <div className="p-5 animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm text-center">
-                 {/* Placeholder Logo / Brand */}
+                {/* Placeholder Logo / Brand */}
                 <div className="w-[60px] h-[60px] bg-[#004A99] rounded-2xl mx-auto mb-4 flex items-center justify-center text-white font-bold text-2xl shadow-lg">
                     IE
                 </div>
                 <h2 className="text-[#004A99] dark:text-blue-300 mb-1.5 text-xl font-bold">InsightEd</h2>
                 <p className="text-gray-400 dark:text-gray-500 text-xs text-center">Version 1.0.0 (Beta)</p>
-                
+
                 <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed my-5 text-left">
-                    <strong>InsightEd</strong> is a comprehensive monitoring and management tool designed for the Department of Education. 
+                    <strong>InsightEd</strong> is a comprehensive monitoring and management tool designed for the Department of Education.
                     It bridges the gap between School Heads, Engineers, HR, and Admin by providing real-time data on school infrastructure, resources, and personnel.
                 </p>
                 <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed mb-4 text-left">
@@ -335,7 +340,7 @@ const UserProfile = () => {
 
                 <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
                 <p className="text-center text-[10px] text-gray-400 uppercase tracking-widest">
-                    © 2024 InsightEd Development Team. <br/>All rights reserved.
+                    © 2024 InsightEd Development Team. <br />All rights reserved.
                 </p>
             </div>
         </div>
@@ -343,10 +348,10 @@ const UserProfile = () => {
 
     // 4. FAQ VIEW (NEW)
     const renderFAQ = () => {
-         const userRole = userData?.role || 'User';
-         const filteredQuestions = FAQ_DATA.filter(q => q.roles.includes(userRole));
+        const userRole = userData?.role || 'User';
+        const filteredQuestions = FAQ_DATA.filter(q => q.roles.includes(userRole));
 
-         return (
+        return (
             <div className="p-5 animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm">
                     <div className="flex items-center gap-3 mb-6 border-b border-gray-100 dark:border-slate-700 pb-4">
@@ -354,8 +359,8 @@ const UserProfile = () => {
                             <FiHelpCircle size={20} />
                         </div>
                         <div>
-                             <h3 className="text-base text-gray-800 dark:text-white font-bold m-0">Help Center</h3>
-                             <p className="text-xs text-gray-400 dark:text-gray-500 m-0">Showing FAQs for {userRole}</p>
+                            <h3 className="text-base text-gray-800 dark:text-white font-bold m-0">Help Center</h3>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 m-0">Showing FAQs for {userRole}</p>
                         </div>
                     </div>
 
@@ -364,7 +369,7 @@ const UserProfile = () => {
                             const isOpen = openFaqIndex === idx;
                             return (
                                 <div key={idx} className="border border-gray-100 dark:border-slate-700 rounded-xl overflow-hidden transition-all">
-                                    <button 
+                                    <button
                                         onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
                                         className={`w-full p-4 flex justify-between items-center bg-transparent border-0 cursor-pointer text-left transition-colors ${isOpen ? 'bg-orange-50 dark:bg-orange-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
                                     >
@@ -373,7 +378,7 @@ const UserProfile = () => {
                                         </span>
                                         {isOpen ? <FiChevronUp className="text-orange-500" /> : <FiChevronDown className="text-gray-400" />}
                                     </button>
-                                    
+
                                     {isOpen && (
                                         <div className="p-4 pt-2 bg-orange-50/50 dark:bg-slate-800/50 text-sm text-gray-600 dark:text-gray-300 leading-relaxed animate-in fade-in duration-200">
                                             {item.answer}
@@ -383,12 +388,12 @@ const UserProfile = () => {
                             );
                         })}
                         {filteredQuestions.length === 0 && (
-                             <p className="text-center text-gray-400 text-sm py-8">No specific questions found for your role.</p>
+                            <p className="text-center text-gray-400 text-sm py-8">No specific questions found for your role.</p>
                         )}
                     </div>
                 </div>
             </div>
-         );
+        );
     };
 
     // 3. MAIN SETTINGS MENU
@@ -423,7 +428,7 @@ const UserProfile = () => {
 
             <div className="bg-white dark:bg-slate-800 rounded-xl py-2 mb-5 shadow-sm overflow-hidden transition-colors border border-transparent dark:border-slate-700">
                 <h4 className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2.5 px-5 pt-3 font-bold">General</h4>
-                
+
                 {/* Dark Mode Toggle */}
                 <div className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent">
                     <div className="flex items-center gap-4">
@@ -433,7 +438,7 @@ const UserProfile = () => {
                         <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Dark Mode</span>
                     </div>
                     {/* Toggle Switch UI */}
-                    <div 
+                    <div
                         onClick={toggleTheme}
                         className={`w-11 h-6 rounded-full relative cursor-pointer transition-colors duration-300 ${isDarkMode ? 'bg-[#004A99] dark:bg-blue-600' : 'bg-gray-300'}`}
                     >
@@ -473,7 +478,7 @@ const UserProfile = () => {
                     </div>
                 </button>
             </div>
-            
+
             <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.0</p>
         </div>
     );
@@ -482,7 +487,7 @@ const UserProfile = () => {
     return (
         <PageTransition>
             <div className={`min-h-screen font-sans pb-20 transition-colors duration-300 ${isDarkMode ? 'bg-[#1a202c]' : 'bg-[#f5f7fa]'}`}>
-                
+
                 {/* DYNAMIC HEADER */}
                 <div className="bg-gradient-to-br from-[#004A99] to-[#003366] dark:from-slate-900 dark:to-slate-800 p-5 h-20 flex items-center justify-between text-white rounded-b-3xl shadow-lg transition-all duration-300">
                     {activeTab !== 'settings' && (
@@ -494,9 +499,9 @@ const UserProfile = () => {
                         </button>
                     )}
                     <h2 className="m-0 text-lg font-semibold flex-1 text-center">
-                        {activeTab === 'settings' ? 'Settings' : 
-                         activeTab === 'profile' ? 'Edit Profile' : 
-                         activeTab === 'faq' ? 'FAQ' : 'About'}
+                        {activeTab === 'settings' ? 'Settings' :
+                            activeTab === 'profile' ? 'Edit Profile' :
+                                activeTab === 'faq' ? 'FAQ' : 'About'}
                     </h2>
                     {/* Spacer to balance header if back button exists */}
                     {activeTab !== 'settings' && <div className="w-6"></div>}

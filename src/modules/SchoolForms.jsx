@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import SchoolHeadBottomNav from './SchoolHeadBottomNav'; // ✅ UPDATED IMPORT
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 
 const SchoolForms = () => {
     const navigate = useNavigate();
@@ -32,7 +32,7 @@ const SchoolForms = () => {
         },
         {
             id: 'enrolment',
-            name: "Enrolment per Grade Level",
+            name: "Enrollment per Grade Level",
             emoji: "📊",
             description: "Total number of enrollees for Grades 1 through 12.",
             route: "/enrolment",
@@ -125,6 +125,7 @@ const SchoolForms = () => {
                 return totalTeachers > 0 ? 'completed' : 'pending';
 
             case 'specialization':
+                if (!schoolProfile) return 'pending';
                 // ✅ Check for any spec_ columns
                 // If even one major is recorded, mark as completed
                 const hasSpec =
@@ -135,6 +136,7 @@ const SchoolForms = () => {
                 return hasSpec ? 'completed' : 'pending';
 
             case 'resources':
+                if (!schoolProfile) return 'pending';
                 // ✅ Check for the new res_ prefixes
                 const hasResources =
                     (schoolProfile.res_armchairs_good > 0) ||
@@ -183,7 +185,7 @@ const SchoolForms = () => {
         );
     };
 
-    if (loading) return <LoadingScreen message="Loading Forms Menu..." />;
+    // LoadingScreen check removed
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">

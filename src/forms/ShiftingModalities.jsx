@@ -1,9 +1,9 @@
 // src/forms/ShiftingModalities.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 import { addToOutbox } from '../db';
 import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
 
@@ -20,7 +20,7 @@ const ShiftingModalities = () => {
     // Data
     const [schoolId, setSchoolId] = useState(null);
     const [offering, setOffering] = useState('');
-    
+
     // Form Data
     const [shifts, setShifts] = useState({});
     const [modes, setModes] = useState({});
@@ -50,7 +50,7 @@ const ShiftingModalities = () => {
                     if (json.exists) {
                         setSchoolId(json.schoolId || storedSchoolId);
                         setOffering(json.offering || storedOffering || '');
-                        
+
                         // Keep cache in sync
                         localStorage.setItem('schoolId', json.schoolId);
                         localStorage.setItem('schoolOffering', json.offering || '');
@@ -59,7 +59,7 @@ const ShiftingModalities = () => {
                         const loadedShifts = {};
                         const loadedModes = {};
                         const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-                        
+
                         levels.forEach(lvl => {
                             loadedShifts[`shift_${lvl}`] = db[`shift_${lvl}`] || '';
                             loadedModes[`mode_${lvl}`] = db[`mode_${lvl}`] || '';
@@ -70,7 +70,7 @@ const ShiftingModalities = () => {
                             adm_odl: db.adm_odl || false,
                             adm_tvi: db.adm_tvi || false,
                             adm_blended: db.adm_blended || false,
-                            adm_others: db.adm_others || '' 
+                            adm_others: db.adm_others || ''
                         };
 
                         setShifts(loadedShifts);
@@ -127,11 +127,11 @@ const ShiftingModalities = () => {
         if (!showJHS()) { ["g7", "g8", "g9", "g10"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
         if (!showSHS()) { ["g11", "g12"].forEach(l => { cleanShifts[`shift_${l}`] = ""; cleanModes[`mode_${l}`] = ""; }); }
 
-        const payload = { 
-            schoolId: schoolId || localStorage.getItem('schoolId'), 
-            ...cleanShifts, 
-            ...cleanModes, 
-            ...adms 
+        const payload = {
+            schoolId: schoolId || localStorage.getItem('schoolId'),
+            ...cleanShifts,
+            ...cleanModes,
+            ...adms
         };
 
         const saveOffline = async () => {
@@ -180,9 +180,9 @@ const ShiftingModalities = () => {
             </div>
             <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Shifting Strategy</label>
-                <select 
-                    value={shifts[`shift_${lvl}`] || ''} 
-                    onChange={(e) => handleShiftChange(e, lvl)} 
+                <select
+                    value={shifts[`shift_${lvl}`] || ''}
+                    onChange={(e) => handleShiftChange(e, lvl)}
                     disabled={isLocked}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#004A99] disabled:bg-gray-50"
                 >
@@ -194,9 +194,9 @@ const ShiftingModalities = () => {
             </div>
             <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Learning Delivery</label>
-                <select 
-                    value={modes[`mode_${lvl}`] || ''} 
-                    onChange={(e) => handleModeChange(e, lvl)} 
+                <select
+                    value={modes[`mode_${lvl}`] || ''}
+                    onChange={(e) => handleModeChange(e, lvl)}
                     disabled={isLocked}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#004A99] disabled:bg-gray-50"
                 >
@@ -210,11 +210,11 @@ const ShiftingModalities = () => {
         </div>
     );
 
-    if (loading) return <LoadingScreen message="Loading Modalities..." />;
+    // LoadingScreen check removed
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
-             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
                     <button onClick={goBack} className="text-white text-2xl">←</button>
@@ -231,7 +231,7 @@ const ShiftingModalities = () => {
                         <h2 className="font-bold text-gray-800 flex items-center gap-2">🗓️ Per Grade Strategy</h2>
                         {offering && <span className="text-[10px] bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold uppercase">{offering}</span>}
                     </div>
-                    
+
                     {showElem() && (
                         <div className="mb-6">
                             <div className="bg-blue-50 text-blue-800 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Elementary</div>
@@ -279,7 +279,7 @@ const ShiftingModalities = () => {
                     </div>
                     <div className="mt-4">
                         <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Other Strategies</label>
-                        <textarea 
+                        <textarea
                             value={adms.adm_others} onChange={handleAdmText} disabled={isLocked}
                             placeholder="Specify other modes..."
                             className="w-full p-4 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" rows="2"
@@ -301,9 +301,9 @@ const ShiftingModalities = () => {
                 )}
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
-            
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
+
             <SchoolHeadBottomNav />
         </div>
     );

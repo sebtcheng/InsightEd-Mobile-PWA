@@ -168,6 +168,7 @@ app.get('/api/schools', async (req, res) => {
 // --- 4. POST: Save School Profile (With Detailed Audit Log) ---
 app.post('/api/save-school', async (req, res) => {
   const data = req.body;
+  console.log("Saving School Profile. Payload received:", JSON.stringify(data, null, 2)); // DEBUG LOG
   const client = await pool.connect();
 
   try {
@@ -198,7 +199,8 @@ app.post('/api/save-school', async (req, res) => {
         barangay: 'barangay',
         motherSchoolId: 'mother_school_id',
         latitude: 'latitude',
-        longitude: 'longitude'
+        longitude: 'longitude',
+        curricularOffering: 'curricular_offering'
       };
 
       for (const [frontKey, dbCol] of Object.entries(fieldMap)) {
@@ -234,10 +236,12 @@ app.post('/api/save-school', async (req, res) => {
         school_id, school_name, region, province, division, district, 
         municipality, leg_district, barangay, mother_school_id, 
         latitude, longitude, submitted_by, submitted_at, 
+        curricular_offering,
         history_logs
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, 
-        jsonb_build_array($14::jsonb) 
+        $14,
+        jsonb_build_array($15::jsonb) 
       )
       ON CONFLICT (school_id) 
       DO UPDATE SET 
@@ -252,9 +256,10 @@ app.post('/api/save-school', async (req, res) => {
         mother_school_id = EXCLUDED.mother_school_id,
         latitude = EXCLUDED.latitude,
         longitude = EXCLUDED.longitude,
+        curricular_offering = EXCLUDED.curricular_offering,
         submitted_by = EXCLUDED.submitted_by,
         submitted_at = CURRENT_TIMESTAMP,
-        history_logs = school_profiles.history_logs || $14::jsonb;
+        history_logs = school_profiles.history_logs || $15::jsonb;
     `;
 
     const values = [
@@ -262,7 +267,8 @@ app.post('/api/save-school', async (req, res) => {
       data.division, data.district, data.municipality, data.legDistrict,
       data.barangay, data.motherSchoolId, data.latitude, data.longitude,
       data.submittedBy,
-      JSON.stringify(newLogEntry)
+      data.curricularOffering, // $14
+      JSON.stringify(newLogEntry) // $15
     ];
 
     await client.query(query, values);

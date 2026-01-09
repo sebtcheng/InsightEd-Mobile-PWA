@@ -1,9 +1,9 @@
 // src/forms/TeachingPersonnel.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 import { addToOutbox } from '../db';
 import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
 
@@ -20,7 +20,7 @@ const TeachingPersonnel = () => {
     // Data
     const [schoolId, setSchoolId] = useState(null);
     const [offering, setOffering] = useState('');
-    
+
     // --- KEY FIX: Using teach_ prefix to match Neon Schema ---
     const [formData, setFormData] = useState({
         teach_kinder: 0, teach_g1: 0, teach_g2: 0, teach_g3: 0, teach_g4: 0, teach_g5: 0, teach_g6: 0,
@@ -97,60 +97,60 @@ const TeachingPersonnel = () => {
 
     // Inside src/forms/TeachingPersonnel.jsx
 
-const confirmSave = async () => {
-    setShowSaveModal(false);
-    setIsSaving(true);
-    
-    const user = auth.currentUser;
+    const confirmSave = async () => {
+        setShowSaveModal(false);
+        setIsSaving(true);
 
-    // We send the UID so the backend can find the row WHERE submitted_by = uid
-    const payload = { 
-        uid: user.uid, 
-        schoolId: schoolId || localStorage.getItem('schoolId'),
-        ...formData // This contains teach_kinder, teach_g1, etc.
-    };
+        const user = auth.currentUser;
 
-    // 1. OFFLINE LOGIC
-    if (!navigator.onLine) {
+        // We send the UID so the backend can find the row WHERE submitted_by = uid
+        const payload = {
+            uid: user.uid,
+            schoolId: schoolId || localStorage.getItem('schoolId'),
+            ...formData // This contains teach_kinder, teach_g1, etc.
+        };
+
+        // 1. OFFLINE LOGIC
+        if (!navigator.onLine) {
+            try {
+                await addToOutbox({
+                    type: 'TEACHING_PERSONNEL',
+                    label: 'Teaching Personnel',
+                    url: '/api/save-teaching-personnel',
+                    payload: payload
+                });
+                alert("⚠️ Saved to Outbox! Sync when you have internet.");
+                setOriginalData({ ...formData });
+                setIsLocked(true);
+            } finally {
+                setIsSaving(false);
+            }
+            return;
+        }
+
+        // 2. ONLINE LOGIC
         try {
-            await addToOutbox({
-                type: 'TEACHING_PERSONNEL',
-                label: 'Teaching Personnel',
-                url: '/api/save-teaching-personnel',
-                payload: payload
+            const response = await fetch('/api/save-teaching-personnel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
-            alert("⚠️ Saved to Outbox! Sync when you have internet.");
-            setOriginalData({ ...formData });
-            setIsLocked(true); 
+
+            if (response.ok) {
+                alert('✅ Teaching Personnel saved successfully to Neon!');
+                setOriginalData({ ...formData });
+                setIsLocked(true);
+            } else {
+                const err = await response.json();
+                // This will now tell you if the school_id was not found
+                alert('Error: ' + err.error);
+            }
+        } catch (error) {
+            alert("Network Error. Please try again.");
         } finally {
             setIsSaving(false);
         }
-        return;
-    }
-
-    // 2. ONLINE LOGIC
-    try {
-        const response = await fetch('/api/save-teaching-personnel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (response.ok) {
-            alert('✅ Teaching Personnel saved successfully to Neon!');
-            setOriginalData({ ...formData });
-            setIsLocked(true); 
-        } else {
-            const err = await response.json();
-            // This will now tell you if the school_id was not found
-            alert('Error: ' + err.error);
-        }
-    } catch (error) {
-        alert("Network Error. Please try again.");
-    } finally {
-        setIsSaving(false);
-    }
-};
+    };
 
     const saveOffline = async (payload) => {
         try {
@@ -169,19 +169,19 @@ const confirmSave = async () => {
     const TeacherInput = ({ label, name }) => (
         <div className="flex flex-col items-center">
             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 text-center">{label}</label>
-            <input 
-                type="number" min="0" 
-                name={name} 
-                value={formData[name]} 
-                onChange={handleChange} 
+            <input
+                type="number" min="0"
+                name={name}
+                value={formData[name]}
+                onChange={handleChange}
                 disabled={isLocked}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all" 
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all"
             />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative"> 
+        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -258,8 +258,8 @@ const confirmSave = async () => {
                 )}
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Personnel?</h3><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Personnel?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
 
             <SchoolHeadBottomNav />
         </div>

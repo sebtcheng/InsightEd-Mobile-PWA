@@ -38,16 +38,25 @@ const EngineerOutbox = () => {
     // --- HELPER TO FIX URLS AUTOMATICALLY ---
     const getCorrectEndpoint = (savedUrl) => {
         let path = savedUrl;
-        
-        // If savedUrl is absolute (starts with http), strip the domain to make it relative
-        if (savedUrl.startsWith('http')) {
+
+        // 1. If absolute URL, extract path
+        if (savedUrl && savedUrl.startsWith('http')) {
             try {
                 const urlObj = new URL(savedUrl);
                 path = urlObj.pathname;
             } catch (e) {
                 console.error("URL parsing error:", e);
+                // If parsing fails, we keep path = savedUrl and hope for the best
             }
         }
+
+        // 2. Normalize: Ensure it starts with /api
+        // We check 'path' here, not 'savedUrl'
+        if (path && !path.startsWith('/api')) {
+            // Handle cases like "projects" -> "/api/projects" or "/projects" -> "/api/projects"
+            return `/api${path.startsWith('/') ? '' : '/'}${path}`;
+        }
+
         return path;
     };
 

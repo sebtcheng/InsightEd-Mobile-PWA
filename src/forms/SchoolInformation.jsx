@@ -1,10 +1,10 @@
 // src/forms/SchoolInformation.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import LoadingScreen from '../components/LoadingScreen'; 
-import { addToOutbox } from '../db'; 
+// LoadingScreen import removed 
+import { addToOutbox } from '../db';
 import Papa from 'papaparse'; //
 
 const SchoolInformation = () => {
@@ -14,13 +14,13 @@ const SchoolInformation = () => {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
-    
-    const [isLocked, setIsLocked] = useState(false); 
+
+    const [isLocked, setIsLocked] = useState(false);
     const [lastUpdated, setLastUpdated] = useState(null);
 
-    const [showSaveModal, setShowSaveModal] = useState(false); 
-    const [isChecked, setIsChecked] = useState(false); 
-    const [editAgreement, setEditAgreement] = useState(false); 
+    const [showSaveModal, setShowSaveModal] = useState(false);
+    const [isChecked, setIsChecked] = useState(false);
+    const [editAgreement, setEditAgreement] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -32,15 +32,15 @@ const SchoolInformation = () => {
     const [originalData, setOriginalData] = useState(null);
 
     const positionOptions = [
-        "Teacher I", "Teacher II", "Teacher III", "Master Teacher I", "Master Teacher II", 
-        "Master Teacher III", "Master Teacher IV", "SPED Teacher I", "SPED Teacher II", 
-        "SPED Teacher III", "SPED Teacher IV", "SPED Teacher V", "Special Science Teacher I", 
-        "Special Science Teacher II", "Head Teacher I", "Head Teacher II", "Head Teacher III", 
-        "Head Teacher IV", "Head Teacher V", "Head Teacher VI", "Assistant School Principal I", 
-        "Assistant School Principal II", "School Principal I", "School Principal II", 
-        "School Principal III", "School Principal IV", "Special School Principal I", 
-        "Special School Principal II", "Vocational School Administrator I", 
-        "Vocational School Administrator II", "Vocational School Administrator III", 
+        "Teacher I", "Teacher II", "Teacher III", "Master Teacher I", "Master Teacher II",
+        "Master Teacher III", "Master Teacher IV", "SPED Teacher I", "SPED Teacher II",
+        "SPED Teacher III", "SPED Teacher IV", "SPED Teacher V", "Special Science Teacher I",
+        "Special Science Teacher II", "Head Teacher I", "Head Teacher II", "Head Teacher III",
+        "Head Teacher IV", "Head Teacher V", "Head Teacher VI", "Assistant School Principal I",
+        "Assistant School Principal II", "School Principal I", "School Principal II",
+        "School Principal III", "School Principal IV", "Special School Principal I",
+        "Special School Principal II", "Vocational School Administrator I",
+        "Vocational School Administrator II", "Vocational School Administrator III",
         "Public School District Supervisor"
     ];
 
@@ -51,7 +51,7 @@ const SchoolInformation = () => {
     const handlePsiLookup = (psiCd) => {
         const cleanPsi = String(psiCd).trim();
         if (cleanPsi.length < 5) return;
-        
+
         setIsSearching(true);
         Papa.parse("/Oct2025-GMIS-Filled RAW.csv", {
             download: true,
@@ -59,10 +59,10 @@ const SchoolInformation = () => {
             skipEmptyLines: true,
             complete: (results) => {
                 // Find match based on PSI_CD column
-                const match = results.data.find(row => 
+                const match = results.data.find(row =>
                     String(row.PSI_CD).trim() === cleanPsi
                 );
-                
+
                 if (match) {
                     setFormData(prev => ({
                         ...prev,
@@ -109,12 +109,12 @@ const SchoolInformation = () => {
                             };
                             setFormData(loadedData);
                             setOriginalData(loadedData);
-                            setLastUpdated(data.updated_at); 
+                            setLastUpdated(data.updated_at);
                             setIsLocked(true);
                         }
                     }
-                } catch (error) { 
-                    console.log("Offline or Server Error."); 
+                } catch (error) {
+                    console.log("Offline or Server Error.");
                 }
             }
             setTimeout(() => setLoading(false), 1000);
@@ -134,62 +134,62 @@ const SchoolInformation = () => {
 
     // --- 3. SAVE LOGIC ---
     const confirmSave = async () => {
-    setShowSaveModal(false);
-    setIsSaving(true);
-    const user = auth.currentUser;
-    
-    // Package all data including the new CSV fields
-    const payload = { 
-        uid: user.uid, 
-        ...formData // Includes lastName, firstName, middleName, itemNumber, positionTitle, dateHired, sex, region, division
-    };
+        setShowSaveModal(false);
+        setIsSaving(true);
+        const user = auth.currentUser;
 
-    if (!navigator.onLine) {
+        // Package all data including the new CSV fields
+        const payload = {
+            uid: user.uid,
+            ...formData // Includes lastName, firstName, middleName, itemNumber, positionTitle, dateHired, sex, region, division
+        };
+
+        if (!navigator.onLine) {
+            try {
+                await addToOutbox({
+                    type: 'SCHOOL_HEAD_INFO',
+                    label: 'School Head Info',
+                    url: '/api/save-school-head',
+                    payload: payload
+                });
+                alert("Data saved to Outbox! Sync when online.");
+                setIsLocked(true);
+            } finally {
+                setIsSaving(false);
+            }
+            return;
+        }
+
         try {
-            await addToOutbox({
-                type: 'SCHOOL_HEAD_INFO',
-                label: 'School Head Info',
-                url: '/api/save-school-head',
-                payload: payload
+            const response = await fetch('/api/save-school-head', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             });
-            alert("Data saved to Outbox! Sync when online.");
-            setIsLocked(true); 
+
+            if (response.ok) {
+                alert('School Head Information saved successfully!');
+                setOriginalData({ ...formData });
+                setIsLocked(true);
+            } else {
+                const err = await response.json();
+                alert('Error: ' + err.error);
+            }
+        } catch (error) {
+            alert("Network Error. Please try again.");
         } finally {
             setIsSaving(false);
         }
-        return;
-    }
+    };
 
-    try {
-        const response = await fetch('/api/save-school-head', {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(payload)
-        });
-
-        if (response.ok) {
-            alert('School Head Information saved successfully!');
-            setOriginalData({...formData});
-            setIsLocked(true); 
-        } else {
-            const err = await response.json();
-            alert('Error: ' + err.error);
-        }
-    } catch (error) { 
-        alert("Network Error. Please try again."); 
-    } finally { 
-        setIsSaving(false); 
-    }
-};
-
-    if (loading) return <LoadingScreen message="Loading Head Profile..." />;
+    // LoadingScreen check removed
 
     const inputClass = `w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all`;
     const labelClass = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 ml-1";
     const sectionClass = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6";
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative"> 
+        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -208,14 +208,14 @@ const SchoolInformation = () => {
                 <div className={sectionClass}>
                     <label className={labelClass}>Item Number (PSI_CD)</label>
                     <div className="relative">
-                        <input 
-                            type="text" 
-                            name="itemNumber" 
-                            value={formData.itemNumber} 
+                        <input
+                            type="text"
+                            name="itemNumber"
+                            value={formData.itemNumber}
                             onChange={handleChange}
-                            onBlur={handleItemNumberBlur} 
-                            placeholder="Enter PSI_CD for autofill..." 
-                            className={`${inputClass} !border-blue-200`} 
+                            onBlur={handleItemNumberBlur}
+                            placeholder="Enter PSI_CD for autofill..."
+                            className={`${inputClass} !border-blue-200`}
                             disabled={isLocked}
                         />
                         {isSearching && <span className="absolute right-4 top-3 animate-spin">⏳</span>}

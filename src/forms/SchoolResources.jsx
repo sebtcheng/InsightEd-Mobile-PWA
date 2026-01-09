@@ -1,9 +1,9 @@
 // src/forms/SchoolResources.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 import { addToOutbox } from '../db';
 import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav';
 
@@ -16,7 +16,7 @@ const SchoolResources = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
-    
+
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
@@ -25,26 +25,26 @@ const SchoolResources = () => {
 
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
-        res_armchairs_good: 0, 
+        res_armchairs_good: 0,
         res_armchairs_repair: 0,
-        res_teacher_tables_good: 0, 
+        res_teacher_tables_good: 0,
         res_teacher_tables_repair: 0,
-        res_blackboards_good: 0, 
+        res_blackboards_good: 0,
         res_blackboards_defective: 0,
-        res_desktops_instructional: 0, 
+        res_desktops_instructional: 0,
         res_desktops_admin: 0,
-        res_laptops_teachers: 0, 
+        res_laptops_teachers: 0,
         res_tablets_learners: 0,
-        res_printers_working: 0, 
+        res_printers_working: 0,
         res_projectors_working: 0,
         res_internet_type: '',
-        res_toilets_male: 0, 
-        res_toilets_female: 0, 
+        res_toilets_male: 0,
+        res_toilets_female: 0,
         res_toilets_pwd: 0,
-        res_faucets: 0, 
+        res_faucets: 0,
         res_water_source: '',
-        res_sci_labs: 0, 
-        res_com_labs: 0, 
+        res_sci_labs: 0,
+        res_com_labs: 0,
         res_tvl_workshops: 0
     };
 
@@ -59,7 +59,7 @@ const SchoolResources = () => {
                 try {
                     const res = await fetch(`/api/school-resources/${user.uid}`);
                     const json = await res.json();
-                    
+
                     if (json.exists) {
                         const db = json.data;
                         setSchoolId(db.school_id || cachedId);
@@ -69,7 +69,7 @@ const SchoolResources = () => {
                         Object.keys(initialFields).forEach(key => {
                             loaded[key] = db[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
                         });
-                        
+
                         setFormData(loaded);
                         setOriginalData(loaded);
 
@@ -92,9 +92,9 @@ const SchoolResources = () => {
 
     const handleChange = (e) => {
         const { name, value, type } = e.target;
-        setFormData(prev => ({ 
-            ...prev, 
-            [name]: type === 'number' ? (parseInt(value) || 0) : value 
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'number' ? (parseInt(value) || 0) : value
         }));
     };
 
@@ -102,11 +102,11 @@ const SchoolResources = () => {
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
-        
-        const payload = { 
-            schoolId: schoolId || localStorage.getItem('schoolId'), 
+
+        const payload = {
+            schoolId: schoolId || localStorage.getItem('schoolId'),
             uid: auth.currentUser.uid,
-            ...formData 
+            ...formData
         };
 
         if (!navigator.onLine) {
@@ -123,7 +123,7 @@ const SchoolResources = () => {
 
             if (res.ok) {
                 alert('Success: Database updated!');
-                setOriginalData({...formData});
+                setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
                 throw new Error("Update failed");
@@ -143,7 +143,7 @@ const SchoolResources = () => {
             payload: payload
         });
         alert("Saved to Outbox (Offline Mode)");
-        setOriginalData({...formData});
+        setOriginalData({ ...formData });
         setIsLocked(true);
         setIsSaving(false);
     };
@@ -152,15 +152,15 @@ const SchoolResources = () => {
     const InputField = ({ label, name, type = "number" }) => (
         <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest w-2/3">{label}</label>
-            <input 
-                type={type} name={name} value={formData[name] ?? (type === 'number' ? 0 : '')} 
+            <input
+                type={type} name={name} value={formData[name] ?? (type === 'number' ? 0 : '')}
                 onChange={handleChange} disabled={isLocked}
                 className="w-24 text-center font-bold text-blue-900 bg-white border border-gray-200 rounded-lg py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
             />
         </div>
     );
 
-    if (loading) return <LoadingScreen message="Accessing Neon Database..." />;
+    // LoadingScreen check removed
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-40">

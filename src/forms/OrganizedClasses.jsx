@@ -1,9 +1,9 @@
 // src/forms/OrganizedClasses.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase'; 
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import LoadingScreen from '../components/LoadingScreen';
+// LoadingScreen import removed
 import { addToOutbox } from '../db';
 import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav'; // Ensure correct path
 
@@ -13,15 +13,15 @@ const OrganizedClasses = () => {
     // --- STATE ---
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
+
     // UI States: Default to FALSE (Unlocked) so new users can type immediately
-    const [isLocked, setIsLocked] = useState(false); 
+    const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
-    const [offering, setOffering] = useState(''); 
+    const [offering, setOffering] = useState('');
     const [formData, setFormData] = useState({
         kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
         g7: 0, g8: 0, g9: 0, g10: 0,
@@ -50,7 +50,7 @@ const OrganizedClasses = () => {
                     if (json.exists) {
                         setSchoolId(json.schoolId);
                         setOffering(json.offering || storedOffering || '');
-                        
+
                         // Sync storage to keep data fresh
                         localStorage.setItem('schoolId', json.schoolId);
                         localStorage.setItem('schoolOffering', json.offering || '');
@@ -97,7 +97,7 @@ const OrganizedClasses = () => {
 
     // --- ACTIONS ---
     const handleUpdateClick = () => setShowEditModal(true);
-    
+
     const handleConfirmEdit = () => {
         setOriginalData({ ...formData });
         setIsLocked(false);
@@ -119,7 +119,7 @@ const OrganizedClasses = () => {
                 payload: payload
             });
             alert("⚠️ Connection unstable. \n\nData saved to Outbox! Sync when you have internet.");
-            
+
             setOriginalData({ ...formData });
             setIsLocked(true);
         } catch (e) {
@@ -133,8 +133,8 @@ const OrganizedClasses = () => {
         setIsSaving(true);
 
         // Sanitize payload based on active sections
-        const payload = { 
-            schoolId, 
+        const payload = {
+            schoolId,
             kinder: showElem() ? formData.kinder : 0,
             g1: showElem() ? formData.g1 : 0,
             g2: showElem() ? formData.g2 : 0,
@@ -161,7 +161,7 @@ const OrganizedClasses = () => {
                 alert("📴 You are offline. \n\nData saved to Outbox! Sync when you have internet.");
                 setOriginalData({ ...formData });
                 setIsLocked(true);
-            } catch (e) { alert("Failed to save offline."); } 
+            } catch (e) { alert("Failed to save offline."); }
             finally { setIsSaving(false); }
             return;
         }
@@ -176,7 +176,7 @@ const OrganizedClasses = () => {
             if (res.ok) {
                 alert('Success: Organized Classes saved!');
                 setOriginalData({ ...formData });
-                setIsLocked(true); 
+                setIsLocked(true);
             } else {
                 throw new Error("Server Error");
             }
@@ -192,25 +192,25 @@ const OrganizedClasses = () => {
     const labelClass = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 text-center";
     const sectionClass = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6";
 
-    if (loading) return <LoadingScreen message="Loading Class Data..." />;
+    // LoadingScreen check removed
 
     const ClassInput = ({ label, name }) => (
         <div>
             <label className={labelClass}>{label}</label>
-            <input 
-                type="number" min="0" 
-                name={name} 
-                value={formData[name]} 
-                onChange={handleChange} 
+            <input
+                type="number" min="0"
+                name={name}
+                value={formData[name]}
+                onChange={handleChange}
                 disabled={isLocked}
-                className={inputClass} 
+                className={inputClass}
             />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative"> 
-            
+        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -279,7 +279,7 @@ const OrganizedClasses = () => {
                     )}
 
                     {!showElem() && !showJHS() && !showSHS() && (
-                         <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
+                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
                             <p className="text-gray-400 font-bold">No offering details found.</p>
                             <p className="text-xs text-gray-400 mt-2">Please ensure your <b>School Profile</b> is complete.</p>
                         </div>
@@ -289,7 +289,7 @@ const OrganizedClasses = () => {
 
             <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                 {isLocked ? (
-                    <button 
+                    <button
                         onClick={handleUpdateClick}
                         className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"
                     >
@@ -305,9 +305,9 @@ const OrganizedClasses = () => {
                 )}
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Classes?</h3><p className="text-gray-500 text-sm mt-2">Modify the section counts in the database.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
-            
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><p className="text-gray-500 text-sm mt-2">This will update the records in the database.</p><div className="mt-6 flex gap-2"><button onClick={()=>setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Classes?</h3><p className="text-gray-500 text-sm mt-2">Modify the section counts in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
+
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><p className="text-gray-500 text-sm mt-2">This will update the records in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
 
             <SchoolHeadBottomNav />
         </div>
