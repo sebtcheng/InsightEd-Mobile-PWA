@@ -21,12 +21,35 @@ export const ThemeProvider = ({ children }) => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // User Logged In: Fetch preference
+                // User Logged In: Fetch preference from Firestore
                 try {
                     const docRef = doc(db, "users", user.uid);
                     const docSnap = await getDoc(docRef);
+                    
+                    // Get the current localStorage value (most recent user action)
+                    const localTheme = localStorage.getItem('theme');
+                    
                     if (docSnap.exists() && docSnap.data().theme) {
-                        setIsDarkMode(docSnap.data().theme === 'dark');
+                        const firestoreTheme = docSnap.data().theme;
+                        
+                        // If localStorage has a theme set, prioritize it (user's most recent toggle)
+                        // Only use Firestore theme if localStorage doesn't have a preference yet
+                        if (localTheme === null || localTheme === undefined) {
+                            setIsDarkMode(firestoreTheme === 'dark');
+                        } else {
+                            // Use localStorage (most recent action) and sync to Firestore
+                            const localIsDark = localTheme === 'dark';
+                            setIsDarkMode(localIsDark);
+                            
+                            // If localStorage differs from Firestore, update Firestore
+                            if ((localIsDark ? 'dark' : 'light') !== firestoreTheme) {
+                                setDoc(docRef, { theme: localTheme }, { merge: true })
+                                    .catch(e => console.error("Error syncing theme to DB:", e));
+                            }
+                        }
+                    } else if (localTheme) {
+                        // No Firestore theme, use localStorage
+                        setIsDarkMode(localTheme === 'dark');
                     }
                 } catch (error) {
                     console.error("Failed to sync theme:", error);

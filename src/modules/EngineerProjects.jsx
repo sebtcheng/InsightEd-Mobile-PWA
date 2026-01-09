@@ -47,22 +47,22 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
   const getStatusColor = (status) => {
     switch (status) {
       case ProjectStatus.Completed:
-        return "bg-emerald-50 text-emerald-600 border-emerald-100";
+        return "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800";
       case ProjectStatus.Ongoing:
-        return "bg-blue-50 text-blue-600 border-blue-100";
+        return "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-800";
       case ProjectStatus.UnderProcurement:
-        return "bg-amber-50 text-amber-600 border-amber-100";
+        return "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-800";
       case ProjectStatus.ForFinalInspection:
-        return "bg-purple-50 text-purple-600 border-purple-100";
+        return "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border-purple-100 dark:border-purple-800";
       default:
-        return "bg-slate-50 text-slate-600 border-slate-100";
+        return "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-100 dark:border-slate-700";
     }
   };
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 h-[450px] flex items-center justify-center flex-col">
-        <div className="w-10 h-10 border-4 border-slate-100 border-t-[#004A99] rounded-full animate-spin mb-4"></div>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 h-[450px] flex items-center justify-center flex-col">
+        <div className="w-10 h-10 border-4 border-slate-100 dark:border-slate-700 border-t-[#004A99] dark:border-t-blue-500 rounded-full animate-spin mb-4"></div>
         <p className="text-sm font-medium text-slate-400">Loading your projects...</p>
       </div>
     );
@@ -70,11 +70,11 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
 
   if (projects.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 h-[300px] flex items-center justify-center flex-col p-8 text-center">
-        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-          <LuClipboardList size={32} className="text-slate-300" />
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 h-[300px] flex items-center justify-center flex-col p-8 text-center">
+        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
+          <LuClipboardList size={32} className="text-slate-300 dark:text-slate-500" />
         </div>
-        <p className="text-lg font-bold text-slate-700">
+        <p className="text-lg font-bold text-slate-700 dark:text-slate-200">
           {searchQuery ? "No matching projects" : "No Projects Yet"}
         </p>
         <p className="text-sm text-slate-400 mt-1 max-w-[200px]">
@@ -85,12 +85,12 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col h-[calc(100vh-220px)] overflow-hidden">
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-700 flex flex-col h-[calc(100vh-220px)] overflow-hidden">
       <div className="overflow-auto flex-1 relative custom-scrollbar">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-50/80 backdrop-blur-md sticky top-0 z-20 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-100">
+          <thead className="bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-100 dark:border-slate-700">
             <tr>
-              <th className="sticky left-0 bg-slate-50 z-30 p-4 min-w-[150px]">
+              <th className="sticky left-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 min-w-[150px]">
                 Project Info
               </th>
               <th className="p-4 min-w-[120px]">
@@ -99,12 +99,12 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
               <th className="p-4 min-w-[100px]">
                 Details
               </th>
-              <th className="sticky right-0 bg-slate-50 z-30 p-4 min-w-[100px] text-center">
+              <th className="sticky right-0 bg-slate-50 dark:bg-slate-900 z-30 p-4 min-w-[100px] text-center">
                 Action
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50 text-xs text-slate-600">
+          <tbody className="divide-y divide-slate-50 dark:divide-slate-700 text-xs text-slate-600 dark:text-slate-300">
             {projects.map((p, idx) => {
               const isLocked = p.status === ProjectStatus.Completed;
               const progress = p.accomplishmentPercentage || 0;
@@ -112,18 +112,18 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
               return (
                 <tr
                   key={p.id}
-                  className="hover:bg-blue-50/30 transition-all duration-200 group animate-in fade-in slide-in-from-bottom-2"
+                  className="hover:bg-blue-50/30 dark:hover:bg-blue-900/20 transition-all duration-200 group animate-in fade-in slide-in-from-bottom-2"
                   style={{ animationDelay: `${idx * 50}ms` }}
                 >
-                  <td className="sticky left-0 bg-white group-hover:bg-blue-50/30 z-10 p-4 border-r border-slate-50">
-                    <div className="font-bold text-slate-800 mb-1 line-clamp-2 leading-tight group-hover:text-[#004A99] transition-colors">
+                  <td className="sticky left-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-r border-slate-50 dark:border-slate-700">
+                    <div className="font-bold text-slate-800 dark:text-slate-100 mb-1 line-clamp-2 leading-tight group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors">
                       {p.schoolName}
                     </div>
                     <div className="text-[10px] text-slate-400 mb-2 line-clamp-1 italic">
                       {p.projectName}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[9px] font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 font-mono">
+                      <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 font-mono">
                         {p.schoolId}
                       </span>
                     </div>
@@ -145,11 +145,11 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
                           <span>PROGRESS</span>
-                          <span className={progress === 100 ? "text-emerald-500" : "text-[#004A99]"}>
+                          <span className={progress === 100 ? "text-emerald-500 dark:text-emerald-400" : "text-[#004A99] dark:text-blue-400"}>
                             {progress}%
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-50">
+                        <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden border border-slate-50 dark:border-slate-600">
                           <div
                             className={`h-full rounded-full transition-all duration-1000 ease-out ${
                               progress === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_8px_rgba(59,130,246,0.3)]"
@@ -159,7 +159,7 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         </div>
                       </div>
                     ) : (
-                      <div className="text-[9px] text-slate-300 italic flex items-center gap-1">
+                      <div className="text-[9px] text-slate-300 dark:text-slate-500 italic flex items-center gap-1">
                         <LuActivity size={10} /> Pending Start
                       </div>
                     )}
@@ -171,7 +171,7 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
                           <LuCalendar size={10} /> Target
                         </span>
-                        <span className="font-semibold text-slate-700">
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">
                           {formatDateShort(p.targetCompletionDate)}
                         </span>
                       </div>
@@ -179,24 +179,24 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         <span className="text-slate-400 text-[8px] font-bold uppercase tracking-wider mb-0.5 flex items-center gap-1">
                           <LuDollarSign size={10} /> Budget
                         </span>
-                        <span className="font-mono font-bold text-[#004A99]">
+                        <span className="font-mono font-bold text-[#004A99] dark:text-blue-400">
                           {formatAllocation(p.projectAllocation)}
                         </span>
                       </div>
                     </div>
                   </td>
 
-                  <td className="sticky right-0 bg-white group-hover:bg-blue-50/30 z-10 p-4 border-l border-slate-50 text-center">
+                  <td className="sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-l border-slate-50 dark:border-slate-700 text-center">
                     <div className="flex flex-col gap-2">
                       <button
                         onClick={() => onView(p)}
-                        className="w-full py-1.5 bg-slate-50 text-slate-500 text-[10px] font-bold rounded-lg border border-slate-100 hover:bg-white hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
+                        className="w-full py-1.5 bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[10px] font-bold rounded-lg border border-slate-100 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-600 hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
                       >
                         VIEW <FiChevronRight size={12} />
                       </button>
                       <button 
                         onClick={() => navigate(`/project-gallery/${p.id}`)}
-                        className="w-full py-1.5 bg-amber-50/50 text-amber-600 text-[10px] font-bold rounded-lg border border-amber-100 hover:bg-amber-50 hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
+                        className="w-full py-1.5 bg-amber-50/50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/50 hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
                       >
                         <FiImage size={12} /> GALLERY
                       </button>
@@ -205,8 +205,8 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         disabled={isLocked}
                         className={`w-full py-2 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${
                           isLocked
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                            : "bg-[#004A99] text-white hover:bg-blue-800 shadow-blue-500/20"
+                            ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
+                            : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
                         }`}
                       >
                        {isLocked ? "LOCKED" : "UPDATE"}
@@ -597,7 +597,7 @@ const EngineerProjects = () => {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-slate-50 font-sans pb-24">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-24">
         {/* --- DYNAMIC PREMIUM HEADER --- */}
         <div className="bg-gradient-to-br from-[#004A99] via-[#003366] to-[#001D3D] p-6 pb-28 rounded-b-[3.5rem] shadow-2xl relative overflow-hidden transition-all duration-500">
           {/* Decorative Elements */}

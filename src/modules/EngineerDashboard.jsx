@@ -71,30 +71,30 @@ const DashboardStats = ({ projects }) => {
   return (
     <div className="mb-6 space-y-3">
       <div className="grid grid-cols-3 gap-2">
-        <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
             Allocation
           </p>
-          <p className="text-sm font-bold text-[#004A99] mt-1">
+          <p className="text-sm font-bold text-[#004A99] dark:text-blue-400 mt-1">
             {formatAllocation(stats.totalAllocation)}
           </p>
         </div>
-        <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide">
+        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
             Projects
           </p>
-          <p className="text-xl font-bold text-slate-800 mt-1">{stats.total}</p>
+          <p className="text-xl font-bold text-slate-800 dark:text-white mt-1">{stats.total}</p>
         </div>
         <div
           className={`p-3 rounded-xl shadow-sm border flex flex-col justify-center items-center text-center ${
             stats.delayed > 0
-              ? "bg-red-50 border-red-100"
-              : "bg-white border-slate-200"
+              ? "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800"
+              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
           }`}
         >
           <p
             className={`text-[10px] font-bold uppercase tracking-wide ${
-              stats.delayed > 0 ? "text-red-500" : "text-slate-500"
+              stats.delayed > 0 ? "text-red-500 dark:text-red-400" : "text-slate-500 dark:text-slate-400"
             }`}
           >
             Delayed
@@ -102,7 +102,7 @@ const DashboardStats = ({ projects }) => {
           <div className="flex items-center gap-1 mt-1">
             <p
               className={`text-xl font-bold ${
-                stats.delayed > 0 ? "text-red-600" : "text-slate-800"
+                stats.delayed > 0 ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-white"
               }`}
             >
               {stats.delayed}
@@ -114,12 +114,12 @@ const DashboardStats = ({ projects }) => {
         </div>
       </div>
 
-      <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
         <div className="flex flex-col justify-center ml-2">
-          <p className="text-xs font-bold text-slate-700 mb-2">
+          <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
             Project Status Mix
           </p>
-          <div className="text-[10px] text-slate-500 space-y-1">
+          <div className="text-[10px] text-slate-500 dark:text-slate-300 space-y-1">
             {data.map((d) => (
               <div key={d.name} className="flex items-center gap-2">
                 <span
@@ -218,7 +218,7 @@ const EngineerDashboard = () => {
 
   return (
     <PageTransition>
-      <div className="min-h-screen bg-slate-50 font-sans pb-24">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-24">
         {/* --- TOP HEADER --- */}
         <div className="relative bg-[#004A99] pt-12 pb-24 px-6 rounded-b-[2.5rem] shadow-xl">
           <div className="flex justify-between items-start">
@@ -251,29 +251,29 @@ const EngineerDashboard = () => {
               className="w-full"
             >
               <SwiperSlide className="pb-8">
-                <div className="bg-white p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
-                  <h3 className="text-[#004A99] font-bold text-sm flex items-center mb-1">
+                <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
+                  <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-sm flex items-center mb-1">
                     <span className="text-xl mr-2">👷</span>
                     Welcome, Engr. {userName}!
                   </h3>
-                  <p className="text-slate-500 text-xs leading-relaxed ml-7">
+                  <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed ml-7">
                     Your dashboard is ready. Track ongoing construction and validate school infrastructure data.
                   </p>
                 </div>
               </SwiperSlide>
 
               <SwiperSlide className="pb-8">
-                <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-emerald-500 flex flex-col h-[140px]">
-                  <h3 className="text-emerald-700 font-bold text-sm flex items-center mb-2 shrink-0">
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border-l-4 border-emerald-500 flex flex-col h-[140px]">
+                  <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm flex items-center mb-2 shrink-0">
                     <span className="text-xl mr-2">🏗️</span>
                     Active Projects ({projects.length})
                   </h3>
                   <div className="overflow-y-auto flex-1 pr-1 space-y-2 custom-scrollbar">
                     {projects.length > 0 ? (
                       projects.map((p) => (
-                        <div key={p.id} className="flex justify-between items-center text-xs border-b border-slate-100 last:border-0 pb-1">
-                          <span className="text-slate-700 font-medium truncate w-[70%]">{p.schoolName}</span>
-                          <span className={`font-bold ${p.accomplishmentPercentage === 100 ? "text-emerald-600" : "text-blue-600"}`}>
+                        <div key={p.id} className="flex justify-between items-center text-xs border-b border-slate-100 dark:border-slate-700 last:border-0 pb-1">
+                          <span className="text-slate-700 dark:text-slate-200 font-medium truncate w-[70%]">{p.schoolName}</span>
+                          <span className={`font-bold ${p.accomplishmentPercentage === 100 ? "text-emerald-600 dark:text-emerald-400" : "text-blue-600 dark:text-blue-400"}`}>
                             {p.accomplishmentPercentage || 0}%
                           </span>
                         </div>
@@ -286,17 +286,17 @@ const EngineerDashboard = () => {
               </SwiperSlide>
 
               <SwiperSlide className="pb-8">
-                <div className="bg-white p-4 rounded-xl shadow-sm border-l-4 border-blue-500 flex flex-col h-[140px]">
-                  <h3 className="text-blue-700 font-bold text-sm flex items-center mb-2 shrink-0">
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border-l-4 border-blue-500 flex flex-col h-[140px]">
+                  <h3 className="text-blue-700 dark:text-blue-400 font-bold text-sm flex items-center mb-2 shrink-0">
                     <span className="text-xl mr-2">📢</span>
                     Latest Remarks
                   </h3>
                   <div className="overflow-y-auto flex-1 pr-1 space-y-2 custom-scrollbar">
                     {projects.some(p => p.otherRemarks) ? (
                       projects.filter(p => p.otherRemarks).map((p) => (
-                        <div key={p.id} className="text-xs border-b border-slate-100 last:border-0 pb-2">
-                          <p className="font-bold text-slate-700 truncate">{p.schoolName}</p>
-                          <p className="text-slate-500 line-clamp-2">{p.otherRemarks}</p>
+                        <div key={p.id} className="text-xs border-b border-slate-100 dark:border-slate-700 last:border-0 pb-2">
+                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate">{p.schoolName}</p>
+                          <p className="text-slate-500 dark:text-slate-400 line-clamp-2">{p.otherRemarks}</p>
                         </div>
                       ))
                     ) : (
@@ -310,15 +310,15 @@ const EngineerDashboard = () => {
 
           {/* --- RECENT ACTIVITIES section --- */}
           <div className="w-full mb-6">
-               <h3 className="text-slate-500 font-bold text-xs uppercase tracking-wider mb-3 ml-1">Recent Activities</h3>
-               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+               <h3 className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider mb-3 ml-1">Recent Activities</h3>
+               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                    {isLoading ? (
                        <div className="p-8 text-center text-xs text-slate-400">Loading activities...</div>
                    ) : activities.length > 0 ? (
                        <>
-                           <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto custom-scrollbar">
+                           <div className="divide-y divide-slate-50 dark:divide-slate-700 max-h-96 overflow-y-auto custom-scrollbar">
                                {activities.map((log, idx) => (
-                                   <div key={log.log_id || idx} className="p-4 flex gap-3 hover:bg-slate-50 transition-colors">
+                                   <div key={log.log_id || idx} className="p-4 flex gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                                        <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
                                            log.action_type === 'CREATE' ? 'bg-green-500' : 
                                            log.action_type === 'DELETE' ? 'bg-red-500' : 'bg-blue-500'
@@ -326,28 +326,28 @@ const EngineerDashboard = () => {
                                        <div className="flex-1 min-w-0">
                                            <div className="flex justify-between items-start">
                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border mb-1 inline-block ${
-                                                   log.action_type === 'CREATE' ? 'bg-green-50 text-green-600 border-green-100' : 
-                                                   log.action_type === 'DELETE' ? 'bg-red-50 text-red-600 border-red-100' : 
-                                                   'bg-blue-50 text-blue-600 border-blue-100'
+                                                   log.action_type === 'CREATE' ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-100 dark:border-green-800' : 
+                                                   log.action_type === 'DELETE' ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800' : 
+                                                   'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-800'
                                                }`}>
                                                    {log.action_type}
                                                </span>
                                                <span className="text-[10px] text-slate-400">{log.formatted_time}</span>
                                            </div>
-                                           <p className="text-xs font-bold text-slate-700 truncate">{log.target_entity}</p>
-                                           <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{log.details}</p>
+                                           <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{log.target_entity}</p>
+                                           <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">{log.details}</p>
                                        </div>
                                    </div>
                                ))}
                            </div>
-                           <div className="p-3 text-center bg-slate-50/50 border-t border-slate-50">
+                           <div className="p-3 text-center bg-slate-50/50 dark:bg-slate-700/30 border-t border-slate-50 dark:border-slate-700">
                                <p className="text-[10px] text-slate-400 font-medium">Showing {activities.length} recent activities</p>
                            </div>
                        </>
                    ) : (
                        <div className="p-8 text-center">
                            <p className="text-2xl mb-2">💤</p>
-                           <p className="text-sm font-bold text-slate-600">No recent activity</p>
+                           <p className="text-sm font-bold text-slate-600 dark:text-slate-300">No recent activity</p>
                            <p className="text-xs text-slate-400">Your actions will appear here.</p>
                        </div>
                    )}
