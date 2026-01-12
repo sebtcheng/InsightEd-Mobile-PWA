@@ -24,6 +24,7 @@ const SchoolProfile = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [ack1, setAck1] = useState(false);
     const [ack2, setAck2] = useState(false);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
     // Dropdowns
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -111,6 +112,18 @@ const SchoolProfile = () => {
         setFormData(data);
         setOriginalData(data);
     };
+
+    // --- NETWORK LISTENER ---
+    useEffect(() => {
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // --- 2. INITIALIZATION EFFECT ---
     useEffect(() => {
@@ -438,94 +451,112 @@ const SchoolProfile = () => {
 
             {/* FORM */}
             <div className="px-5 -mt-12 relative z-20">
+                {isOffline && (
+                    <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-4 rounded shadow-md relative z-30" role="alert">
+                        <p className="font-bold">You are offline</p>
+                        <p className="text-sm">School Profile is in read-only mode. Connect to the internet to make changes.</p>
+                    </div>
+                )}
                 <form onSubmit={(e) => { e.preventDefault(); setAck1(false); setAck2(false); setShowSaveModal(true); }}>
+                    <fieldset disabled={isOffline} className="disabled:opacity-90">
 
-                    {/* 1. IDENTITY */}
-                    <div className={sectionClass}>
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">🏫</span> Identity</h2>
+                        {/* 1. IDENTITY */}
+                        <div className={sectionClass}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">🏫</span> Identity</h2>
+                            </div>
+                            <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                    <label className={labelClass}>School ID (6-Digit)</label>
+                                    <input type="text" name="schoolId" value={formData.schoolId} onChange={handleChange} onBlur={handleIdBlur} placeholder="100001" maxLength="6" className={`${inputClass} text-center text-xl tracking-widest font-bold ${hasSavedData ? 'bg-gray-200 cursor-not-allowed' : ''}`} required disabled={hasSavedData} />
+                                    {hasSavedData && <p className="text-[10px] text-gray-400 mt-1 text-center">Permanently linked.</p>}
+                                </div>
+                                <div>
+                                    <label className={labelClass}>School Name</label>
+                                    <input type="text" name="schoolName" value={formData.schoolName} onChange={handleChange} className={inputClass} required />
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Mother School ID</label>
+                                    <input type="text" name="motherSchoolId" value={formData.motherSchoolId} onChange={handleChange} className={inputClass} placeholder="If annex" />
+                                </div>
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 gap-4">
-                            <div>
-                                <label className={labelClass}>School ID (6-Digit)</label>
-                                <input type="text" name="schoolId" value={formData.schoolId} onChange={handleChange} onBlur={handleIdBlur} placeholder="100001" maxLength="6" className={`${inputClass} text-center text-xl tracking-widest font-bold ${hasSavedData ? 'bg-gray-200 cursor-not-allowed' : ''}`} required disabled={hasSavedData} />
-                                {hasSavedData && <p className="text-[10px] text-gray-400 mt-1 text-center">Permanently linked.</p>}
+
+                        {/* 2. CLASSIFICATION */}
+                        <div className={sectionClass}>
+                            <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">📊</span> Classification</h2>
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
+                                <p className="text-xs text-blue-800 italic">This setting determines which fields appear in other Forms.</p>
                             </div>
                             <div>
-                                <label className={labelClass}>School Name</label>
-                                <input type="text" name="schoolName" value={formData.schoolName} onChange={handleChange} className={inputClass} required />
+                                <label className={labelClass}>Curricular Offering</label>
+                                {isOffline ? (
+                                    <input type="text" value={formData.curricularOffering} className={inputClass} disabled />
+                                ) : (
+                                    <select name="curricularOffering" value={formData.curricularOffering} onChange={handleChange} className={inputClass} required>
+                                        <option value="">-- Select Offering --</option>
+                                        <option>Purely Elementary</option>
+                                        <option>Elementary School and Junior High School (K-10)</option>
+                                        <option>All Offering (K-12)</option>
+                                        <option>Junior and Senior High</option>
+                                        <option>Purely Junior High School</option>
+                                        <option>Purely Senior High School</option>
+                                    </select>
+                                )}
                             </div>
-                            <div>
-                                <label className={labelClass}>Mother School ID</label>
-                                <input type="text" name="motherSchoolId" value={formData.motherSchoolId} onChange={handleChange} className={inputClass} placeholder="If annex" />
+                        </div>
+
+                        {/* 3. LOCATION */}
+                        <div className={sectionClass}>
+                            <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📍</span> Location</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label className={labelClass}>Region</label>{isOffline ? <input type="text" value={formData.region} className={inputClass} disabled /> : <select name="region" value={formData.region} onChange={handleRegionChange} className={inputClass} required><option value="">Select Region</option>{Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}</select>}</div>
+                                <div><label className={labelClass}>Province</label>{isOffline ? <input type="text" value={formData.province} className={inputClass} disabled /> : <select name="province" value={formData.province} onChange={handleProvinceChange} className={inputClass} disabled={!formData.region} required><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select>}</div>
+                                <div><label className={labelClass}>Municipality</label>{isOffline ? <input type="text" value={formData.municipality} className={inputClass} disabled /> : <select name="municipality" value={formData.municipality} onChange={handleCityChange} className={inputClass} disabled={!formData.province} required><option value="">Select City/Mun</option>{cityOptions.map(c => <option key={c} value={c}>{c}</option>)}</select>}</div>
+                                <div><label className={labelClass}>Barangay</label>{isOffline ? <input type="text" value={formData.barangay} className={inputClass} disabled /> : <select name="barangay" value={formData.barangay} onChange={handleChange} className={inputClass} disabled={!formData.municipality} required><option value="">Select Barangay</option>{barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}</select>}</div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* 2. CLASSIFICATION */}
-                    <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">📊</span> Classification</h2>
-                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
-                            <p className="text-xs text-blue-800 italic">This setting determines which fields appear in other Forms.</p>
-                        </div>
-                        <div>
-                            <label className={labelClass}>Curricular Offering</label>
-                            <select name="curricularOffering" value={formData.curricularOffering} onChange={handleChange} className={inputClass} required>
-                                <option value="">-- Select Offering --</option>
-                                <option>Purely Elementary</option>
-                                <option>Elementary School and Junior High School (K-10)</option>
-                                <option>All Offering (K-12)</option>
-                                <option>Junior and Senior High</option>
-                                <option>Purely Junior High School</option>
-                                <option>Purely Senior High School</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* 3. LOCATION */}
-                    <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">📍</span> Location</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className={labelClass}>Region</label><select name="region" value={formData.region} onChange={handleRegionChange} className={inputClass} required><option value="">Select Region</option>{Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                            <div><label className={labelClass}>Province</label><select name="province" value={formData.province} onChange={handleProvinceChange} className={inputClass} disabled={!formData.region} required><option value="">Select Province</option>{provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-                            <div><label className={labelClass}>Municipality</label><select name="municipality" value={formData.municipality} onChange={handleCityChange} className={inputClass} disabled={!formData.province} required><option value="">Select City/Mun</option>{cityOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                            <div><label className={labelClass}>Barangay</label><select name="barangay" value={formData.barangay} onChange={handleChange} className={inputClass} disabled={!formData.municipality} required><option value="">Select Barangay</option>{barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}</select></div>
-                        </div>
-                    </div>
-
-                    {/* 4. HIERARCHY */}
-                    <div className={sectionClass}>
-                        <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">🏛️</span> Administration</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className={labelClass}>Division</label><select name="division" value={formData.division} onChange={handleDivisionChange} className={inputClass} disabled={!formData.region} required><option value="">Select Division</option>{divisionOptions.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                            <div><label className={labelClass}>District</label><select name="district" value={formData.district} onChange={handleChange} className={inputClass} disabled={!formData.division} required><option value="">Select District</option>{districtOptions.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
-                            <div className="md:col-span-2"><label className={labelClass}>Legislative District</label><select name="legDistrict" value={formData.legDistrict} onChange={handleChange} className={inputClass} required><option value="">Select District</option>{legDistrictOptions.map(l => <option key={l} value={l}>{l}</option>)}</select></div>
-                        </div>
-                    </div>
-
-                    {/* 5. COORDINATES */}
-                    <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 mb-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-blue-800 font-bold text-sm uppercase tracking-wide">🌐 Geo-Tagging</h2>
-                            <button type="button" onClick={handleGetLocation} className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-all"><span>📍</span> Get My Location</button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div><label className={labelClass}>Latitude</label><input type="text" name="latitude" value={formData.latitude} onChange={handleChange} className={inputClass} placeholder="14.5995" /></div>
-                            <div><label className={labelClass}>Longitude</label><input type="text" name="longitude" value={formData.longitude} onChange={handleChange} className={inputClass} placeholder="120.9842" /></div>
-                        </div>
-                        {/* 👇 ADD THIS BLOCK BACK 👇 */}
-                        {formData.latitude && formData.longitude && (
-                            <div className="mt-4 flex gap-2 justify-end">
-                                <a href={`geo:${formData.latitude},${formData.longitude}?q=${formData.latitude},${formData.longitude}`} className="flex items-center gap-2 text-[#004A99] hover:text-white hover:bg-[#004A99] text-xs font-bold bg-white px-3 py-2 rounded-lg border border-blue-100 shadow-sm transition-all no-underline"><span>📱</span> Open App</a>
-                                <a href={`https://www.openstreetmap.org/?mlat=${formData.latitude}&mlon=${formData.longitude}#map=18/${formData.latitude}/${formData.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-green-700 hover:text-white hover:bg-green-600 text-xs font-bold bg-white px-3 py-2 rounded-lg border border-green-100 shadow-sm transition-all no-underline"><span>🗺️</span> Confirm Location</a>
+                        {/* 4. HIERARCHY */}
+                        <div className={sectionClass}>
+                            <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4"><span className="text-xl">🏛️</span> Administration</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label className={labelClass}>Division</label>{isOffline ? <input type="text" value={formData.division} className={inputClass} disabled /> : <select name="division" value={formData.division} onChange={handleDivisionChange} className={inputClass} disabled={!formData.region} required><option value="">Select Division</option>{divisionOptions.map(d => <option key={d} value={d}>{d}</option>)}</select>}</div>
+                                <div><label className={labelClass}>District</label>{isOffline ? <input type="text" value={formData.district} className={inputClass} disabled /> : <select name="district" value={formData.district} onChange={handleChange} className={inputClass} disabled={!formData.division} required><option value="">Select District</option>{districtOptions.map(d => <option key={d} value={d}>{d}</option>)}</select>}</div>
+                                <div className="md:col-span-2"><label className={labelClass}>Legislative District</label>{isOffline ? <input type="text" value={formData.legDistrict} className={inputClass} disabled /> : <select name="legDistrict" value={formData.legDistrict} onChange={handleChange} className={inputClass} required><option value="">Select District</option>{legDistrictOptions.map(l => <option key={l} value={l}>{l}</option>)}</select>}</div>
                             </div>
-                        )}
-                    </div>
+                        </div>
+
+                        {/* 5. COORDINATES */}
+                        <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 mb-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-blue-800 font-bold text-sm uppercase tracking-wide">🌐 Geo-Tagging</h2>
+                                <button type="button" onClick={handleGetLocation} className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-all"><span>📍</span> Get My Location</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className={labelClass}>Latitude</label><input type="text" name="latitude" value={formData.latitude} onChange={handleChange} className={inputClass} placeholder="14.5995" /></div>
+                                <div><label className={labelClass}>Longitude</label><input type="text" name="longitude" value={formData.longitude} onChange={handleChange} className={inputClass} placeholder="120.9842" /></div>
+                            </div>
+                            {/* 👇 ADD THIS BLOCK BACK 👇 */}
+                            {formData.latitude && formData.longitude && (
+                                <div className="mt-4 flex gap-2 justify-end">
+                                    <a href={`geo:${formData.latitude},${formData.longitude}?q=${formData.latitude},${formData.longitude}`} className="flex items-center gap-2 text-[#004A99] hover:text-white hover:bg-[#004A99] text-xs font-bold bg-white px-3 py-2 rounded-lg border border-blue-100 shadow-sm transition-all no-underline"><span>📱</span> Open App</a>
+                                    <a href={`https://www.openstreetmap.org/?mlat=${formData.latitude}&mlon=${formData.longitude}#map=18/${formData.latitude}/${formData.longitude}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-green-700 hover:text-white hover:bg-green-600 text-xs font-bold bg-white px-3 py-2 rounded-lg border border-green-100 shadow-sm transition-all no-underline"><span>🗺️</span> Confirm Location</a>
+                                </div>
+                            )}
+                        </div>
+                    </fieldset>
 
                     <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                        <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                            {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
-                        </button>
+                        {isOffline ? (
+                            <button type="button" disabled className="w-full bg-gray-400 text-white font-bold py-4 rounded-xl shadow-none cursor-not-allowed flex items-center justify-center gap-2">
+                                <span>📵</span> Offline - Read Only
+                            </button>
+                        ) : (
+                            <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
+                                {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
+                            </button>
+                        )}
                     </div>
                 </form>
             </div>

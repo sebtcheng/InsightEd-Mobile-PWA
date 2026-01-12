@@ -99,13 +99,27 @@ const SchoolForms = () => {
             if (user) {
                 try {
                     const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
+                    if (!profileRes.ok) throw new Error("Network response was not ok");
                     const profileJson = await profileRes.json();
                     if (profileJson.exists) setSchoolProfile(profileJson.data);
 
                     const headRes = await fetch(`/api/school-head/${user.uid}`);
+                    if (!headRes.ok) throw new Error("Network response was not ok");
                     const headJson = await headRes.json();
                     if (headJson.exists) setHeadProfile(headJson.data);
-                } catch (error) { console.error("Error loading status:", error); }
+                } catch (error) {
+                    console.warn("⚠️ Offline/Network Error. Loading from cache...");
+                    const cachedProfile = localStorage.getItem('fullSchoolProfile');
+                    if (cachedProfile) {
+                        try {
+                            const parsedProfile = JSON.parse(cachedProfile);
+                            setSchoolProfile(parsedProfile);
+                            console.log("✅ School profile loaded from cache.");
+                        } catch (e) {
+                            console.error("Failed to parse cached profile", e);
+                        }
+                    }
+                }
             }
             setTimeout(() => setLoading(false), 600);
         });
