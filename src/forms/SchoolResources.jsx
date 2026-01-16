@@ -43,12 +43,22 @@ const SchoolResources = () => {
         res_toilets_pwd: 0,
         res_faucets: 0,
         res_water_source: '',
-        res_sci_labs: 0,
-        res_com_labs: 0,
-        res_tvl_workshops: 0
+        res_tvl_workshops: 0,
+        res_ownership_type: '',
+        res_electricity_source: '',
+        res_buildable_space: '',
+
+        // SEATS
+        seats_kinder: 0, seats_grade_1: 0, seats_grade_2: 0, seats_grade_3: 0,
+        seats_grade_4: 0, seats_grade_5: 0, seats_grade_6: 0,
+        seats_grade_7: 0, seats_grade_8: 0, seats_grade_9: 0, seats_grade_10: 0,
+        seats_grade_11: 0, seats_grade_12: 0
     };
 
     // --- FETCH DATA ---
+    const [enrollmentData, setEnrollmentData] = useState({});
+    const [curricularOffering, setCurricularOffering] = useState('');
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -56,6 +66,37 @@ const SchoolResources = () => {
                 const cachedId = localStorage.getItem('schoolId');
                 if (cachedId) setSchoolId(cachedId);
 
+                // 1. Fetch BASIC PROFILE / ENROLLMENT (needed for computation & ID)
+                try {
+                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
+                    const profileJson = await profileRes.json();
+
+                    if (profileJson.exists) {
+                        const pData = profileJson.data;
+                        setSchoolId(pData.school_id);
+                        setCurricularOffering(pData.curricular_offering || '');
+                        setEnrollmentData({
+                            gradeKinder: pData.grade_kinder || 0,
+                            grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
+                            grade3: pData.grade_3 || 0, grade4: pData.grade_4 || 0,
+                            grade5: pData.grade_5 || 0, grade6: pData.grade_6 || 0,
+                            grade7: pData.grade_7 || 0, grade8: pData.grade_8 || 0,
+                            grade9: pData.grade_9 || 0, grade10: pData.grade_10 || 0,
+                            grade11: (pData.abm_11 + pData.stem_11 + pData.humss_11 + pData.gas_11 + pData.tvl_ict_11 + pData.tvl_he_11 + pData.tvl_ia_11 + pData.tvl_afa_11 + pData.arts_11 + pData.sports_11) || 0,
+                            grade12: (pData.abm_12 + pData.stem_12 + pData.humss_12 + pData.gas_12 + pData.tvl_ict_12 + pData.tvl_he_12 + pData.tvl_ia_12 + pData.tvl_afa_12 + pData.arts_12 + pData.sports_12) || 0
+                        });
+                    }
+                } catch (e) {
+                    console.log("Offline: Loading basic profile from cache");
+                    const cachedProfile = localStorage.getItem('fullSchoolProfile');
+                    if (cachedProfile) {
+                        const pData = JSON.parse(cachedProfile);
+                        setCurricularOffering(pData.curricularOffering || '');
+                        // Simplify offline enrollment load (might be limited if not full profile)
+                    }
+                }
+
+                // 2. Fetch RESOURCES
                 try {
                     const res = await fetch(`/api/school-resources/${user.uid}`);
                     const json = await res.json();
@@ -160,6 +201,64 @@ const SchoolResources = () => {
         </div>
     );
 
+    const SelectField = ({ label, name, options }) => (
+        <div className="flex flex-col gap-2 bg-gray-50 p-4 rounded-xl border border-gray-100">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <select
+                name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked}
+                className="w-full font-bold text-blue-900 bg-white border border-gray-200 rounded-lg py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
+            >
+                <option value="">-- Select --</option>
+                {options.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                ))}
+            </select>
+        </div>
+    );
+
+    const SeatRow = ({ label, enrollment, seatKey }) => {
+        const seats = formData[seatKey] || 0;
+        const shortage = enrollment - seats;
+        const isShortage = shortage > 0;
+
+        return (
+            <tr className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+                <td className="py-3 px-4 text-xs font-bold text-gray-600">{label}</td>
+                <td className="py-3 px-4 text-center">
+                    <span className="bg-blue-50 text-blue-700 text-[10px] px-2 py-1 rounded-md font-bold border border-blue-100">
+                        {enrollment}
+                    </span>
+                </td>
+                <td className="py-3 px-4">
+                    <input
+                        type="number"
+                        name={seatKey}
+                        value={seats}
+                        onChange={handleChange}
+                        disabled={isLocked}
+                        className="w-full text-center font-bold text-gray-800 bg-white border border-gray-200 rounded-lg py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                    />
+                </td>
+                <td className="py-3 px-4 text-center">
+                    {isShortage ? (
+                        <span className="text-red-600 bg-red-50 px-2 py-1 rounded-md text-[10px] font-extrabold border border-red-100">
+                            -{shortage}
+                        </span>
+                    ) : (
+                        <span className="text-green-600 bg-green-50 px-2 py-1 rounded-md text-[10px] font-bold border border-green-100">
+                            OK
+                        </span>
+                    )}
+                </td>
+            </tr>
+        );
+    };
+
+    // VISIBILITY Helpers
+    const showElem = () => !curricularOffering || curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
+    const showJHS = () => !curricularOffering || curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
+    const showSHS = () => !curricularOffering || curricularOffering.includes("Senior") || curricularOffering.includes("K-12");
+
     // LoadingScreen check removed
 
     return (
@@ -194,11 +293,91 @@ const SchoolResources = () => {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🚰 Facilities</h2>
+                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🏞️ Site & Utilities</h2>
+                    <div className="grid gap-3">
+                        <SelectField
+                            label="Ownership Type"
+                            name="res_ownership_type"
+                            options={["DOS", "DOD", "For Verification", "PP", "SP", "Tax Dec", "TCT/OCT", "Usucfruct agreement", "With Adverse Claims"]}
+                        />
+                        <SelectField
+                            label="Electricity Source"
+                            name="res_electricity_source"
+                            options={["For Verification", "GRID AND OFF-GRID SUPPLY", "GRID SUPPLY", "OFF-GRID SUPPLY", "NO ELECTRICITY"]}
+                        />
+                        <SelectField
+                            label="Water Source"
+                            name="res_water_source"
+                            options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
+                        />
+                        <SelectField
+                            label="Is there Buildable Space?"
+                            name="res_buildable_space"
+                            options={["Yes", "No"]}
+                        />
+                    </div>
+                </div>
+
+                {/* SEAT ANALYSIS */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🪑 Furniture & Seat Analysis</h2>
+
+                    {/* General Furniture */}
+                    <div className="grid gap-3 mb-6">
+                        <InputField label="Armchairs (Good)" name="res_armchairs_good" />
+                        <InputField label="Armchairs (Repair)" name="res_armchairs_repair" />
+                        <InputField label="Blackboards (Good)" name="res_blackboards_good" />
+                    </div>
+
+                    {/* Seat Shortage Table */}
+                    <div className="overflow-hidden rounded-xl border border-gray-100">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grade</th>
+                                    <th className="py-3 px-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">Enrollment</th>
+                                    <th className="py-3 px-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">Seats</th>
+                                    <th className="py-3 px-4 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">Shortage</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {showElem() && (
+                                    <>
+                                        <SeatRow label="Kinder" enrollment={enrollmentData.gradeKinder || 0} seatKey="seats_kinder" />
+                                        <SeatRow label="Grade 1" enrollment={enrollmentData.grade1 || 0} seatKey="seats_grade_1" />
+                                        <SeatRow label="Grade 2" enrollment={enrollmentData.grade2 || 0} seatKey="seats_grade_2" />
+                                        <SeatRow label="Grade 3" enrollment={enrollmentData.grade3 || 0} seatKey="seats_grade_3" />
+                                        <SeatRow label="Grade 4" enrollment={enrollmentData.grade4 || 0} seatKey="seats_grade_4" />
+                                        <SeatRow label="Grade 5" enrollment={enrollmentData.grade5 || 0} seatKey="seats_grade_5" />
+                                        <SeatRow label="Grade 6" enrollment={enrollmentData.grade6 || 0} seatKey="seats_grade_6" />
+                                    </>
+                                )}
+                                {showJHS() && (
+                                    <>
+                                        <SeatRow label="Grade 7" enrollment={enrollmentData.grade7 || 0} seatKey="seats_grade_7" />
+                                        <SeatRow label="Grade 8" enrollment={enrollmentData.grade8 || 0} seatKey="seats_grade_8" />
+                                        <SeatRow label="Grade 9" enrollment={enrollmentData.grade9 || 0} seatKey="seats_grade_9" />
+                                        <SeatRow label="Grade 10" enrollment={enrollmentData.grade10 || 0} seatKey="seats_grade_10" />
+                                    </>
+                                )}
+                                {showSHS() && (
+                                    <>
+                                        <SeatRow label="Grade 11" enrollment={enrollmentData.grade11 || 0} seatKey="seats_grade_11" />
+                                        <SeatRow label="Grade 12" enrollment={enrollmentData.grade12 || 0} seatKey="seats_grade_12" />
+                                    </>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🚰 Comfort Rooms</h2>
                     <div className="grid gap-3">
                         <InputField label="Male Toilets" name="res_toilets_male" />
                         <InputField label="Female Toilets" name="res_toilets_female" />
-                        <InputField label="Water Source" name="res_water_source" type="text" />
+                        <InputField label="PWD Toilets" name="res_toilets_pwd" />
+                        <InputField label="Faucets" name="res_faucets" />
                     </div>
                 </div>
             </div>
