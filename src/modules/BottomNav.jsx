@@ -34,6 +34,16 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
             { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
             { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Regional Office': [
+            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
+            { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'School Division Office': [
+            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
+            { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
         ]
     };
 

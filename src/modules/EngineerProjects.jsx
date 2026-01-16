@@ -8,6 +8,7 @@ import PageTransition from "../components/PageTransition";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { addEngineerToOutbox } from "../db";
+import { compressImage } from "../utils/imageCompression";
 
 // --- CONSTANTS ---
 const ProjectStatus = {
@@ -528,18 +529,17 @@ const EngineerProjects = () => {
             });
             if (selectedFiles.length > 0) {
                 for (const file of selectedFiles) {
-                    const reader = new FileReader();
-                    const base64Promise = new Promise(resolve => {
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(file);
-                    });
-                    const base64Image = await base64Promise;
-                    await addEngineerToOutbox({
-                        url: `${API_BASE}/api/upload-image`,
-                        method: 'POST',
-                        body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid },
-                        formName: `Photo: ${updatedProject.schoolName}`
-                    });
+                    try {
+                        const base64Image = await compressImage(file);
+                        await addEngineerToOutbox({
+                            url: `${API_BASE}/api/upload-image`,
+                            method: 'POST',
+                            body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid },
+                            formName: `Photo: ${updatedProject.schoolName}`
+                        });
+                    } catch (err) {
+                        console.error("Compression failed for file:", file.name, err);
+                    }
                 }
             }
             alert("⚠️ Offline: Changes cached to Sync Center.");
@@ -555,17 +555,16 @@ const EngineerProjects = () => {
         if (!response.ok) throw new Error("Update failed");
         if (selectedFiles.length > 0) {
             for (const file of selectedFiles) {
-                const reader = new FileReader();
-                const base64Promise = new Promise(resolve => {
-                    reader.onload = () => resolve(reader.result);
-                    reader.readAsDataURL(file);
-                });
-                const base64Image = await base64Promise;
-                await fetch(`${API_BASE}/api/upload-image`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid }),
-                });
+                try {
+                    const base64Image = await compressImage(file);
+                    await fetch(`${API_BASE}/api/upload-image`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid }),
+                    });
+                } catch (err) {
+                    console.error("Compression failed for file:", file.name, err);
+                }
             }
         }
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));

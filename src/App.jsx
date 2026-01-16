@@ -12,6 +12,8 @@ import EngineerProjects from './modules/EngineerProjects';
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard';
+import MonitoringDashboard from './modules/MonitoringDashboard';
+import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import UserProfile from './modules/UserProfile';
 import Activity from './modules/Activity';
 import ProjectGallery from './modules/ProjectGallery';
@@ -60,6 +62,8 @@ const AnimatedRoutes = () => {
         <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
+        <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
 
         {/* Menus */}
         <Route path="/school-forms" element={<SchoolForms />} />

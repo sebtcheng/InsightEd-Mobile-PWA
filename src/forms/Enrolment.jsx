@@ -13,6 +13,10 @@ const Enrolment = () => {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
+    const queryParams = new URLSearchParams(window.location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const monitorSchoolId = queryParams.get('schoolId');
+
     // UI States
     const [isLocked, setIsLocked] = useState(false);
     const [lastUpdated, setLastUpdated] = useState(null);
@@ -87,21 +91,27 @@ const Enrolment = () => {
                 if (storedOffering) setCurricularOffering(storedOffering);
 
                 try {
-                    // 2. ONLINE FETCH
-                    const response = await fetch(`/api/school-by-user/${user.uid}`);
+                    // 2. MONITOR VIEW or NORMAL FLOW
+                    const fetchUrl = viewOnly && monitorSchoolId 
+                        ? `/api/monitoring/school-detail/${monitorSchoolId}`
+                        : `/api/school-by-user/${user.uid}`;
+
+                    const response = await fetch(fetchUrl);
                     if (response.ok) {
                         const result = await response.json();
+                        
+                        // Result is flat for monitoring detail, {data} for regular fetch
+                        const data = (viewOnly && monitorSchoolId) ? result : result.data;
 
-                        if (result.exists) {
-                            const data = result.data;
-
+                        if (data) {
                             setSchoolId(data.school_id);
                             setLastUpdated(data.submitted_at);
                             setCurricularOffering(data.curricular_offering || storedOffering || '');
 
-                            // Sync Storage
-                            localStorage.setItem('schoolId', data.school_id);
-                            localStorage.setItem('schoolOffering', data.curricular_offering || '');
+                            if (!viewOnly) {
+                                localStorage.setItem('schoolId', data.school_id);
+                                localStorage.setItem('schoolOffering', data.curricular_offering || '');
+                            }
 
                             // Load Grades
                             setBasicGrades({
@@ -134,16 +144,14 @@ const Enrolment = () => {
                                     strands: { ...shsStrands }
                                 });
                             }
-                        } else {
-                            if (!storedSchoolId) {
-                                alert("School Profile missing. Redirecting to setup...");
-                                navigate('/school-profile', { state: { isFirstTime: true } });
-                            }
+                        } else if (!viewOnly && !storedSchoolId) {
+                            alert("School Profile missing. Redirecting to setup...");
+                            navigate('/school-profile', { state: { isFirstTime: true } });
                         }
                     }
                 } catch (error) {
-                    console.log("Offline mode.");
-                    if (!storedSchoolId) {
+                    console.log("Fetch Error:", error);
+                    if (!viewOnly && !storedSchoolId) {
                         alert("⚠️ You are offline and no School ID is saved. Please connect to internet.");
                         navigate('/schoolhead-dashboard');
                     }
@@ -390,7 +398,14 @@ const Enrolment = () => {
 
             {/* --- FLOATING ACTION BAR --- */}
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                {isLocked ? (
+                {viewOnly ? (
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
+                    >
+                        ← Back to Schools List
+                    </button>
+                ) : isLocked ? (
                     <button
                         onClick={handleUpdateClick}
                         className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"

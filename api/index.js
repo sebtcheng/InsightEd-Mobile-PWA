@@ -1104,6 +1104,127 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+// ==================================================================
+//                    MONITORING & JURISDICTION ROUTES
+// ==================================================================
+
+// --- 25. GET: Monitoring Stats (RO / SDO) ---
+app.get('/api/monitoring/stats', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let whereClause = `WHERE region = $1`;
+    let params = [region];
+
+    if (division) {
+      whereClause += ` AND division = $2`;
+      params.push(division);
+    }
+
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_schools,
+        COUNT(CASE WHEN school_name IS NOT NULL THEN 1 END) as Profile,
+        COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as Enrollment,
+        COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as OrganizedClasses,
+        COUNT(CASE WHEN teach_kinder IS NOT NULL THEN 1 END) as Personnel,
+        COUNT(CASE WHEN res_internet_type IS NOT NULL THEN 1 END) as Resources
+      FROM school_profiles
+      ${whereClause}
+    `;
+
+    const result = await pool.query(statsQuery, params);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Monitoring Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+// --- 26. GET: List Schools in Jurisdiction ---
+app.get('/api/monitoring/schools', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let query = `
+      SELECT 
+        school_id, school_name, region, division, district,
+        (CASE WHEN school_name IS NOT NULL THEN true ELSE false END) as profile_status,
+        (CASE WHEN total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+        (CASE WHEN classes_kinder IS NOT NULL THEN true ELSE false END) as classes_status
+      FROM school_profiles
+      WHERE region = $1
+    `;
+    let params = [region];
+
+    if (division) {
+      query += ` AND division = $2 `;
+      params.push(division);
+    }
+
+    query += ` ORDER BY school_name ASC `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Jurisdiction Schools Error:", err);
+    res.status(500).json({ error: "Failed to fetch schools" });
+  }
+});
+
+// --- 27. GET: Engineer Project Stats for Jurisdiction ---
+app.get('/api/monitoring/engineer-stats', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let query = `
+      SELECT 
+        COUNT(*) as total_projects,
+        AVG(accomplishment_percentage)::NUMERIC(10,2) as avg_progress,
+        COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed_count,
+        COUNT(CASE WHEN status = 'Ongoing' THEN 1 END) as ongoing_count
+      FROM engineer_form
+      WHERE region = $1
+    `;
+    let params = [region];
+
+    if (division) {
+      query += ` AND division = $2 `;
+      params.push(division);
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Engineer Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch engineer stats" });
+  }
+});
+
+// --- 28. GET: Full School Profile for Monitor (by School ID) ---
+app.get('/api/monitoring/school-detail/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "School not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch school details" });
+  }
+});
+
+// --- 29. GET: Engineer Projects for a School (Monitor View) ---
+app.get('/api/monitoring/school-projects/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const query = `
+      SELECT * FROM engineer_form WHERE school_id = $1 ORDER BY created_at DESC
+    `;
+    const result = await pool.query(query, [schoolId]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
+});
+
 // ==================================================================
 //                        SERVER STARTUP
 // ==================================================================

@@ -10,7 +10,9 @@ const ProjectValidation = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [projects, setProjects] = useState([]);
-    const [schoolId, setSchoolId] = useState(null);
+    const queryParams = new URLSearchParams(window.location.search);
+    const monitorSchoolId = queryParams.get('schoolId');
+    const [schoolId, setSchoolId] = useState(monitorSchoolId || null);
     const [user, setUser] = useState(null);
     const [schoolHeadName, setSchoolHeadName] = useState(null);
 
@@ -27,19 +29,25 @@ const ProjectValidation = () => {
             setUser(currentUser);
 
             try {
-                const profileRes = await fetch(`/api/school-by-user/${currentUser.uid}`);
-                const profileJson = await profileRes.json();
+                let targetSchoolId = monitorSchoolId;
+                
+                // If no schoolId in URL, we try to get it from the user's school profile (Normal Flow)
+                if (!targetSchoolId) {
+                    const profileRes = await fetch(`/api/school-by-user/${currentUser.uid}`);
+                    const profileJson = await profileRes.json();
+                    if (profileJson.exists) {
+                        targetSchoolId = profileJson.data.school_id;
+                        setSchoolId(targetSchoolId);
+                        
+                        const fName = profileJson.data.head_first_name || '';
+                        const lName = profileJson.data.head_last_name || '';
+                        const fullName = `${fName} ${lName}`.trim();
+                        if (fullName) setSchoolHeadName(fullName);
+                    }
+                }
 
-                if (profileJson.exists && profileJson.data.school_id) {
-                    setSchoolId(profileJson.data.school_id);
-
-                    // Set School Head Name
-                    const fName = profileJson.data.head_first_name || '';
-                    const lName = profileJson.data.head_last_name || '';
-                    const fullName = `${fName} ${lName}`.trim();
-                    if (fullName) setSchoolHeadName(fullName);
-
-                    const projectRes = await fetch(`/api/projects-by-school-id/${profileJson.data.school_id}`);
+                if (targetSchoolId) {
+                    const projectRes = await fetch(`/api/projects-by-school-id/${targetSchoolId}`);
                     if (projectRes.ok) {
                         const projectData = await projectRes.json();
                         setProjects(projectData);
@@ -118,11 +126,12 @@ const ProjectValidation = () => {
     const [showTutorial, setShowTutorial] = useState(false);
 
     useEffect(() => {
+        if (monitorSchoolId) return; // Don't show tutorial for monitors
         const hasViewed = localStorage.getItem('hasViewedValidationTutorial');
         if (!hasViewed) {
             setShowTutorial(true);
         }
-    }, []);
+    }, [monitorSchoolId]);
 
     const closeTutorial = () => {
         localStorage.setItem('hasViewedValidationTutorial', 'true');
@@ -355,33 +364,41 @@ const ProjectValidation = () => {
                                     </div>
                                     <h3 className="font-bold text-slate-700">Validation Decision</h3>
                                 </div>
-
                                 <textarea
                                     className="w-full p-4 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-500"
                                     rows="3"
-                                    placeholder="Enter your remarks here..."
+                                    placeholder={monitorSchoolId ? "Validation remarks from School Head" : "Enter your remarks here..."}
                                     value={remarks}
                                     onChange={(e) => setRemarks(e.target.value)}
-                                    disabled={selectedProject.validation_status !== 'Pending'}
+                                    disabled={selectedProject.validation_status !== 'Pending' || monitorSchoolId}
                                 ></textarea>
 
                                 {selectedProject.validation_status === 'Pending' ? (
-                                    <div className="flex gap-3 pt-2">
-                                        <button
-                                            onClick={() => handleValidation('Rejected')}
-                                            className="flex-1 py-3.5 rounded-2xl bg-white border border-red-100 text-red-600 font-bold text-sm hover:bg-red-50 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm"
-                                        >
-                                            <TbX size={18} />
-                                            Reject
-                                        </button>
-                                        <button
-                                            onClick={() => handleValidation('Validated')}
-                                            className="flex-[2] py-3.5 rounded-2xl bg-[#004A99] text-white font-bold text-sm hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20"
-                                        >
-                                            <TbCheck size={18} />
-                                            Confirm & Validate
-                                        </button>
-                                    </div>
+                                    !monitorSchoolId ? (
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                onClick={() => handleValidation('Rejected')}
+                                                className="flex-1 py-3.5 rounded-2xl bg-white border border-red-100 text-red-600 font-bold text-sm hover:bg-red-50 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm"
+                                            >
+                                                <TbX size={18} />
+                                                Reject
+                                            </button>
+                                            <button
+                                                onClick={() => handleValidation('Validated')}
+                                                className="flex-[2] py-3.5 rounded-2xl bg-[#004A99] text-white font-bold text-sm hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20"
+                                            >
+                                                <TbCheck size={18} />
+                                                Confirm & Validate
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="pt-2">
+                                            <div className="w-full py-3.5 rounded-2xl bg-orange-50 text-orange-700 font-bold text-sm flex items-center justify-center gap-2">
+                                                <TbActivity size={18} />
+                                                Awaiting Head Validation
+                                            </div>
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="pt-2">
                                         <button

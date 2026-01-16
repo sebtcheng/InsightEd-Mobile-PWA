@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 import { auth } from '../firebase'; 
 // --- IMPORT NEW DB LOGIC ---
 import { addEngineerToOutbox } from '../db';
+import { compressImage } from '../utils/imageCompression';
 
 // Helper component for Section Headers
 const SectionHeader = ({ title, icon }) => (
@@ -149,14 +150,15 @@ const NewProjects = () => {
         e.preventDefault();
         setIsSubmitting(true);
 
-        // 1. PRE-PROCESS IMAGES (Convert to Base64 strings immediately)
+        // 1. PRE-PROCESS IMAGES (Compress and convert to Base64 strings immediately)
         let imagePayload = [];
         if (selectedFiles.length > 0) {
             try {
-                imagePayload = await Promise.all(selectedFiles.map(file => convertToBase64(file)));
+                // Using compression utility instead of manual convertToBase64
+                imagePayload = await Promise.all(selectedFiles.map(file => compressImage(file)));
             } catch (err) {
-                console.error("Error processing images", err);
-                alert("Error processing images");
+                console.error("Error compressing images", err);
+                alert("Error compressing images");
                 setIsSubmitting(false);
                 return;
             }

@@ -140,6 +140,7 @@ const Register = () => {
             province: formData.province,
             city: formData.city,
             barangay: formData.barangay,
+            division: formData.division || null, // New field for SDO/RO focus
             authProvider: isGoogle ? "google" : "email",
             createdAt: new Date()
         }, { merge: true });
@@ -165,6 +166,8 @@ const Register = () => {
             // Force School Heads to create a School Profile immediately
             console.log("New School Head Registered. Redirecting to Profile Setup...");
             navigate('/school-profile', { state: { isFirstTime: true } });
+        } else if (formData.role === 'Regional Office' || formData.role === 'School Division Office') {
+            navigate('/monitoring-dashboard');
         } else {
             // Other roles go to their dashboards normally
             const path = getDashboardPath(formData.role);
@@ -188,8 +191,24 @@ const Register = () => {
                         <option value="Engineer">Engineer</option>
                         <option value="School Head">School Head</option>
                         <option value="Human Resource">Human Resource</option>
+                        <option value="Regional Office">Regional Office</option>
+                        <option value="School Division Office">School Division Office</option>
                         <option value="Admin">Admin</option>
                     </select>
+
+                    {formData.role === 'School Division Office' && (
+                        <div className="mb-4">
+                            <label className="section-label">2. Division Name</label>
+                            <input 
+                                name="division" 
+                                placeholder="Enter Division (e.g. Cebu City)" 
+                                onChange={handleChange} 
+                                className="custom-input" 
+                                style={{ marginTop: '5px' }}
+                                required 
+                            />
+                        </div>
+                    )}
 
                     <div className="form-grid">
                         {/* REGION */}

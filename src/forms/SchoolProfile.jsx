@@ -13,6 +13,9 @@ const SchoolProfile = () => {
     const location = useLocation();
 
     const isFirstTime = location.state?.isFirstTime || false;
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const monitorSchoolId = queryParams.get('schoolId');
 
     // --- STATE ---
     const [loading, setLoading] = useState(true);
@@ -183,25 +186,30 @@ const SchoolProfile = () => {
 
                 let profileLoaded = false;
 
-                // 1. Try Online Fetch
+                // 1. MONITOR VIEW or NORMAL FLOW
                 try {
-                    const response = await fetch(`/api/school-by-user/${user.uid}`);
+                    const fetchUrl = viewOnly && monitorSchoolId 
+                        ? `/api/monitoring/school-detail/${monitorSchoolId}`
+                        : `/api/school-by-user/${user.uid}`;
+
+                    const response = await fetch(fetchUrl);
                     if (!response.ok) throw new Error("Network error");
 
                     const result = await response.json();
-                    if (result.exists) {
-                        const dbData = result.data;
-                        const loadedData = mapDbToForm(dbData);
+                    
+                    // Monitoring detail returns the flat row, normal fetch returns { exists, data }
+                    const dbData = (viewOnly && monitorSchoolId) ? result : result.data;
 
-                        // We pass the LOCALLY computed maps because state update is async/not guaranteed yet
+                    if (dbData) {
+                        const loadedData = mapDbToForm(dbData);
                         applyDataToState(loadedData, processedRegDiv, processedDivDist);
                         setLastUpdated(dbData.submitted_at);
                         setHasSavedData(true);
-                        saveToLocalCache(loadedData);
+                        if (!viewOnly) saveToLocalCache(loadedData);
                         profileLoaded = true;
                     }
                 } catch (error) {
-                    console.log("⚠️ Checking offline cache...");
+                    console.log("⚠️ Fetch error:", error.message);
                 }
 
                 // 2. Offline Fallback
@@ -458,7 +466,7 @@ const SchoolProfile = () => {
                     </div>
                 )}
                 <form onSubmit={(e) => { e.preventDefault(); setAck1(false); setAck2(false); setShowSaveModal(true); }}>
-                    <fieldset disabled={isOffline} className="disabled:opacity-90">
+                    <fieldset disabled={isOffline || viewOnly} className="disabled:opacity-95">
 
                         {/* 1. IDENTITY */}
                         <div className={sectionClass}>
@@ -534,8 +542,8 @@ const SchoolProfile = () => {
                                 <button type="button" onClick={handleGetLocation} className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition-all"><span>📍</span> Get My Location</button>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <div><label className={labelClass}>Latitude</label><input type="text" name="latitude" value={formData.latitude} onChange={handleChange} className={inputClass} placeholder="14.5995" /></div>
-                                <div><label className={labelClass}>Longitude</label><input type="text" name="longitude" value={formData.longitude} onChange={handleChange} className={inputClass} placeholder="120.9842" /></div>
+                                <div><label className={labelClass}>Latitude</label><input type="text" name="latitude" value={formData.latitude} onChange={handleChange} className={inputClass} placeholder="14.5995" disabled={viewOnly} /></div>
+                                <div><label className={labelClass}>Longitude</label><input type="text" name="longitude" value={formData.longitude} onChange={handleChange} className={inputClass} placeholder="120.9842" disabled={viewOnly} /></div>
                             </div>
                             {/* 👇 ADD THIS BLOCK BACK 👇 */}
                             {formData.latitude && formData.longitude && (
@@ -547,17 +555,31 @@ const SchoolProfile = () => {
                         </div>
                     </fieldset>
 
-                    <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                        {isOffline ? (
-                            <button type="button" disabled className="w-full bg-gray-400 text-white font-bold py-4 rounded-xl shadow-none cursor-not-allowed flex items-center justify-center gap-2">
-                                <span>📵</span> Offline - Read Only
+                    {!viewOnly && (
+                        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+                            {isOffline ? (
+                                <button type="button" disabled className="w-full bg-gray-400 text-white font-bold py-4 rounded-xl shadow-none cursor-not-allowed flex items-center justify-center gap-2">
+                                    <span>📵</span> Offline - Read Only
+                                </button>
+                            ) : (
+                                <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
+                                    {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    
+                    {viewOnly && (
+                        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+                            <button 
+                                type="button" 
+                                onClick={() => navigate(-1)}
+                                className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
+                            >
+                                ← Back to Schools List
                             </button>
-                        ) : (
-                            <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                                {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
-                            </button>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </form>
             </div>
 
