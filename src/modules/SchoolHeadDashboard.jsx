@@ -123,8 +123,11 @@ const SchoolHeadDashboard = () => {
                 } catch (error) {
                     console.error("Dashboard Load Error:", error);
                 }
+                setTimeout(() => setLoading(false), 800);
+            } else {
+                // Not authenticated, redirect to login
+                navigate('/');
             }
-            setTimeout(() => setLoading(false), 800);
         });
         return () => unsubscribe();
     }, []);

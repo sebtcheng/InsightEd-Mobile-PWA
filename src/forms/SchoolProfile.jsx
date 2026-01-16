@@ -141,6 +141,12 @@ const SchoolProfile = () => {
             try {
                 const csvResponse = await fetch('/schools.csv');
                 if (csvResponse.ok) {
+                    const contentType = csvResponse.headers.get("content-type");
+                    if (contentType && contentType.includes("html")) {
+                        // Check for SPA fallback returning index.html instead of CSV
+                        throw new Error("CSV file not found (HTML returned)");
+                    }
+
                     const csvText = await csvResponse.text();
                     const parsedData = await new Promise((resolve) => {
                         Papa.parse(csvText, {
@@ -150,13 +156,16 @@ const SchoolProfile = () => {
                         });
                     });
 
-                    if (isMounted) {
+                    if (isMounted && Array.isArray(parsedData) && parsedData.length > 0) {
                         setSchoolDirectory(parsedData);
                         const tempRegDivSet = {}; const tempDivDistSet = {}; const tempLegsSet = new Set();
                         const clean = (str) => str ? String(str).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
 
                         parsedData.forEach(row => {
+                            if (!row) return; // Defensive check
                             const keys = Object.keys(row);
+                            if (keys.length === 0) return;
+
                             const reg = row[keys.find(k => clean(k) === 'region')]?.trim();
                             const div = row[keys.find(k => clean(k) === 'division')]?.trim();
                             const dist = row[keys.find(k => clean(k) === 'district')]?.trim();
@@ -177,12 +186,17 @@ const SchoolProfile = () => {
                     }
                 }
             } catch (err) {
-                console.warn("⚠️ Offline Mode: CSV load skipped.");
+                console.warn("⚠️ Offline Mode or CSV Error:", err);
             }
 
             // B. User Profile Load
             onAuthStateChanged(auth, async (user) => {
-                if (!user || !isMounted) return;
+                if (!isMounted) return;
+
+                if (!user) {
+                    navigate('/'); // Redirect if not logged in
+                    return;
+                }
 
                 let profileLoaded = false;
 

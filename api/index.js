@@ -115,6 +115,87 @@ app.post('/api/log-activity', async (req, res) => {
   }
 });
 
+// ==================================================================
+//                        OTP & AUTH ROUTES
+// ==================================================================
+
+// Temporary in-memory store for OTPs (Use Redis/DB in production)
+const otpStore = {};
+
+// --- POST: Send OTP (Real Email via Nodemailer) ---
+app.post('/api/send-otp', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email is required" });
+
+  // Generate 6-digit code
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // Store in memory
+  otpStore[email] = otp;
+
+  try {
+    // Dynamic import to avoid crash if not installed yet
+    const nodemailer = await import('nodemailer');
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER || 'cleamoniquesacriz@gmail.com',
+        pass: process.env.EMAIL_PASS || 'bdfd nzoa ybby cjqc'
+      }
+    });
+
+    const mailOptions = {
+      from: '"InsightEd System" <cleamoniquesacriz@gmail.com>',
+      to: email,
+      subject: 'InsightEd Verification Code',
+      html: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                    <h2 style="color: #004A99;">InsightEd Verification</h2>
+                    <p>Your verification code is:</p>
+                    <h1 style="background: #eef2ff; padding: 10px 20px; display: inline-block; border-radius: 8px; letter-spacing: 5px; color: #004A99;">${otp}</h1>
+                    <p style="font-size: 12px; color: #666; margin-top: 20px;">If you did not request this code, please ignore this email.</p>
+                </div>
+            `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent to ${email}`);
+    res.json({ success: true, message: "Verification code sent to your email!" });
+
+  } catch (error) {
+    console.error("❌ Email Error:", error);
+
+    // Fallback to console for dev if email fails
+    console.log(`⚠️ FALLBACK: OTP for ${email} is ${otp}`);
+
+    // 4. FALLBACK: Return success so the user can verify via terminal code
+    // (Even if email failed, we generated a valid OTP and logged it)
+    console.log("⚠️ Returning SUCCESS despite email error (Fallback Mode)");
+
+    return res.json({
+      success: true,
+      message: "Email failed, but code was generated. CHECK TERMINAL/CONSOLE."
+    });
+  }
+});
+
+// --- POST: Verify OTP ---
+app.post('/api/verify-otp', async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!otpStore[email]) {
+    return res.status(400).json({ success: false, message: "No OTP found for this email. Request a new one." });
+  }
+
+  if (otpStore[email] === code) {
+    delete otpStore[email]; // Clear after usage
+    return res.json({ success: true, message: "Email Verified!" });
+  } else {
+    return res.status(400).json({ success: false, message: "Invalid Code. Please try again." });
+  }
+});
+
 // --- 2. GET: Check School by USER ID ---
 app.get('/api/school-by-user/:uid', async (req, res) => {
   const { uid } = req.params;
@@ -1234,7 +1315,9 @@ import { fileURLToPath } from 'url';
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
-    console.log(`🚀 Server running locally on http://localhost:${PORT}`);
+    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT}`);
+    console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
+    console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
   });
 }
 

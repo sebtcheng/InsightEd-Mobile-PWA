@@ -1,15 +1,16 @@
 // src/Register.jsx
 
 import React, { useState } from 'react';
-import logo from './assets/InsightEd1.png'; 
-import { auth, db, googleProvider } from './firebase';
+import logo from './assets/InsightEd1.png';
+import { auth, db, googleProvider } from './firebase'; // kept googleProvider just in case they sign in later, but unused for register now
 import { createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore'; 
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
-import './Register.css';
+import PageTransition from './components/PageTransition';
+// Removed: import './Register.css'; // Using Tailwind CSS now
 
 // 1. IMPORT YOUR OPTIMIZED JSON FILE
-import locationData from './locations.json'; 
+import locationData from './locations.json';
 
 const getDashboardPath = (role) => {
     const roleMap = {
@@ -18,17 +19,19 @@ const getDashboardPath = (role) => {
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
     };
-    return roleMap[role] || '/'; 
+    return roleMap[role] || '/';
 };
 
 const Register = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
-    
+    const [focusedInput, setFocusedInput] = useState(null);
+
     // Form Data State
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
+        schoolId: '', // New Field
         email: '',
         password: '',
         role: 'Engineer', // Default
@@ -37,6 +40,106 @@ const Register = () => {
         city: '',
         barangay: '',
     });
+
+    const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+
+    // --- OTP STATE ---
+    const [otp, setOtp] = useState(['', '', '', '', '', '']);
+    const [isOtpSent, setIsOtpSent] = useState(false);
+    const [isOtpVerified, setIsOtpVerified] = useState(false);
+    const [otpLoading, setOtpLoading] = useState(false);
+
+    // --- OTP HANDLERS ---
+    const handleSendOtp = async () => {
+        if (!formData.email) {
+            alert("Please enter your email first.");
+            return;
+        }
+        if (formData.role === 'School Head' && !formData.schoolId) {
+            alert("Please enter a valid School ID first.");
+            return;
+        }
+
+        setOtpLoading(true);
+        try {
+            const res = await fetch('/api/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setIsOtpSent(true);
+                alert("Verification code sent to your email!");
+            } else {
+                alert(data.message || "Failed to send OTP");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Network error sending OTP");
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async () => {
+        const code = otp.join("");
+        if (code.length < 6) return;
+
+        setOtpLoading(true);
+        try {
+            const res = await fetch('/api/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email, code })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setIsOtpVerified(true);
+                alert("Verified successfully!");
+            } else {
+                alert(data.message || "Invalid Code");
+                setIsOtpVerified(false);
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
+    const handleOtpChange = (element, index) => {
+        if (isNaN(element.value)) return;
+        const newOtp = [...otp];
+        newOtp[index] = element.value;
+        setOtp(newOtp);
+
+        // Auto-focus next input
+        if (element.nextSibling && element.value) {
+            element.nextSibling.focus();
+        }
+    };
+
+    // --- DUPLICATE CHECK ---
+    const checkSchoolId = async () => {
+        if (formData.role !== 'School Head' || !formData.schoolId) return;
+
+        // Basic Length Check
+        if (formData.schoolId.length !== 6) return;
+
+        try {
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("schoolId", "==", formData.schoolId));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                setShowDuplicateModal(true);
+                setFormData(prev => ({ ...prev, schoolId: '' }));
+            }
+        } catch (error) {
+            console.error("Error checking ID:", error);
+        }
+    };
 
     // 2. DROPDOWN OPTIONS STATE
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -47,10 +150,10 @@ const Register = () => {
 
     const handleRegionChange = (e) => {
         const region = e.target.value;
-        setFormData({ 
-            ...formData, 
-            region, 
-            province: '', city: '', barangay: '' 
+        setFormData({
+            ...formData,
+            region,
+            province: '', city: '', barangay: ''
         });
 
         if (region && locationData[region]) {
@@ -64,10 +167,10 @@ const Register = () => {
 
     const handleProvinceChange = (e) => {
         const province = e.target.value;
-        setFormData({ 
-            ...formData, 
-            province, 
-            city: '', barangay: '' 
+        setFormData({
+            ...formData,
+            province,
+            city: '', barangay: ''
         });
 
         if (province && formData.region) {
@@ -80,10 +183,10 @@ const Register = () => {
 
     const handleCityChange = (e) => {
         const city = e.target.value;
-        setFormData({ 
-            ...formData, 
-            city, 
-            barangay: '' 
+        setFormData({
+            ...formData,
+            city,
+            barangay: ''
         });
 
         if (city && formData.province && formData.region) {
@@ -95,7 +198,40 @@ const Register = () => {
     };
 
     const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const { name, value } = e.target;
+
+        // SPECIAL LOGIC FOR SCHOOL HEAD
+        if (formData.role === 'School Head') {
+            if (name === 'schoolId') {
+                // RESTRICT: Numbers only, Max 6 chars
+                const numericValue = value.replace(/\D/g, '').slice(0, 6);
+
+                // Auto-generate email based on School ID
+                setFormData({
+                    ...formData,
+                    schoolId: numericValue,
+                    email: numericValue ? `${numericValue}@deped.gov.ph` : ''
+                });
+                return;
+            }
+            // Prevent manual email editing for School Head
+            if (name === 'email') return;
+        }
+
+        if (name === 'role') {
+            // Reset fields when switching roles
+            setFormData({
+                ...formData,
+                role: value,
+                schoolId: '',
+                email: '',
+                firstName: '',
+                lastName: ''
+            });
+            return;
+        }
+
+        setFormData({ ...formData, [name]: value });
     };
 
     // --- REGISTRATION LOGIC ---
@@ -114,75 +250,47 @@ const Register = () => {
         }
     };
 
-    const handleGoogleRegister = async () => {
-        if (!formData.region || !formData.province || !formData.city) {
-            alert("Please complete your Address details (Region to City) before continuing.");
-            return;
-        }
-        try {
-            const result = await signInWithPopup(auth, googleProvider);
-            await saveUserToDB(result.user, true);
-        } catch (error) {
-            console.error(error);
-            alert(error.message);
-        }
-    };
-
     const saveUserToDB = async (user, isGoogle = false) => {
-        const [firstName, ...lastNameParts] = user.displayName ? user.displayName.split(" ") : [formData.firstName, formData.lastName];
-        
+        let firstName = "User";
+        let lastName = "";
+
+        // 1. Determine Name
+        if (formData.role === 'School Head') {
+            // For School Head, use ID as name or generic
+            firstName = "School Head";
+            lastName = formData.schoolId || "Unknown ID";
+        } else {
+            firstName = formData.firstName || "User";
+            lastName = formData.lastName || "";
+        }
+
+        // 2. Determine School ID
+        const schoolIdToSave = (formData.role === 'School Head' && formData.schoolId) ? String(formData.schoolId) : null;
+
         await setDoc(doc(db, "users", user.uid), {
-            email: user.email,
-            role: formData.role,
-            firstName: isGoogle ? firstName : formData.firstName,
-            lastName: isGoogle ? lastNameParts.join(" ") : formData.lastName,
-            region: formData.region,
-            province: formData.province,
-            city: formData.city,
-            barangay: formData.barangay,
-            division: formData.division || null, // New field for SDO/RO focus
+            email: user.email || "",
+            role: formData.role || "User",
+            firstName: firstName,
+            lastName: lastName,
+            schoolId: schoolIdToSave,
+            region: formData.region || "",
+            province: formData.province || "",
+            city: formData.city || "",
+            barangay: formData.barangay || "",
             authProvider: isGoogle ? "google" : "email",
             createdAt: new Date()
         }, { merge: true });
-        
-        // --- AUDIT LOG: REGISTER ---
-        try {
-            fetch('/api/log-activity', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userUid: user.uid,
-                    userName: isGoogle ? firstName : formData.firstName,
-                    role: formData.role,
-                    actionType: 'REGISTER',
-                    targetEntity: 'System',
-                    details: 'New user registered via ' + (isGoogle ? 'Google' : 'Email')
-                })
-            });
-        } catch (e) { console.warn("Register Log Failed", e); }
 
-        // --- 🚀 NEW REDIRECT LOGIC ---
-        if (formData.role === 'School Head') {
-            // Force School Heads to create a School Profile immediately
-            console.log("New School Head Registered. Redirecting to Profile Setup...");
-            navigate('/school-profile', { state: { isFirstTime: true } });
-        } else if (formData.role === 'Regional Office' || formData.role === 'School Division Office') {
-            navigate('/monitoring-dashboard');
-        } else {
-            // Other roles go to their dashboards normally
-            const path = getDashboardPath(formData.role);
-            navigate(path);
-        }
+
+        // Auto-redirect to dashboard
+        navigate(getDashboardPath(formData.role));
     };
 
     return (
-        <div className="register-container" style={{ color: '#1a202c' }}>
-            <div className="register-card">
-                <div className="register-header">
-                    <img src={logo} alt="InsightEd Logo" className="app-logo" />
-                    <h2>Create Account</h2>
-                    <p>Join the InsightEd network</p>
-                </div>
+        <PageTransition>
+            <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-blue-900 via-blue-700 to-slate-200 animate-gradient-xy py-10">
+                {/* RICH DYNAMIC BACKGROUND */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-white to-blue-100 animate-gradient-xy"></div>
 
                 <div className="input-group">
                     <label className="section-label">1. Profile & Location</label>
@@ -227,73 +335,240 @@ const Register = () => {
                             ))}
                         </select>
                     </div>
+                {/* DECORATIVE SHAPES */}
+                <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-purple-300/20 rounded-full blur-[100px] animate-blob"></div>
+                <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-blue-400/20 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
 
-                    <div className="form-grid">
-                        {/* CITY / MUNICIPALITY */}
-                        <select name="city" onChange={handleCityChange} value={formData.city} className="custom-select" disabled={!formData.province} required>
-                            <option value="">Select City/Mun</option>
-                            {cityOptions.map((city) => (
-                                <option key={city} value={city}>{city}</option>
-                            ))}
-                        </select>
 
-                        {/* BARANGAY */}
-                        <select name="barangay" onChange={handleChange} value={formData.barangay} className="custom-select" disabled={!formData.city} required>
-                            <option value="">Select Barangay</option>
-                            {barangayOptions.map((brgy) => (
-                                <option key={brgy} value={brgy}>{brgy}</option>
-                            ))}
-                        </select>
+                <div className="relative z-10 w-[90%] max-w-md">
+                    {/* GLASSMORMISM CARD */}
+                    <div className="bg-white/70 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl p-6 transform transition-all duration-500 max-h-[80vh] overflow-y-auto overflow-x-hidden custom-scrollbar">
+
+                        <div className="text-center mb-6">
+                            <img src={logo} alt="InsightEd Logo" className="h-16 mx-auto mb-4 object-contain drop-shadow-sm" />
+                            <h2 className="text-2xl font-bold text-slate-800">Create Account</h2>
+                            <p className="text-slate-500 text-sm">Join the InsightEd network</p>
+                        </div>
+
+                        <form onSubmit={handleRegister} className="space-y-6">
+
+                            {/* ROLE SELECTION */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">I am registering as a:</label>
+                                <div className="relative">
+                                    <select
+                                        name="role"
+                                        onChange={handleChange}
+                                        value={formData.role}
+                                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none cursor-pointer hover:bg-white"
+                                    >
+                                        <option value="Engineer">Engineer</option>
+                                        <option value="School Head">School Head</option>
+                                        <option value="Human Resource">Human Resource</option>
+                                        <option value="Admin">Admin</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* SECTION 1: PERSONAL / DETAILS */}
+                            <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
+                                <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">1. Personal Details</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {formData.role === 'School Head' ? (
+                                        <div className="md:col-span-2">
+                                            <input
+                                                name="schoolId"
+                                                type="text"
+                                                placeholder="School ID (e.g. 100001)"
+                                                value={formData.schoolId}
+                                                onChange={handleChange}
+                                                onBlur={checkSchoolId}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono"
+                                                required
+                                                inputMode="numeric"
+                                            />
+                                            <p className="text-xs text-slate-400 mt-1 ml-1">Your email will be auto-generated.</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <input name="firstName" value={formData.firstName} placeholder="First Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
+                                            <input name="lastName" value={formData.lastName} placeholder="Last Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* SECTION 2: LOCATION */}
+                            <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
+                                <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">2. Location Assignment</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required>
+                                        <option value="">Select Region</option>
+                                        {Object.keys(locationData).sort().map((reg) => (
+                                            <option key={reg} value={reg}>{reg}</option>
+                                        ))}
+                                    </select>
+
+                                    <select name="province" onChange={handleProvinceChange} value={formData.province} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.region} required>
+                                        <option value="">Select Province</option>
+                                        {provinceOptions.map((prov) => (
+                                            <option key={prov} value={prov}>{prov}</option>
+                                        ))}
+                                    </select>
+
+                                    <select name="city" onChange={handleCityChange} value={formData.city} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.province} required>
+                                        <option value="">Select City/Mun</option>
+                                        {cityOptions.map((city) => (
+                                            <option key={city} value={city}>{city}</option>
+                                        ))}
+                                    </select>
+
+                                    <select name="barangay" onChange={handleChange} value={formData.barangay} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.city} required>
+                                        <option value="">Select Barangay</option>
+                                        {barangayOptions.map((brgy) => (
+                                            <option key={brgy} value={brgy}>{brgy}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* SECTION 3: CREDENTIALS */}
+                            <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
+                                <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">3. Account Security</label>
+
+                                {/* EMAIL & OTP */}
+                                <div className="mb-4 space-y-3">
+                                    <div className="flex flex-col gap-3">
+                                        <input
+                                            name="email"
+                                            type="email"
+                                            placeholder="Email Address"
+                                            value={formData.email}
+                                            onChange={handleChange}
+                                            className={`w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${formData.role === 'School Head' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                                            required
+                                            readOnly={formData.role === 'School Head' || isOtpVerified}
+                                        />
+                                        {!isOtpVerified && (
+                                            <button
+                                                type="button"
+                                                onClick={handleSendOtp}
+                                                disabled={otpLoading || isOtpSent || !formData.email}
+                                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-sm font-bold disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-500/30"
+                                            >
+                                                {otpLoading ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        Sending
+                                                    </span>
+                                                ) : isOtpSent ? 'Resend Code' : 'Get Verification Code'}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* OTP INPUTS */}
+                                    {isOtpSent && !isOtpVerified && (
+                                        <div className="mt-3 bg-blue-50 p-4 rounded-xl border border-blue-100 animate-in fade-in slide-in-from-top-2">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <p className="text-xs text-blue-600 font-bold uppercase tracking-wider">Verification Code</p>
+                                                <span className="text-xs text-blue-400">Check your email</span>
+                                            </div>
+                                            <div className="flex justify-between gap-2 mb-4">
+                                                {otp.map((digit, index) => (
+                                                    <input
+                                                        key={index}
+                                                        type="text"
+                                                        maxLength="1"
+                                                        value={digit}
+                                                        onChange={e => handleOtpChange(e.target, index)}
+                                                        onFocus={e => e.target.select()}
+                                                        className="w-10 h-12 md:w-12 md:h-14 text-center border-2 border-blue-200 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-xl font-bold text-blue-800 bg-white"
+                                                    />
+                                                ))}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleVerifyOtp}
+                                                className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 transition"
+                                            >
+                                                Verify Code
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {isOtpVerified && (
+                                        <div className="mt-2 bg-green-50 text-green-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 border border-green-200">
+                                            <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                            Email Verified Successfully
+                                        </div>
+                                    )}
+                                </div>
+
+                                <input name="password" type="password" placeholder="Create Password" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 rounded-xl shadow-xl shadow-blue-500/30 transform transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                disabled={loading || !isOtpVerified}
+                            >
+                                {loading ? 'Creating Account...' : 'Create Account'}
+                                {!loading && <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>}
+                            </button>
+                        </form>
+
+                        <div className="mt-8 text-center border-t border-slate-100 pt-6">
+                            <p className="text-slate-500 text-sm">
+                                Already have an account? <Link to="/" className="text-blue-600 font-bold hover:text-blue-700 transition-colors">Login here</Link>
+                            </p>
+                        </div>
                     </div>
                 </div>
 
-                <div className="divider"><span>QUICK REGISTER</span></div>
-                
-                <button onClick={handleGoogleRegister} className="btn btn-google">
-                    <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-                        <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.836.86-3.048.86-2.344 0-4.328-1.584-5.032-3.716H.96v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-                        <path d="M3.968 10.705A5.366 5.366 0 0 1 3.682 9c0-.593.102-1.17.286-1.705V4.962H.96A9.006 9.006 0 0 0 0 9c0 1.452.348 2.827.96 4.095l3.008-2.39z" fill="#FBBC05"/>
-                        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .96 4.962l3.008 2.392C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                {/* DUPLICATE MODAL */}
+                {showDuplicateModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center transform scale-100 transition-all border border-red-100">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-inner">
+                                ⚠️
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">School ID Exists</h3>
+                            <p className="text-gray-500 text-sm mb-8 leading-relaxed">
+                                The School ID <b>{formData.schoolId}</b> is already registered. Please check the ID or contact support if you believe this is an error.
+                            </p>
+                            <button
+                                onClick={() => setShowDuplicateModal(false)}
+                                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-red-500/30 transition-all"
+                            >
+                                Okay, I'll check again
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* RESTORED WAVES */}
+                <div className="waves-container">
+                    <svg className="waves" xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink"
+                        viewBox="0 24 150 28" preserveAspectRatio="none" shapeRendering="auto">
+                        <defs>
+                            <path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
+                        </defs>
+                        <g className="parallax">
+                            <use xlinkHref="#gentle-wave" x="48" y="0" fill="rgba(255,255,255,0.7)" />
+                            <use xlinkHref="#gentle-wave" x="48" y="3" fill="rgba(255,255,255,0.5)" />
+                            <use xlinkHref="#gentle-wave" x="48" y="5" fill="rgba(255,255,255,0.3)" />
+                            <use xlinkHref="#gentle-wave" x="48" y="7" fill="#fff" />
+                        </g>
                     </svg>
-                    Continue with Google
-                </button>
-
-                <div className="divider"><span>OR WITH EMAIL</span></div>
-
-                <form onSubmit={handleRegister} className="input-group">
-                    <div className="form-grid">
-                        <input name="firstName" placeholder="First Name" onChange={handleChange} className="custom-input" required />
-                        <input name="lastName" placeholder="Last Name" onChange={handleChange} className="custom-input" required />
-                    </div>
-                    <input name="email" type="email" placeholder="Email Address" onChange={handleChange} className="custom-input" required />
-                    <input name="password" type="password" placeholder="Password" onChange={handleChange} className="custom-input" required />
-
-                    <button type="submit" className="btn btn-primary" disabled={loading}>
-                        {loading ? 'Creating Account...' : 'Create Account'}
-                    </button>
-                </form>
-
-                <div className="login-link">
-                    Already have an account? <Link to="/" className="link-text">Login here</Link>
                 </div>
             </div>
-
-             <div className="waves-container">
-                 <svg className="waves" xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink"
-                viewBox="0 24 150 28" preserveAspectRatio="none" shapeRendering="auto">
-                    <defs>
-                        <path id="gentle-wave" d="M-160 44c30 0 58-18 88-18s 58 18 88 18 58-18 88-18 58 18 88 18 v44h-352z" />
-                    </defs>
-                    <g className="parallax">
-                        <use xlinkHref="#gentle-wave" x="48" y="0" fill="rgba(255,255,255,0.9)" />
-                        <use xlinkHref="#gentle-wave" x="48" y="3" fill="rgba(255,255,255,0.7)" />
-                        <use xlinkHref="#gentle-wave" x="48" y="5" fill="rgba(255,255,255,0.5)" />
-                        <use xlinkHref="#gentle-wave" x="48" y="7" fill="#fff" />
-                    </g>
-                </svg>
-            </div>
-        </div>
+        </PageTransition>
     );
 };
 

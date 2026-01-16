@@ -101,11 +101,15 @@ const AnimatedRoutes = () => {
   );
 };
 
+import GlobalErrorBoundary from './components/GlobalErrorBoundary';
+
 function App() {
   return (
-    <Router>
-      <AnimatedRoutes />
-    </Router>
+    <GlobalErrorBoundary>
+      <Router>
+        <AnimatedRoutes />
+      </Router>
+    </GlobalErrorBoundary>
   );
 }
 
