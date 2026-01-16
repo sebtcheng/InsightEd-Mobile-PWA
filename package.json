@@ -17,6 +17,7 @@
     "firebase": "^12.6.0",
     "framer-motion": "^12.24.12",
     "idb": "^8.0.3",
+    "nodemailer": "^7.0.12",
     "papaparse": "^5.5.3",
     "pg": "^8.16.3",
     "react": "^19.2.0",

@@ -238,8 +238,63 @@ const SchoolForms = () => {
         );
     };
 
+    // --- TUTORIAL STATE ---
+    const [showTutorial, setShowTutorial] = useState(false);
+
+    useEffect(() => {
+        const hasViewed = localStorage.getItem('hasViewedSchoolFormsTutorial');
+        if (!hasViewed) {
+            setShowTutorial(true);
+        }
+    }, []);
+
+    const closeTutorial = () => {
+        setShowTutorial(false);
+        localStorage.setItem('hasViewedSchoolFormsTutorial', 'true');
+    };
+
     return (
-        <div className="min-h-screen bg-slate-50/50 dark:bg-slate-900 font-sans pb-24">
+        <div className="min-h-screen bg-slate-50/50 dark:bg-slate-900 font-sans pb-24 relative">
+
+            {/* TUTORIAL MODAL */}
+            {showTutorial && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-purple-500"></div>
+
+                        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <TbReportAnalytics size={32} />
+                        </div>
+
+                        <h2 className="text-xl font-bold text-slate-800">School Forms Hub</h2>
+                        <p className="text-sm text-slate-500">
+                            Welcome! This is where you manage all your school's data reports.
+                        </p>
+
+                        <div className="text-left space-y-3 bg-slate-50 p-4 rounded-xl text-sm border border-slate-100">
+                            <div className="flex gap-3">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">1</div>
+                                <p className="text-slate-600"><strong className="text-slate-800">Track Progress</strong> using the donut chart at the top.</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">2</div>
+                                <p className="text-slate-600"><strong className="text-slate-800">Fill Forms</strong> by tapping on any card in the list.</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">3</div>
+                                <p className="text-slate-600"><strong className="text-slate-800">Sync Data</strong> when you're back online.</p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={closeTutorial}
+                            className="w-full py-3 rounded-xl bg-[#004A99] text-white font-bold hover:bg-blue-800 transition shadow-lg shadow-blue-900/20"
+                        >
+                            Got it, let's start!
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* --- HEADER --- */}
             <div className="bg-[#004A99] pt-8 pb-20 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
