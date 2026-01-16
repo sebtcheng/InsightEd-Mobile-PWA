@@ -306,19 +306,17 @@ const SchoolInformation = () => {
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
-                {viewOnly ? (
-                    <button 
-                        onClick={() => navigate('/jurisdiction-schools')} 
-                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
-                    >
-                        Back to Schools List
+                {isLocked ? (
+                    <button onClick={() => { setShowEditModal(true); }} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                        <span>✏️</span> Unlock to Edit
                     </button>
-                ) : isLocked ? (
-                    <button onClick={() => { setIsLocked(false); setShowEditModal(true); }} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl">✏️ Update Info</button>
                 ) : (
-                    <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl">
-                        {isSaving ? "Saving..." : "Save Changes"}
-                    </button>
+                    <>
+                        <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
+                            {isSaving ? "Saving..." : "Save Changes"}
+                        </button>
+                    </>
                 )}
             </div>
 

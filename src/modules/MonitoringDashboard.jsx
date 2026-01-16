@@ -5,6 +5,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin } from 'react-icons/fi';
+import { TbTrophy } from 'react-icons/tb';
 
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
@@ -22,7 +23,7 @@ const MonitoringDashboard = () => {
 
             const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
-            
+
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setUserData(data);
@@ -67,8 +68,8 @@ const MonitoringDashboard = () => {
                 </div>
                 <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300">{title}</h3>
                 <div className="mt-3 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                    <div 
-                        className={`h-full ${color} transition-all duration-1000`} 
+                    <div
+                        className={`h-full ${color} transition-all duration-1000`}
                         style={{ width: `${percentage}%` }}
                     ></div>
                 </div>
@@ -90,7 +91,7 @@ const MonitoringDashboard = () => {
                     <div className="absolute top-0 right-0 p-8 opacity-10">
                         <FiTrendingUp size={120} />
                     </div>
-                    
+
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-2 opacity-80">
                             <FiMapPin size={14} />

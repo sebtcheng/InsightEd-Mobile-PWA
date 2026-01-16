@@ -25,9 +25,11 @@ const SchoolProfile = () => {
     const [lastUpdated, setLastUpdated] = useState(null);
 
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false); // New State
     const [ack1, setAck1] = useState(false);
     const [ack2, setAck2] = useState(false);
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
+    const [isLocked, setIsLocked] = useState(false); // New State
 
     // Dropdowns
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -114,6 +116,11 @@ const SchoolProfile = () => {
 
         setFormData(data);
         setOriginalData(data);
+
+        // Auto-lock if data exists and it's not a first-time setup
+        if (data.schoolId && !isFirstTime) {
+            setIsLocked(true);
+        }
     };
 
     // --- NETWORK LISTENER ---
@@ -202,7 +209,7 @@ const SchoolProfile = () => {
 
                 // 1. MONITOR VIEW or NORMAL FLOW
                 try {
-                    const fetchUrl = viewOnly && monitorSchoolId 
+                    const fetchUrl = viewOnly && monitorSchoolId
                         ? `/api/monitoring/school-detail/${monitorSchoolId}`
                         : `/api/school-by-user/${user.uid}`;
 
@@ -210,7 +217,7 @@ const SchoolProfile = () => {
                     if (!response.ok) throw new Error("Network error");
 
                     const result = await response.json();
-                    
+
                     // Monitoring detail returns the flat row, normal fetch returns { exists, data }
                     const dbData = (viewOnly && monitorSchoolId) ? result : result.data;
 
@@ -480,7 +487,7 @@ const SchoolProfile = () => {
                     </div>
                 )}
                 <form onSubmit={(e) => { e.preventDefault(); setAck1(false); setAck2(false); setShowSaveModal(true); }}>
-                    <fieldset disabled={isOffline || viewOnly} className="disabled:opacity-95">
+                    <fieldset disabled={isOffline || viewOnly || isLocked} className="disabled:opacity-95">
 
                         {/* 1. IDENTITY */}
                         <div className={sectionClass}>
@@ -575,18 +582,25 @@ const SchoolProfile = () => {
                                 <button type="button" disabled className="w-full bg-gray-400 text-white font-bold py-4 rounded-xl shadow-none cursor-not-allowed flex items-center justify-center gap-2">
                                     <span>📵</span> Offline - Read Only
                                 </button>
-                            ) : (
-                                <button type="submit" disabled={isSaving} className="w-full bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                                    {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
+                            ) : isLocked ? (
+                                <button type="button" onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                                    <span>✏️</span> Unlock to Edit
                                 </button>
+                            ) : (
+                                <>
+                                    {hasSavedData && <button type="button" onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
+                                    <button type="submit" disabled={isSaving} className={`flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2 ${isSaving ? 'opacity-70' : ''}`}>
+                                        {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
+                                    </button>
+                                </>
                             )}
                         </div>
                     )}
-                    
+
                     {viewOnly && (
                         <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 onClick={() => navigate(-1)}
                                 className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
                             >
@@ -597,29 +611,49 @@ const SchoolProfile = () => {
                 </form>
             </div>
 
-            {showSaveModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="font-bold text-lg">{hasSavedData ? "Review Changes" : "Confirm Submission"}</h3>
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 my-4 text-xs max-h-32 overflow-y-auto">
-                            {getChanges().length > 0 ? getChanges().map((c, i) => (
-                                <div key={i} className="flex justify-between border-b pb-1 mb-1 last:border-0"><span className="font-bold text-gray-500">{c.field}</span><span className="text-gray-800">{c.newVal}</span></div>
-                            )) : <p className="text-gray-400 italic">No changes detected.</p>}
-                        </div>
-                        {!hasSavedData && (
-                            <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-3">
-                                <label className="flex items-start gap-3 cursor-pointer group select-none"><input type="checkbox" checked={ack1} onChange={(e) => setAck1(e.target.checked)} className="mt-0.5 w-4 h-4 text-blue-600 rounded focus:ring-blue-600 cursor-pointer" /><span className="text-[11px] font-medium text-gray-700 group-hover:text-gray-900 leading-tight">I confirm that I am the <b>SCHOOL HEAD</b> and that all information I provide is TRUE and ACCURATE.</span></label>
-                                <label className="flex items-start gap-3 cursor-pointer group select-none"><input type="checkbox" checked={ack2} onChange={(e) => setAck2(e.target.checked)} className="mt-0.5 w-4 h-4 text-blue-600 rounded focus:ring-blue-600 cursor-pointer" /><span className="text-[11px] font-medium text-gray-700 group-hover:text-gray-900 leading-tight">I acknowledge that I have read and understood the information above.</span></label>
+            {
+                showEditModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
+                            <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">⚠️</span></div>
+                            <h3 className="font-bold text-lg">Edit Profile?</h3>
+                            <p className="text-sm text-gray-500 mt-2 mb-6">Editing identifying information (School ID, Name) requires re-validation.</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
+                                <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md hover:bg-amber-600">Unlock</button>
                             </div>
-                        )}
-                        <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
-                            <button onClick={confirmSave} disabled={!hasSavedData && (!ack1 || !ack2)} className={`flex-1 py-3 text-white rounded-xl font-bold transition-all shadow-md ${(!hasSavedData && (!ack1 || !ack2)) ? 'bg-gray-300 cursor-not-allowed shadow-none' : 'bg-[#CC0000] hover:bg-[#A30000]'}`}>Confirm</button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {
+                showSaveModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
+                            <h3 className="font-bold text-lg">{hasSavedData ? "Review Changes" : "Confirm Submission"}</h3>
+                            {hasSavedData && (
+                                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 my-4 text-xs max-h-32 overflow-y-auto">
+                                    {getChanges().length > 0 ? getChanges().map((c, i) => (
+                                        <div key={i} className="flex justify-between border-b pb-1 mb-1 last:border-0"><span className="font-bold text-gray-500">{c.field}</span><span className="text-gray-800">{c.newVal}</span></div>
+                                    )) : <p className="text-gray-400 italic">No changes detected.</p>}
+                                </div>
+                            )}
+                            {!hasSavedData && (
+                                <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-3">
+                                    <label className="flex items-start gap-3 cursor-pointer group select-none"><input type="checkbox" checked={ack1} onChange={(e) => setAck1(e.target.checked)} className="mt-0.5 w-4 h-4 text-blue-600 rounded focus:ring-blue-600 cursor-pointer" /><span className="text-[11px] font-medium text-gray-700 group-hover:text-gray-900 leading-tight">I confirm that I am the <b>SCHOOL HEAD</b> and that all information I provide is TRUE and ACCURATE.</span></label>
+                                    <label className="flex items-start gap-3 cursor-pointer group select-none"><input type="checkbox" checked={ack2} onChange={(e) => setAck2(e.target.checked)} className="mt-0.5 w-4 h-4 text-blue-600 rounded focus:ring-blue-600 cursor-pointer" /><span className="text-[11px] font-medium text-gray-700 group-hover:text-gray-900 leading-tight">I acknowledge that I have read and understood the information above.</span></label>
+                                </div>
+                            )}
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
+                                <button onClick={confirmSave} disabled={!hasSavedData && (!ack1 || !ack2)} className={`flex-1 py-3 text-white rounded-xl font-bold transition-all shadow-md ${(!hasSavedData && (!ack1 || !ack2)) ? 'bg-gray-300 cursor-not-allowed shadow-none' : 'bg-[#CC0000] hover:bg-[#A30000]'}`}>Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 };
 

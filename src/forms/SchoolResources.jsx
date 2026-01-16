@@ -6,7 +6,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-import BottomNav from '../modules/BottomNav';
+
 
 const SchoolResources = () => {
     const navigate = useNavigate();
@@ -293,14 +293,7 @@ const SchoolResources = () => {
             </div>
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold mb-4 flex items-center gap-2">🪑 Furniture</h2>
-                    <div className="grid gap-3">
-                        <InputField label="Armchairs (Good)" name="res_armchairs_good" />
-                        <InputField label="Armchairs (Repair)" name="res_armchairs_repair" />
-                        <InputField label="Blackboards (Good)" name="res_blackboards_good" />
-                    </div>
-                </div>
+
 
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
                     <h2 className="text-gray-800 dark:text-slate-200 font-bold mb-4 flex items-center gap-2">💻 ICT Equipment</h2>
@@ -446,7 +439,7 @@ const SchoolResources = () => {
                 </div>
             )}
 
-            <BottomNav userRole={userRole} />
+
         </div>
     );
 };

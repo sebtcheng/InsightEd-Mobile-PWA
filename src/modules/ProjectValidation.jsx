@@ -6,6 +6,7 @@ import { FiChevronRight } from "react-icons/fi";
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import PageTransition from '../components/PageTransition';
+import BottomNav from './BottomNav';
 
 const ProjectValidation = () => {
     const navigate = useNavigate();
@@ -22,6 +23,10 @@ const ProjectValidation = () => {
     const [projectImages, setProjectImages] = useState([]);
     const [imageLoading, setImageLoading] = useState(false);
     const [remarks, setRemarks] = useState('');
+    const userRole = localStorage.getItem('userRole') || 'School Head';
+
+    // Search State
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -31,7 +36,7 @@ const ProjectValidation = () => {
 
             try {
                 let targetSchoolId = monitorSchoolId;
-                
+
                 // If no schoolId in URL, we try to get it from the user's school profile (Normal Flow)
                 if (!targetSchoolId) {
                     const profileRes = await fetch(`/api/school-by-user/${currentUser.uid}`);
@@ -39,7 +44,7 @@ const ProjectValidation = () => {
                     if (profileJson.exists) {
                         targetSchoolId = profileJson.data.school_id;
                         setSchoolId(targetSchoolId);
-                        
+
                         const fName = profileJson.data.head_first_name || '';
                         const lName = profileJson.data.head_last_name || '';
                         const fullName = `${fName} ${lName}`.trim();
@@ -219,6 +224,27 @@ const ProjectValidation = () => {
 
                 {/* Content Container */}
                 <div className="px-6 -mt-12 relative z-10 pb-20">
+
+                    {/* SEARCH BAR (Only show when list is active) */}
+                    {!selectedProject && !loading && projects.length > 0 && (
+                        <div className="mb-6 bg-white rounded-2xl shadow-lg shadow-blue-900/5 p-2 flex items-center border border-slate-100">
+                            <div className="pl-3 pr-2 text-slate-400">
+                                <TbSearch size={20} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Search projects or contractors..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="flex-1 bg-transparent border-none focus:outline-none text-slate-700 text-sm placeholder-slate-400 py-2"
+                            />
+                            {searchQuery && (
+                                <button onClick={() => setSearchQuery('')} className="p-2 text-slate-300 hover:text-slate-500 transition-colors">
+                                    <TbX size={16} />
+                                </button>
+                            )}
+                        </div>
+                    )}
                     {loading ? (
                         <div className="bg-white rounded-3xl p-8 shadow-lg border border-slate-100 text-center">
                             <div className="animate-pulse flex flex-col items-center">
@@ -396,27 +422,45 @@ const ProjectValidation = () => {
                                             <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
                                                 <FiChevronRight size={20} />
                                             </div>
-                                        </div>
 
-                                        <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Progress</span>
-                                                <span className="text-sm font-bold text-slate-700">{project.accomplishmentPercentage}%</span>
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0 shadow-sm group-hover:bg-[#004A99] group-hover:text-white transition-colors duration-300">
+                                                    <TbBuildingSkyscraper size={24} />
+                                                </div>
+                                                <div className="flex-1 min-w-0 pr-16">
+                                                    <h3 className="font-bold text-slate-800 leading-tight truncate">{project.projectName}</h3>
+                                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                                        <TbCalendar size={12} />
+                                                        {formatDate(project.statusAsOfDate)}
+                                                    </p>
+                                                </div>
+                                                <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
+                                                    <TbArrowLeft className="rotate-180" size={20} />
+                                                </div>
                                             </div>
-                                            <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-blue-500 rounded-full"
-                                                    style={{ width: `${project.accomplishmentPercentage}%` }}
-                                                ></div>
+
+                                            <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Progress</span>
+                                                    <span className="text-sm font-bold text-slate-700">{project.accomplishmentPercentage}%</span>
+                                                </div>
+                                                {/* Mini visual bar/pill could go here */}
+                                                <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-blue-500 rounded-full"
+                                                        style={{ width: `${project.accomplishmentPercentage}%` }}
+                                                    ></div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         )
                     )}
                 </div>
             </div>
+            <BottomNav userRole={userRole} />
         </PageTransition>
     );
 };

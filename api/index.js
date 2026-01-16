@@ -1343,6 +1343,67 @@ app.get('/api/monitoring/school-projects/:schoolId', async (req, res) => {
   }
 });
 
+// --- 30. GET: Leaderboard Data ---
+app.get('/api/leaderboard', async (req, res) => {
+  const { scope, filter } = req.query; // scope: 'region' (for RO) or 'division' (for SDO/Head)
+  try {
+    let whereClause = '';
+    let params = [];
+
+    if (scope === 'division') {
+      whereClause = 'WHERE division = $1';
+      params.push(filter);
+    } else if (scope === 'region') {
+      whereClause = 'WHERE region = $1';
+      params.push(filter);
+    }
+
+    const query = `
+            SELECT 
+                school_id, school_name, division, region,
+                
+                -- Calculate Completion Percentage (Simple Weighting)
+                (
+                    (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + -- Basic Profile
+                    (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) +    -- Enrollment
+                    (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + -- School Head
+                    (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + -- Resources (Basic Check)
+                    (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + -- Classes
+                    (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + -- Personnel
+                    (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END) -- Specialization
+                ) * 100.0 / 7.0 as completion_rate,
+
+                updated_at
+            FROM school_profiles
+            ${whereClause}
+            ORDER BY completion_rate DESC, updated_at DESC
+        `;
+
+    const result = await pool.query(query, params);
+
+    // Calculate Division Averages if requesting Regional View
+    let responseData = { schools: result.rows };
+
+    if (scope === 'region') {
+      const divMap = {};
+      result.rows.forEach(s => {
+        if (!divMap[s.division]) divMap[s.division] = { name: s.division, total: 0, count: 0 };
+        divMap[s.division].total += parseFloat(s.completion_rate);
+        divMap[s.division].count++;
+      });
+      responseData.divisions = Object.values(divMap).map(d => ({
+        name: d.name,
+        avg_completion: (d.total / d.count).toFixed(1)
+      })).sort((a, b) => b.avg_completion - a.avg_completion);
+    }
+
+    res.json(responseData);
+  } catch (err) {
+    console.error("Leaderboard Error:", err);
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
 // ==================================================================
 //                        SERVER STARTUP
 // ==================================================================

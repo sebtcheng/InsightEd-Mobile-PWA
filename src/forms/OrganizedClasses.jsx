@@ -5,7 +5,7 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-import BottomNav from '../modules/BottomNav'; // Ensure correct path
+
 
 const OrganizedClasses = () => {
     const navigate = useNavigate();
@@ -315,7 +315,7 @@ const OrganizedClasses = () => {
                         onClick={handleUpdateClick}
                         className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"
                     >
-                        <span>Unlock to Edit</span>
+                        <span>✏️</span> Unlock to Edit
                     </button>
                 ) : (
                     <>
@@ -331,7 +331,7 @@ const OrganizedClasses = () => {
 
             {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Save Changes?</h3><p className="text-gray-500 dark:text-slate-400 text-sm mt-2">This will update the records in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
 
-            <BottomNav userRole={userRole} />
+
         </div>
     );
 };

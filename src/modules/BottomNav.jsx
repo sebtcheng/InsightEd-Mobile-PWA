@@ -6,28 +6,28 @@ import { TbHomeEdit, TbCloudUpload, TbClipboardList } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings } from "react-icons/fi"; // Changed to Gear icon
 
-const BottomNav = ({ userRole = 'Engineer' }) => { 
+const BottomNav = ({ userRole = 'Engineer' }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
         'Engineer': [
-            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit }, 
+            { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
-            { label: 'Settings', path: '/profile', icon: FiSettings }, 
+            { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
             { label: 'Home', path: '/schoolhead-dashboard', icon: TbHomeEdit },
-            { label: 'Forms', path: '/school-forms', icon: TbClipboardList },
+            { label: 'Validation', path: '/project-validation', icon: TbClipboardList },
             { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Admin': [
             { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
-           // { label: 'Activity', path: '/activity', icon: TbClipboardList },
-          //  { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+            // { label: 'Activity', path: '/activity', icon: TbClipboardList },
+            //  { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
@@ -57,9 +57,9 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
                     const Icon = item.icon;
 
                     return (
-                        <button 
+                        <button
                             key={item.label}
-                            style={styles.navButton} 
+                            style={styles.navButton}
                             onClick={() => navigate(item.path)}
                         >
                             <Icon
@@ -67,9 +67,9 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
                                 color={isActive ? '#004A99' : '#B0B0B0'}
                                 style={styles.icon}
                             />
-                            <span style={{ 
-                                ...styles.label, 
-                                color: isActive ? '#004A99' : '#B0B0B0' 
+                            <span style={{
+                                ...styles.label,
+                                color: isActive ? '#004A99' : '#B0B0B0'
                             }}>
                                 {item.label}
                             </span>
@@ -82,46 +82,46 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
 };
 
 const styles = {
-    wrapper: { 
-        position: 'fixed', 
-        bottom: 0, 
-        left: 0, 
-        width: '100%', 
-        height: '70px', 
-        zIndex: 1000, 
+    wrapper: {
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        width: '100%',
+        height: '70px',
+        zIndex: 1000,
         backgroundColor: '#ffffff',
         borderTop: '1px solid #e2e8f0',
         boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.05)',
         display: 'flex',
         alignItems: 'center'
     },
-    navContainer: { 
-        width: '100%', 
-        height: '100%', 
-        display: 'flex', 
-        justifyContent: 'space-around', 
-        alignItems: 'center' 
+    navContainer: {
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        justifyContent: 'space-around',
+        alignItems: 'center'
     },
-    navButton: { 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        background: 'none', 
-        border: 'none', 
+    navButton: {
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'none',
+        border: 'none',
         cursor: 'pointer',
         height: '100%'
     },
-    icon: { 
+    icon: {
         marginBottom: '4px',
         transition: 'all 0.2s ease'
     },
-    label: { 
-        fontSize: '10px', 
-        fontWeight: '700', 
-        textTransform: 'uppercase', 
-        letterSpacing: '0.02em' 
+    label: {
+        fontSize: '10px',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: '0.02em'
     }
 };
 

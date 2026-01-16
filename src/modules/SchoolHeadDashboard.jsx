@@ -7,7 +7,7 @@ import "swiper/css";
 import "swiper/css/pagination";
 
 // Icons (Using the libraries you already have installed)
-import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell } from "react-icons/tb";
+import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
 import { FiUser } from "react-icons/fi";
 
@@ -161,8 +161,8 @@ const SchoolHeadDashboard = () => {
                                     {schoolProfile ? schoolProfile.school_name : 'School Principal'}
                                 </p>
                             </div>
-                            <button className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-lg hover:bg-white/20 transition-all">
-                                <FiUser size={20} />
+                            <button onClick={() => navigate('/leaderboard')} className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-lg hover:bg-white/20 transition-all active:scale-95 group">
+                                <TbTrophy size={20} className="text-yellow-300 group-hover:scale-110 transition-transform" />
                             </button>
                         </div>
 
