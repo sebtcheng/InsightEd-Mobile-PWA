@@ -1,6 +1,6 @@
 // src/forms/ShiftingModalities.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
@@ -11,6 +11,11 @@ const ShiftingModalities = () => {
     const navigate = useNavigate();
 
     // --- STATE ---
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const schoolIdParam = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
@@ -44,34 +49,38 @@ const ShiftingModalities = () => {
                 if (storedOffering) setOffering(storedOffering);
 
                 try {
-                    // 2. ONLINE FETCH
-                    const res = await fetch(`/api/learning-modalities/${user.uid}`);
+                    let fetchUrl = `/api/learning-modalities/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    const res = await fetch(fetchUrl);
                     const json = await res.json();
 
-                    if (json.exists) {
-                        setSchoolId(json.schoolId || storedSchoolId);
-                        setOffering(json.offering || storedOffering || '');
+                    if (json.exists || (viewOnly && schoolIdParam)) {
+                        setSchoolId(json.school_id || json.schoolId || storedSchoolId);
+                        setOffering(json.curricular_offering || json.offering || storedOffering || '');
 
                         // Keep cache in sync
                         localStorage.setItem('schoolId', json.schoolId);
                         localStorage.setItem('schoolOffering', json.offering || '');
 
-                        const db = json.data;
+                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
                         const loadedShifts = {};
                         const loadedModes = {};
                         const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
 
                         levels.forEach(lvl => {
-                            loadedShifts[`shift_${lvl}`] = db[`shift_${lvl}`] || '';
-                            loadedModes[`mode_${lvl}`] = db[`mode_${lvl}`] || '';
+                            loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
+                            loadedModes[`mode_${lvl}`] = dbData[`mode_${lvl}`] || '';
                         });
 
                         const loadedAdms = {
-                            adm_mdl: db.adm_mdl || false,
-                            adm_odl: db.adm_odl || false,
-                            adm_tvi: db.adm_tvi || false,
-                            adm_blended: db.adm_blended || false,
-                            adm_others: db.adm_others || ''
+                            adm_mdl: dbData.adm_mdl || false,
+                            adm_odl: dbData.adm_odl || false,
+                            adm_tvi: dbData.adm_tvi || false,
+                            adm_blended: dbData.adm_blended || false,
+                            adm_others: dbData.adm_others || ''
                         };
 
                         setShifts(loadedShifts);
@@ -85,9 +94,9 @@ const ShiftingModalities = () => {
                             ...levels.map(l => `mode_${l}`),
                             "adm_mdl", "adm_odl", "adm_tvi", "adm_blended", "adm_others"
                         ];
-                        const hasModalitiesData = relevantKeys.some(k => db[k] && db[k] !== '' && db[k] !== false);
+                        const hasModalitiesData = relevantKeys.some(k => dbData[k] && dbData[k] !== '' && dbData[k] !== false);
 
-                        if (hasModalitiesData) {
+                        if (hasModalitiesData || viewOnly) {
                             setIsLocked(true);
                             setHasSavedData(true);
                         } else {
@@ -197,7 +206,7 @@ const ShiftingModalities = () => {
                 <select
                     value={shifts[`shift_${lvl}`] || ''}
                     onChange={(e) => handleShiftChange(e, lvl)}
-                    disabled={isLocked}
+                    disabled={isLocked || viewOnly}
                     className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
                 >
                     <option value="">Select...</option>
@@ -211,7 +220,7 @@ const ShiftingModalities = () => {
                 <select
                     value={modes[`mode_${lvl}`] || ''}
                     onChange={(e) => handleModeChange(e, lvl)}
-                    disabled={isLocked}
+                    disabled={isLocked || viewOnly}
                     className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
                 >
                     <option value="">Select...</option>
@@ -231,10 +240,10 @@ const ShiftingModalities = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white text-2xl">←</button>
+                    <button onClick={() => navigate(-1)} className="text-white text-2xl">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Shifting & Modality</h1>
-                        <p className="text-blue-200 text-xs mt-1">Manage schedules and delivery modes</p>
+                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Manage schedules and delivery modes"}</p>
                     </div>
                 </div>
             </div>
@@ -284,7 +293,7 @@ const ShiftingModalities = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {['adm_mdl', 'adm_odl', 'adm_tvi', 'adm_blended'].map(adm => (
                             <label key={adm} className="flex items-center gap-3 p-3 border border-gray-100 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer transition">
-                                <input type="checkbox" name={adm} checked={adms[adm]} onChange={handleAdmCheck} disabled={isLocked} className="w-5 h-5 accent-[#004A99] dark:accent-blue-500" />
+                                <input type="checkbox" name={adm} checked={adms[adm]} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 accent-[#004A99] dark:accent-blue-500" />
                                 <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase">
                                     {adm === 'adm_mdl' ? 'Modular' : adm === 'adm_odl' ? 'Online' : adm === 'adm_tvi' ? 'TV/Radio' : 'Blended'}
                                 </span>
@@ -294,7 +303,7 @@ const ShiftingModalities = () => {
                     <div className="mt-4">
                         <label className="block text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase mb-2">Other Strategies</label>
                         <textarea
-                            value={adms.adm_others} onChange={handleAdmText} disabled={isLocked}
+                            value={adms.adm_others} onChange={handleAdmText} disabled={isLocked || viewOnly}
                             placeholder="Specify other modes..."
                             className="w-full p-4 border border-gray-200 dark:border-slate-700 rounded-xl text-sm bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" rows="2"
                         />
@@ -303,7 +312,14 @@ const ShiftingModalities = () => {
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-lg">
-                {isLocked ? (
+                {viewOnly ? (
+                    <button 
+                        onClick={() => navigate('/jurisdiction-schools')} 
+                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
+                    >
+                        Back to Schools List
+                    </button>
+                ) : isLocked ? (
                     <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
                 ) : (
                     <>

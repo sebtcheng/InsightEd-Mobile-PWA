@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto, TbSearch } from "react-icons/tb";
+import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto } from "react-icons/tb";
+import { FiChevronRight } from "react-icons/fi";
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import PageTransition from '../components/PageTransition';
@@ -153,7 +154,7 @@ const ProjectValidation = () => {
         <PageTransition>
             <div className="min-h-screen bg-slate-50 pb-20 relative">
                 {/* TUTORIAL MODAL */}
-                {showTutorial && (
+                {showTutorial && !monitorSchoolId && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                         <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 to-purple-500"></div>
@@ -206,19 +207,22 @@ const ProjectValidation = () => {
                             >
                                 <TbArrowLeft size={24} />
                             </button>
-                            <h1 className="text-2xl font-bold tracking-tight">
-                                {selectedProject ? 'Project Details' : 'Project Validation'}
+                            <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+                                {selectedProject ? 'Project Details' : 'Project Monitoring'}
+                                {monitorSchoolId && (
+                                    <span className="bg-white/20 text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border border-white/30 backdrop-blur-sm">Monitor View</span>
+                                )}
                             </h1>
                         </div>
                         {!selectedProject && (
-                            <p className="text-blue-100 text-sm opacity-90 pl-10 max-w-xs">
-                                Verify and approve completed infrastructure projects for your school.
+                            <p className="text-blue-100/60 text-xs font-medium pl-10 max-w-xs">
+                                {monitorSchoolId ? `Inspecting school ID: ${monitorSchoolId}` : "Manage and verify infrastructure projects."}
                             </p>
                         )}
                     </div>
                 </div>
 
-                {/* Content Container (Overlapping Header) */}
+                {/* Content Container */}
                 <div className="px-6 -mt-12 relative z-10 pb-20">
 
                     {/* SEARCH BAR (Only show when list is active) */}
@@ -242,7 +246,7 @@ const ProjectValidation = () => {
                         </div>
                     )}
                     {loading ? (
-                        <div className="bg-white rounded-3xl p-8 shadow-lg border border-slate-100 text-center text-slate-400">
+                        <div className="bg-white rounded-3xl p-8 shadow-lg border border-slate-100 text-center">
                             <div className="animate-pulse flex flex-col items-center">
                                 <div className="w-12 h-12 bg-slate-200 rounded-full mb-3"></div>
                                 <div className="h-4 w-32 bg-slate-200 rounded mb-2"></div>
@@ -250,126 +254,58 @@ const ProjectValidation = () => {
                             </div>
                         </div>
                     ) : selectedProject ? (
-                        // --- DETAILED VIEW ---
                         <div className="space-y-6 animate-in slide-in-from-right duration-300">
-
-                            {/* IMMERSIVE HEADER CARD */}
-                            <div className="bg-white rounded-3xl shadow-xl overflow-hidden relative">
-                                {/* Image Background or Gradient */}
-                                <div className="h-48 bg-slate-800 relative">
-                                    {projectImages.length > 0 ? (
-                                        <img
-                                            src={projectImages[0].image_data}
-                                            alt="Project Cover"
-                                            className="w-full h-full object-cover opacity-80"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-900">
-                                            <TbBuildingSkyscraper className="text-white/20" size={64} />
-                                        </div>
-                                    )}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-
-                                    {/* Status Badge Over Image */}
-                                    <div className={`absolute top-4 right-4 text-[10px] font-bold px-3 py-1 rounded-full backdrop-blur-md shadow-lg ${selectedProject.validation_status === 'Validated' ? 'bg-green-500/90 text-white' :
-                                        selectedProject.validation_status === 'Rejected' ? 'bg-red-500/90 text-white' :
-                                            'bg-orange-500/90 text-white'
-                                        }`}>
-                                        {selectedProject.validation_status.toUpperCase()}
+                             {/* Project Details Card */}
+                             <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-slate-100 space-y-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0">
+                                        <TbBuildingSkyscraper size={24} />
                                     </div>
-
-                                    <div className="absolute bottom-0 left-0 p-6 w-full">
-                                        <h2 className="text-2xl font-bold text-white leading-tight shadow-sm">{selectedProject.projectName}</h2>
-                                        <p className="text-blue-100 text-xs mt-1 flex items-center gap-1 opacity-90">
-                                            <TbBuildingSkyscraper size={14} />
-                                            {selectedProject.contractorName || 'Contractor Not Specified'}
-                                        </p>
+                                    <div className="flex-1 min-w-0">
+                                        <h2 className="text-xl font-bold text-slate-800 leading-tight">{selectedProject.projectName}</h2>
+                                        <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-bold">ID: {selectedProject.id}</p>
                                     </div>
                                 </div>
 
-                                {/* Key Stats Grid */}
-                                <div className="p-6 grid grid-cols-2 gap-y-6 gap-x-4">
-                                    <div className="col-span-2 grid grid-cols-2 gap-4 pb-4 border-b border-slate-100">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1">
-                                                <TbCoin size={14} className="text-blue-500" />
-                                                Allocation
-                                            </label>
-                                            <p className="font-bold text-slate-800 text-lg">
-                                                ₱ {selectedProject.projectAllocation ? Number(selectedProject.projectAllocation).toLocaleString() : '0.00'}
-                                            </p>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold flex items-center gap-1">
-                                                <TbActivity size={14} className="text-green-500" />
-                                                Progress
-                                            </label>
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${selectedProject.accomplishmentPercentage}%` }}></div>
-                                                </div>
-                                                <span className="font-bold text-slate-800">{selectedProject.accomplishmentPercentage}%</span>
-                                            </div>
-                                        </div>
+                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status</span>
+                                        <span className="text-sm font-bold text-slate-700">{selectedProject.status}</span>
                                     </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Status</label>
-                                        <p className="font-semibold text-slate-700 text-sm">{selectedProject.status}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Funds Batch</label>
-                                        <p className="font-semibold text-slate-700 text-sm">{selectedProject.batchOfFunds || 'N/A'}</p>
-                                    </div>
-
-                                    <div className="col-span-2 pt-2 grid grid-cols-3 gap-2">
-                                        <div className="bg-slate-50 p-2 rounded-lg text-center">
-                                            <label className="text-[9px] text-slate-400 font-bold uppercase block mb-1">Target</label>
-                                            <p className="text-xs font-bold text-slate-700">{formatDate(selectedProject.targetCompletionDate)}</p>
-                                        </div>
-                                        <div className="bg-slate-50 p-2 rounded-lg text-center">
-                                            <label className="text-[9px] text-slate-400 font-bold uppercase block mb-1">Actual</label>
-                                            <p className="text-xs font-bold text-slate-700">{formatDate(selectedProject.actualCompletionDate)}</p>
-                                        </div>
-                                        <div className="bg-slate-50 p-2 rounded-lg text-center">
-                                            <label className="text-[9px] text-slate-400 font-bold uppercase block mb-1">Notice</label>
-                                            <p className="text-xs font-bold text-slate-700">{formatDate(selectedProject.noticeToProceed)}</p>
-                                        </div>
+                                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Accomplishment</span>
+                                        <span className="text-sm font-bold text-[#004A99]">{selectedProject.accomplishmentPercentage}%</span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Engineer's Remarks Card */}
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-start">
-                                <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center shrink-0">
-                                    <TbFileDescription size={20} />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-slate-800 text-sm mb-1">Engineer's Report</h3>
-                                    <p className="text-sm text-slate-600 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                        "{selectedProject.otherRemarks || "No additional remarks provided."}"
-                                    </p>
-                                </div>
+                            {/* Project Description */}
+                            <div className="bg-white p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] border border-slate-100">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-3">Description</h3>
+                                <p className="text-sm text-slate-700 leading-relaxed">{selectedProject.projectDescription || 'No description provided.'}</p>
                             </div>
 
-                            {/* Images Gallery */}
+                            {/* Photos Section */}
                             <div className="space-y-3">
-                                <h3 className="font-bold text-slate-700 pl-2 flex items-center gap-2">
-                                    <TbPhoto size={18} />
-                                    Project Gallery
-                                </h3>
+                                <div className="flex items-center justify-between px-1">
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                        <TbPhoto /> Project Photos
+                                    </h3>
+                                    <span className="bg-slate-100 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full">
+                                        {projectImages.length} Images
+                                    </span>
+                                </div>
+
                                 {imageLoading ? (
-                                    <div className="bg-white rounded-2xl p-8 text-center text-sm text-slate-400 shadow-sm border border-slate-100">Loading photos...</div>
+                                    <div className="bg-white rounded-2xl p-8 border border-slate-100 flex justify-center">
+                                        <div className="w-8 h-8 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+                                    </div>
                                 ) : projectImages.length > 0 ? (
                                     <div className="grid grid-cols-2 gap-3">
-                                        {projectImages.map((img) => (
-                                            <div key={img.id} className="relative aspect-video rounded-2xl overflow-hidden bg-white shadow-sm border border-slate-100 group">
-                                                <img
-                                                    src={img.image_data}
-                                                    alt="Project"
-                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                                />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                                        {projectImages.map((img, idx) => (
+                                            <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
+                                                <img src={img.image_url || img.image_data} alt={`Project ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
                                                     <p className="text-white text-[10px] font-medium truncate w-full">Uploaded by {img.uploaded_by}</p>
                                                 </div>
                                             </div>
@@ -390,53 +326,57 @@ const ProjectValidation = () => {
                                     </div>
                                     <h3 className="font-bold text-slate-700">Validation Decision</h3>
                                 </div>
-                                <textarea
-                                    className="w-full p-4 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-500"
-                                    rows="3"
-                                    placeholder={monitorSchoolId ? "Validation remarks from School Head" : "Enter your remarks here..."}
-                                    value={remarks}
-                                    onChange={(e) => setRemarks(e.target.value)}
-                                    disabled={selectedProject.validation_status !== 'Pending' || monitorSchoolId}
-                                ></textarea>
 
                                 {selectedProject.validation_status === 'Pending' ? (
-                                    !monitorSchoolId ? (
-                                        <div className="flex gap-3 pt-2">
-                                            <button
-                                                onClick={() => handleValidation('Rejected')}
-                                                className="flex-1 py-3.5 rounded-2xl bg-white border border-red-100 text-red-600 font-bold text-sm hover:bg-red-50 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm"
-                                            >
-                                                <TbX size={18} />
-                                                Reject
-                                            </button>
-                                            <button
-                                                onClick={() => handleValidation('Validated')}
-                                                className="flex-[2] py-3.5 rounded-2xl bg-[#004A99] text-white font-bold text-sm hover:bg-blue-800 transition-all active:scale-95 flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20"
-                                            >
-                                                <TbCheck size={18} />
-                                                Confirm & Validate
-                                            </button>
-                                        </div>
-                                    ) : (
+                                    monitorSchoolId ? (
                                         <div className="pt-2">
                                             <div className="w-full py-3.5 rounded-2xl bg-orange-50 text-orange-700 font-bold text-sm flex items-center justify-center gap-2">
                                                 <TbActivity size={18} />
-                                                Awaiting Head Validation
+                                                Awaiting School Head Validation
                                             </div>
                                         </div>
+                                    ) : (
+                                        <>
+                                            <div className="space-y-3">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Validation Remarks</label>
+                                                <textarea
+                                                    value={remarks}
+                                                    onChange={(e) => setRemarks(e.target.value)}
+                                                    placeholder="Add any additional observation or reason for rejection..."
+                                                    className="w-full bg-slate-100 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-blue-500 min-h-[100px] outline-none"
+                                                />
+                                            </div>
+
+                                            <div className="flex gap-3 pt-4">
+                                                <button
+                                                    onClick={() => handleValidation('Rejected')}
+                                                    className="flex-1 py-4 bg-red-50 text-red-600 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+                                                >
+                                                    <TbX /> Reject
+                                                </button>
+                                                <button
+                                                    onClick={() => handleValidation('Validated')}
+                                                    className="flex-[2] py-4 bg-[#004A99] text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors"
+                                                >
+                                                    <TbCheck /> Confirm Project
+                                                </button>
+                                            </div>
+                                        </>
                                     )
                                 ) : (
-                                    <div className="pt-2">
-                                        <button
-                                            disabled
-                                            className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-90 ${selectedProject.validation_status === 'Validated'
-                                                ? 'bg-green-100 text-green-700'
-                                                : 'bg-red-100 text-red-700'
-                                                }`}
-                                        >
+                                    <div className="space-y-4 pt-2">
+                                        <div className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-90 ${selectedProject.validation_status === 'Validated'
+                                            ? 'bg-green-100 text-green-700'
+                                            : 'bg-red-100 text-red-700'
+                                            }`}>
                                             {selectedProject.validation_status === 'Validated' ? <TbCheck size={18} /> : <TbX size={18} />}
                                             {selectedProject.validation_status === 'Validated' ? 'Project Confirmed' : 'Project Rejected'}
-                                        </button>
+                                        </div>
+                                        {selectedProject.validationRemarks && (
+                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm italic text-slate-600">
+                                                "{selectedProject.validationRemarks}"
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -449,33 +389,38 @@ const ProjectValidation = () => {
                                     <TbBuildingSkyscraper size={32} />
                                 </div>
                                 <h3 className="text-slate-800 font-bold text-lg">No Projects Found</h3>
-                                <p className="text-slate-500 text-sm mt-2 max-w-[200px] mx-auto">There are no submitted projects waiting for your validation.</p>
+                                <p className="text-slate-500 text-sm mt-2 max-w-[200px] mx-auto">There are no submitted projects available for this school.</p>
                             </div>
                         ) : (
                             <div className="space-y-4 pb-6">
-                                {projects.filter(p =>
-                                    p.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                    (p.contractorName && p.contractorName.toLowerCase().includes(searchQuery.toLowerCase()))
-                                ).length === 0 ? (
-                                    <div className="text-center py-10 opacity-60">
-                                        <p className="text-sm font-semibold text-slate-500">No projects found matching your search.</p>
-                                    </div>
-                                ) : (
-                                    projects.filter(p =>
-                                        p.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                        (p.contractorName && p.contractorName.toLowerCase().includes(searchQuery.toLowerCase()))
-                                    ).map((project) => (
-                                        <div
-                                            key={project.id}
-                                            onClick={() => setSelectedProject(project)}
-                                            className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group"
-                                        >
-                                            {/* Status Badge */}
-                                            <div className={`absolute top-0 right-0 text-[10px] font-bold px-4 py-1.5 rounded-bl-2xl ${project.validation_status === 'Validated' ? 'bg-green-500 text-white' :
-                                                project.validation_status === 'Rejected' ? 'bg-red-500 text-white' :
-                                                    'bg-orange-100 text-orange-700'
-                                                }`}>
-                                                {project.validation_status.toUpperCase()}
+                                {projects.map((project) => (
+                                    <div
+                                        key={project.id}
+                                        onClick={() => setSelectedProject(project)}
+                                        className="bg-white rounded-3xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group"
+                                    >
+                                        {/* Status Badge */}
+                                        <div className={`absolute top-0 right-0 text-[10px] font-bold px-4 py-1.5 rounded-bl-2xl ${
+                                            project.validation_status === 'Validated' ? 'bg-green-500 text-white' : 
+                                            project.validation_status === 'Rejected' ? 'bg-red-500 text-white' : 
+                                            'bg-orange-500 text-white'
+                                        }`}>
+                                            {project.validation_status || 'Submitted'}
+                                        </div>
+
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0 shadow-sm group-hover:bg-[#004A99] group-hover:text-white transition-colors duration-300">
+                                                <TbBuildingSkyscraper size={24} />
+                                            </div>
+                                            <div className="flex-1 min-w-0 pr-16">
+                                                <h3 className="font-bold text-slate-800 leading-tight truncate">{project.projectName}</h3>
+                                                <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                                    <TbCalendar size={12} />
+                                                    {formatDate(project.statusAsOfDate)}
+                                                </p>
+                                            </div>
+                                            <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
+                                                <FiChevronRight size={20} />
                                             </div>
 
                                             <div className="flex items-center gap-4">

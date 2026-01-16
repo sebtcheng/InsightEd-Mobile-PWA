@@ -1,8 +1,9 @@
 // src/forms/SchoolResources.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
 
@@ -11,11 +12,17 @@ const SchoolResources = () => {
     const navigate = useNavigate();
 
     // --- STATE ---
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const schoolIdParam = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [userRole, setUserRole] = useState("School Head");
 
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
@@ -66,17 +73,25 @@ const SchoolResources = () => {
                 const cachedId = localStorage.getItem('schoolId');
                 if (cachedId) setSchoolId(cachedId);
 
+                // Fetch user role for BottomNav
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                if (userDoc.exists()) setUserRole(userDoc.data().role);
+
                 // 1. Fetch BASIC PROFILE / ENROLLMENT (needed for computation & ID)
                 try {
-                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
+                    let profileFetchUrl = `/api/school-by-user/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+                    const profileRes = await fetch(profileFetchUrl);
                     const profileJson = await profileRes.json();
 
-                    if (profileJson.exists) {
-                        const pData = profileJson.data;
-                        setSchoolId(pData.school_id);
-                        setCurricularOffering(pData.curricular_offering || '');
+                    if (profileJson.exists || (viewOnly && schoolIdParam)) {
+                        const pData = (viewOnly && schoolIdParam) ? profileJson : profileJson.data;
+                        setSchoolId(pData.school_id || pData.schoolId);
+                        setCurricularOffering(pData.curricular_offering || pData.curricularOffering || '');
                         setEnrollmentData({
-                            gradeKinder: pData.grade_kinder || 0,
+                            gradeKinder: pData.grade_kinder || pData.kinder || 0,
                             grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
                             grade3: pData.grade_3 || 0, grade4: pData.grade_4 || 0,
                             grade5: pData.grade_5 || 0, grade6: pData.grade_6 || 0,
@@ -98,24 +113,28 @@ const SchoolResources = () => {
 
                 // 2. Fetch RESOURCES
                 try {
-                    const res = await fetch(`/api/school-resources/${user.uid}`);
+                    let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+                    const res = await fetch(resourcesFetchUrl);
                     const json = await res.json();
 
-                    if (json.exists) {
-                        const db = json.data;
-                        setSchoolId(db.school_id || cachedId);
+                    if (json.exists || (viewOnly && schoolIdParam)) {
+                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                        setSchoolId(dbData.school_id || dbData.schoolId || cachedId);
 
                         // Map database columns to state
                         const loaded = {};
                         Object.keys(initialFields).forEach(key => {
-                            loaded[key] = db[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
+                            loaded[key] = dbData[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
                         });
 
                         setFormData(loaded);
                         setOriginalData(loaded);
 
-                        // Lock if data is already present
-                        if (db.res_armchairs_good > 0 || db.res_toilets_male > 0) {
+                        // Lock if data is already present or viewOnly
+                        if (dbData.res_armchairs_good > 0 || dbData.res_toilets_male > 0 || viewOnly) {
                             setIsLocked(true);
                         }
                     } else {
@@ -195,7 +214,7 @@ const SchoolResources = () => {
             <label className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest w-2/3">{label}</label>
             <input
                 type={type} name={name} value={formData[name] ?? (type === 'number' ? 0 : '')}
-                onChange={handleChange} disabled={isLocked}
+                onChange={handleChange} disabled={isLocked || viewOnly}
                 className="w-24 text-center font-bold text-blue-900 dark:text-blue-200 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg py-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent dark:disabled:bg-transparent"
             />
         </div>
@@ -205,7 +224,7 @@ const SchoolResources = () => {
         <div className="flex flex-col gap-2 bg-gray-50 p-4 rounded-xl border border-gray-100">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
             <select
-                name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked}
+                name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
                 className="w-full font-bold text-blue-900 bg-white border border-gray-200 rounded-lg py-2 px-3 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
             >
                 <option value="">-- Select --</option>
@@ -235,7 +254,7 @@ const SchoolResources = () => {
                         name={seatKey}
                         value={seats}
                         onChange={handleChange}
-                        disabled={isLocked}
+                        disabled={isLocked || viewOnly}
                         className="w-full text-center font-bold text-gray-800 bg-white border border-gray-200 rounded-lg py-1.5 text-xs focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent"
                     />
                 </td>
@@ -265,10 +284,10 @@ const SchoolResources = () => {
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-40">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white text-2xl">←</button>
+                    <button onClick={() => navigate(-1)} className="text-white text-2xl">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
-                        <p className="text-blue-100 text-[10px] uppercase font-bold tracking-widest opacity-80">Neon Inventory System</p>
+                        <p className="text-blue-100 text-[10px] uppercase font-bold tracking-widest opacity-80">{viewOnly ? "Monitor View (Read-Only)" : "Neon Inventory System"}</p>
                     </div>
                 </div>
             </div>
@@ -376,7 +395,14 @@ const SchoolResources = () => {
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
-                {isLocked ? (
+                {viewOnly ? (
+                    <button 
+                        onClick={() => navigate('/jurisdiction-schools')} 
+                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
+                    >
+                        Back to Schools List
+                    </button>
+                ) : isLocked ? (
                     <button onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg transition">✏️ Unlock to Edit</button>
                 ) : (
                     <>

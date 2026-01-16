@@ -1,6 +1,6 @@
 // src/forms/OrganizedClasses.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
@@ -11,6 +11,11 @@ const OrganizedClasses = () => {
     const navigate = useNavigate();
 
     // --- STATE ---
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const schoolIdParam = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -18,6 +23,7 @@ const OrganizedClasses = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [userRole, setUserRole] = useState("School Head");
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -43,28 +49,37 @@ const OrganizedClasses = () => {
                 if (storedOffering) setOffering(storedOffering);
 
                 try {
-                    // 2. ONLINE FETCH
-                    const res = await fetch(`/api/organized-classes/${user.uid}`);
+                    // Fetch user role for BottomNav
+                    const docRef = doc(db, "users", user.uid);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) setUserRole(docSnap.data().role);
+
+                    let fetchUrl = `/api/organized-classes/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    const res = await fetch(fetchUrl);
                     const json = await res.json();
 
-                    if (json.exists) {
-                        setSchoolId(json.schoolId);
-                        setOffering(json.offering || storedOffering || '');
+                    if (json.exists || (viewOnly && schoolIdParam)) {
+                        setSchoolId(json.school_id || json.schoolId);
+                        setOffering(json.curricular_offering || json.offering || storedOffering || '');
 
                         // Sync storage to keep data fresh
                         localStorage.setItem('schoolId', json.schoolId);
                         localStorage.setItem('schoolOffering', json.offering || '');
 
-                        const db = json.data;
+                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
                         // Check if data actually exists in DB to lock the form
-                        const hasData = Object.values(db).some(val => val !== null && val !== 0);
+                        const hasData = Object.values(dbData).some(val => val !== null && val !== 0);
 
                         const initialData = {
-                            kinder: db.kinder || 0,
-                            g1: db.grade_1 || 0, g2: db.grade_2 || 0, g3: db.grade_3 || 0,
-                            g4: db.grade_4 || 0, g5: db.grade_5 || 0, g6: db.grade_6 || 0,
-                            g7: db.grade_7 || 0, g8: db.grade_8 || 0, g9: db.grade_9 || 0, g10: db.grade_10 || 0,
-                            g11: db.grade_11 || 0, g12: db.grade_12 || 0
+                            kinder: dbData.classes_kinder || dbData.kinder || 0,
+                            g1: dbData.classes_grade_1 || dbData.grade_1 || 0, g2: dbData.classes_grade_2 || dbData.grade_2 || 0, g3: dbData.classes_grade_3 || dbData.grade_3 || 0,
+                            g4: dbData.classes_grade_4 || dbData.grade_4 || 0, g5: dbData.classes_grade_5 || dbData.grade_5 || 0, g6: dbData.classes_grade_6 || dbData.grade_6 || 0,
+                            g7: dbData.classes_grade_7 || dbData.grade_7 || 0, g8: dbData.classes_grade_8 || dbData.grade_8 || 0, g9: dbData.classes_grade_9 || dbData.grade_9 || 0, g10: dbData.classes_grade_10 || dbData.grade_10 || 0,
+                            g11: dbData.classes_grade_11 || dbData.grade_11 || 0, g12: dbData.classes_grade_12 || dbData.grade_12 || 0
                         };
                         setFormData(initialData);
                         setOriginalData(initialData);
@@ -202,7 +217,7 @@ const OrganizedClasses = () => {
                 name={name}
                 value={formData[name]}
                 onChange={handleChange}
-                disabled={isLocked}
+                disabled={isLocked || viewOnly}
                 className={inputClass}
             />
         </div>
@@ -214,10 +229,10 @@ const OrganizedClasses = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Organized Classes</h1>
-                        <p className="text-blue-200 text-xs mt-1">Number of sections per grade level</p>
+                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Number of sections per grade level"}</p>
                     </div>
                 </div>
             </div>
@@ -288,7 +303,14 @@ const OrganizedClasses = () => {
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                {isLocked ? (
+                {viewOnly ? (
+                    <button 
+                        onClick={() => navigate('/jurisdiction-schools')} 
+                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
+                    >
+                        Back to Schools List
+                    </button>
+                ) : isLocked ? (
                     <button
                         onClick={handleUpdateClick}
                         className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"

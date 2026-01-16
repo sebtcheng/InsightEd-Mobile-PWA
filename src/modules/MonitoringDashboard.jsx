@@ -12,7 +12,9 @@ const MonitoringDashboard = () => {
     const [userData, setUserData] = useState(null);
     const [stats, setStats] = useState(null);
     const [engStats, setEngStats] = useState(null);
+    const [jurisdictionProjects, setJurisdictionProjects] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('all');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -32,13 +34,15 @@ const MonitoringDashboard = () => {
                         ...(data.division && { division: data.division })
                     });
 
-                    const [statsRes, engStatsRes] = await Promise.all([
+                    const [statsRes, engStatsRes, projectsRes] = await Promise.all([
                         fetch(`/api/monitoring/stats?${params.toString()}`),
-                        fetch(`/api/monitoring/engineer-stats?${params.toString()}`)
+                        fetch(`/api/monitoring/engineer-stats?${params.toString()}`),
+                        fetch(`/api/monitoring/engineer-projects?${params.toString()}`)
                     ]);
 
                     if (statsRes.ok) setStats(await statsRes.json());
                     if (engStatsRes.ok) setEngStats(await engStatsRes.json());
+                    if (projectsRes.ok) setJurisdictionProjects(await projectsRes.json());
                 } catch (err) {
                     console.error("Dashboard Fetch Error:", err);
                 }
@@ -95,69 +99,156 @@ const MonitoringDashboard = () => {
                                 {userData?.role === 'Regional Office' ? `Region ${userData?.region}` : `${userData?.division} Division`}
                             </span>
                         </div>
-                        <h1 className="text-3xl font-black tracking-tight">Monitoring Dashboard</h1>
-                        <p className="text-blue-100/70 text-sm mt-1">Status of schools & infrastructure projects.</p>
+                        <h1 className="text-3xl font-black tracking-tight">Monitoring</h1>
+                        <p className="text-blue-100/70 text-sm mt-1">Status of schools & infrastructure.</p>
+                    </div>
 
-                        <div className="absolute top-6 right-6 z-30">
-                            <button onClick={() => navigate('/leaderboard')} className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 hover:bg-white/30 transition-all active:scale-95 shadow-lg relative group">
-                                <TbTrophy size={20} className="text-yellow-300 drop-shadow-sm group-hover:scale-110 transition-transform" />
+                    {/* Tabs */}
+                    <div className="flex gap-2 mt-8 relative z-10">
+                        {['all', 'school', 'engineer'].map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                                    activeTab === tab 
+                                    ? 'bg-white text-[#004A99] shadow-lg' 
+                                    : 'bg-white/10 text-white hover:bg-white/20'
+                                }`}
+                            >
+                                {tab}
                             </button>
-                        </div>
+                        ))}
                     </div>
                 </div>
 
                 <div className="px-5 -mt-10 space-y-6 relative z-20">
-                    {/* Infrastructure Summary */}
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
-                        <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Infrastructure Status</h2>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
-                                <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">{engStats?.avg_progress || 0}%</span>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Avg. Progress</p>
+                    {/* ALL TAB */}
+                    {activeTab === 'all' && (
+                        <>
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
+                                        <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">{stats?.total_schools || 0}</span>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Total Schools</p>
+                                    </div>
+                                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl">
+                                        <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Infra Projects</p>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="text-center p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl">
-                                <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.completed_count || 0}</span>
-                                <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Completed</p>
+
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Quick Stats</h2>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-500">Avg. Project Progress</span>
+                                        <span className="font-bold text-[#004A99]">{engStats?.avg_progress || 0}%</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-500">Profile Completion</span>
+                                        <span className="font-bold text-emerald-600">
+                                            {stats?.total_schools ? Math.round(((stats?.profile || 0) / stats.total_schools) * 100) : 0}%
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {/* SCHOOL TAB */}
+                    {activeTab === 'school' && (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Form Submissions</h2>
+                                <button 
+                                    onClick={() => navigate('/jurisdiction-schools')}
+                                    className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg"
+                                >
+                                    View All Schools
+                                </button>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <StatCard title="Profiles" value={stats?.profile || 0} total={stats?.total_schools || 0} color="bg-blue-500" icon={FiFileText} />
+                                <StatCard title="School Head" value={stats?.head || 0} total={stats?.total_schools || 0} color="bg-indigo-500" icon={FiCheckCircle} />
+                                <StatCard title="Enrollment" value={stats?.enrollment || 0} total={stats?.total_schools || 0} color="bg-emerald-500" icon={FiTrendingUp} />
+                                <StatCard title="Classes" value={stats?.organizedclasses || 0} total={stats?.total_schools || 0} color="bg-cyan-500" icon={FiCheckCircle} />
+                                <StatCard title="Modalities" value={stats?.shifting || 0} total={stats?.total_schools || 0} color="bg-purple-500" icon={FiMapPin} />
+                                <StatCard title="Personnel" value={stats?.personnel || 0} total={stats?.total_schools || 0} color="bg-orange-500" icon={FiFileText} />
+                                <StatCard title="Specialization" value={stats?.specialization || 0} total={stats?.total_schools || 0} color="bg-pink-500" icon={FiTrendingUp} />
+                                <StatCard title="Resources" value={stats?.resources || 0} total={stats?.total_schools || 0} color="bg-amber-500" icon={FiClock} />
                             </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* School Submissions */}
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Form Submissions</h2>
-                            <button
-                                onClick={() => navigate('/jurisdiction-schools')}
-                                className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg"
-                            >
-                                View All Schools
-                            </button>
-                        </div>
+                    {/* ENGINEER TAB */}
+                    {activeTab === 'engineer' && (
+                        <div className="space-y-4">
+                            <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Infrastructure Summary</h2>
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="text-center">
+                                        <p className="text-4xl font-black text-[#004A99] dark:text-blue-400">{engStats?.total_projects || 0}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Total Projects</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.completed_count || 0}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Completed</p>
+                                    </div>
+                                    <div className="text-center col-span-2 pt-4 border-t border-slate-50 dark:border-slate-700">
+                                        <p className="text-4xl font-black text-amber-500">{engStats?.avg_progress || 0}%</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avg. Physical Accomplishment</p>
+                                    </div>
+                                </div>
+                            </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard
-                                title="School Profiles"
-                                value={stats?.profile || 0}
-                                total={stats?.total_schools || 0}
-                                color="bg-blue-500"
-                                icon={FiFileText}
-                            />
-                            <StatCard
-                                title="Enrollment Data"
-                                value={stats?.enrollment || 0}
-                                total={stats?.total_schools || 0}
-                                color="bg-emerald-500"
-                                icon={FiCheckCircle}
-                            />
-                            <StatCard
-                                title="School Resources"
-                                value={stats?.resources || 0}
-                                total={stats?.total_schools || 0}
-                                color="bg-amber-500"
-                                icon={FiClock}
-                            />
+                            <div className="space-y-3">
+                                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] px-1">Project List</h2>
+                                {jurisdictionProjects.length === 0 ? (
+                                    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 text-center text-slate-400">
+                                        No projects found in this jurisdiction.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 pb-6">
+                                        {jurisdictionProjects.map((project) => (
+                                            <div 
+                                                key={project.id}
+                                                onClick={() => navigate(`/project-validation?schoolId=${project.schoolId}`)}
+                                                className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 active:scale-[0.98] transition-all cursor-pointer group"
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="flex-1">
+                                                        <h3 className="font-bold text-slate-800 dark:text-slate-100 leading-tight group-hover:text-blue-600 transition-colors">{project.projectName}</h3>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 flex items-center gap-1">
+                                                            <FiMapPin size={10} /> {project.schoolName}
+                                                        </p>
+                                                    </div>
+                                                    <div className={`text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-wider ${
+                                                        project.validation_status === 'Validated' ? 'bg-emerald-50 text-emerald-600' :
+                                                        project.validation_status === 'Rejected' ? 'bg-red-50 text-red-600' :
+                                                        'bg-orange-50 text-orange-600'
+                                                    }`}>
+                                                        {project.validation_status || 'Pending'}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-blue-500 rounded-full" 
+                                                            style={{ width: `${project.accomplishmentPercentage}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="text-xs font-black text-slate-700 dark:text-slate-300">{project.accomplishmentPercentage}%</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
 
                 <BottomNav userRole={userData?.role} />

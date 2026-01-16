@@ -1,8 +1,9 @@
 // src/forms/TeachingPersonnel.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
 
@@ -11,11 +12,17 @@ const TeachingPersonnel = () => {
     const navigate = useNavigate();
 
     // --- STATE ---
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const schoolIdParam = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [userRole, setUserRole] = useState("School Head");
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -41,26 +48,35 @@ const TeachingPersonnel = () => {
                 if (storedOffering) setOffering(storedOffering);
 
                 try {
-                    const res = await fetch(`/api/teaching-personnel/${user.uid}`);
+                    // Fetch user role for BottomNav
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) setUserRole(userDoc.data().role);
+
+                    let fetchUrl = `/api/teaching-personnel/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    const res = await fetch(fetchUrl);
                     const json = await res.json();
 
-                    if (json.exists) {
-                        setSchoolId(json.schoolId || storedSchoolId);
-                        setOffering(json.offering || storedOffering || '');
+                    if (json.exists || (viewOnly && schoolIdParam)) {
+                        setSchoolId(json.school_id || json.schoolId || storedSchoolId);
+                        setOffering(json.curricular_offering || json.offering || storedOffering || '');
 
-                        const db = json.data;
+                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
                         const initialData = {
-                            teach_kinder: db.teach_kinder || 0,
-                            teach_g1: db.teach_g1 || 0, teach_g2: db.teach_g2 || 0, teach_g3: db.teach_g3 || 0,
-                            teach_g4: db.teach_g4 || 0, teach_g5: db.teach_g5 || 0, teach_g6: db.teach_g6 || 0,
-                            teach_g7: db.teach_g7 || 0, teach_g8: db.teach_g8 || 0, teach_g9: db.teach_g9 || 0, teach_g10: db.teach_g10 || 0,
-                            teach_g11: db.teach_g11 || 0, teach_g12: db.teach_g12 || 0
+                            teach_kinder: dbData.teach_kinder || 0,
+                            teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
+                            teach_g4: dbData.teach_g4 || 0, teach_g5: dbData.teach_g5 || 0, teach_g6: dbData.teach_g6 || 0,
+                            teach_g7: dbData.teach_g7 || 0, teach_g8: dbData.teach_g8 || 0, teach_g9: dbData.teach_g9 || 0, teach_g10: dbData.teach_g10 || 0,
+                            teach_g11: dbData.teach_g11 || 0, teach_g12: dbData.teach_g12 || 0
                         };
                         setFormData(initialData);
                         setOriginalData(initialData);
 
-                        const hasData = Object.values(db).some(val => val > 0);
-                        if (hasData) setIsLocked(true);
+                        const hasData = Object.values(dbData).some(val => val > 0);
+                        if (hasData || viewOnly) setIsLocked(true);
                     }
                 } catch (error) {
                     console.error("Fetch error:", error);
@@ -174,7 +190,7 @@ const TeachingPersonnel = () => {
                 name={name}
                 value={formData[name]}
                 onChange={handleChange}
-                disabled={isLocked}
+                disabled={isLocked || viewOnly}
                 className="w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all"
             />
         </div>
@@ -185,10 +201,10 @@ const TeachingPersonnel = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white text-2xl">←</button>
+                    <button onClick={() => navigate(-1)} className="text-white text-2xl">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white tracking-tight">Teaching Personnel</h1>
-                        <p className="text-blue-200 text-xs mt-1">Teacher count per grade level</p>
+                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Teacher count per grade level"}</p>
                     </div>
                 </div>
             </div>
@@ -246,7 +262,14 @@ const TeachingPersonnel = () => {
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
-                {isLocked ? (
+                {viewOnly ? (
+                    <button 
+                        onClick={() => navigate('/jurisdiction-schools')} 
+                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
+                    >
+                        Back to Schools List
+                    </button>
+                ) : isLocked ? (
                     <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
                 ) : (
                     <>

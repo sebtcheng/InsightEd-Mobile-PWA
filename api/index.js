@@ -1194,22 +1194,25 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
   try {
-    let whereClause = `WHERE region = $1`;
+    let whereClause = `WHERE TRIM(region) = TRIM($1)`;
     let params = [region];
 
     if (division) {
-      whereClause += ` AND division = $2`;
+      whereClause += ` AND TRIM(division) = TRIM($2)`;
       params.push(division);
     }
 
     const statsQuery = `
       SELECT 
         COUNT(*) as total_schools,
-        COUNT(CASE WHEN school_name IS NOT NULL THEN 1 END) as Profile,
-        COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as Enrollment,
-        COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as OrganizedClasses,
-        COUNT(CASE WHEN teach_kinder IS NOT NULL THEN 1 END) as Personnel,
-        COUNT(CASE WHEN res_internet_type IS NOT NULL THEN 1 END) as Resources
+        COUNT(CASE WHEN school_name IS NOT NULL THEN 1 END) as profile,
+        COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as head,
+        COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as enrollment,
+        COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as organizedclasses,
+        COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
+        COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
+        COUNT(CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 END) as specialization,
+        COUNT(CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN 1 END) as resources
       FROM school_profiles
       ${whereClause}
     `;
@@ -1230,15 +1233,20 @@ app.get('/api/monitoring/schools', async (req, res) => {
       SELECT 
         school_id, school_name, region, division, district,
         (CASE WHEN school_name IS NOT NULL THEN true ELSE false END) as profile_status,
+        (CASE WHEN head_last_name IS NOT NULL THEN true ELSE false END) as head_status,
         (CASE WHEN total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
-        (CASE WHEN classes_kinder IS NOT NULL THEN true ELSE false END) as classes_status
+        (CASE WHEN classes_kinder IS NOT NULL THEN true ELSE false END) as classes_status,
+        (CASE WHEN shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+        (CASE WHEN teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+        (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN true ELSE false END) as specialization_status,
+        (CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN true ELSE false END) as resources_status
       FROM school_profiles
-      WHERE region = $1
+      WHERE TRIM(region) = TRIM($1)
     `;
     let params = [region];
 
     if (division) {
-      query += ` AND division = $2 `;
+      query += ` AND TRIM(division) = TRIM($2) `;
       params.push(division);
     }
 
@@ -1263,12 +1271,12 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
         COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed_count,
         COUNT(CASE WHEN status = 'Ongoing' THEN 1 END) as ongoing_count
       FROM engineer_form
-      WHERE region = $1
+      WHERE TRIM(region) = TRIM($1)
     `;
     let params = [region];
 
     if (division) {
-      query += ` AND division = $2 `;
+      query += ` AND TRIM(division) = TRIM($2) `;
       params.push(division);
     }
 
@@ -1277,6 +1285,35 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
   } catch (err) {
     console.error("Engineer Stats Error:", err);
     res.status(500).json({ error: "Failed to fetch engineer stats" });
+  }
+});
+
+// --- 28. GET: All Engineer Projects for Jurisdiction ---
+app.get('/api/monitoring/engineer-projects', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    let query = `
+      SELECT 
+        project_id as id, project_name as "projectName", school_id as "schoolId", school_name as "schoolName", 
+        accomplishment_percentage as "accomplishmentPercentage", status, 
+        validation_status as "validation_status", status_as_of as "statusAsOfDate"
+      FROM engineer_form
+      WHERE TRIM(region) = TRIM($1)
+    `;
+    let params = [region];
+
+    if (division) {
+      query += ` AND TRIM(division) = TRIM($2) `;
+      params.push(division);
+    }
+
+    query += ` ORDER BY created_at DESC `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Jurisdiction Projects Error:", err);
+    res.status(500).json({ error: "Failed to fetch projects" });
   }
 });
 

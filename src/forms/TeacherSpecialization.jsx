@@ -1,8 +1,9 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
 
@@ -27,11 +28,17 @@ const getInitialFields = () => ({
 
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const schoolIdParam = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [userRole, setUserRole] = useState("School Head");
 
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState(getInitialFields());
@@ -47,26 +54,34 @@ const TeacherSpecialization = () => {
                 if (cachedId) setSchoolId(cachedId);
 
                 try {
-                    // 2. FETCH FROM NEON via UID
-                    const res = await fetch(`/api/teacher-specialization/${user.uid}`);
+                    // Fetch user role for BottomNav
+                    const userDoc = await getDoc(doc(db, "users", user.uid));
+                    if (userDoc.exists()) setUserRole(userDoc.data().role);
+
+                    let fetchUrl = `/api/teacher-specialization/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    const res = await fetch(fetchUrl);
                     const json = await res.json();
 
-                    if (json.exists) {
-                        setSchoolId(json.schoolId || cachedId);
-                        const db = json.data;
+                    if (json.exists || (viewOnly && schoolIdParam)) {
+                        setSchoolId(json.school_id || json.schoolId || cachedId);
+                        const dbData = (viewOnly && schoolIdParam) ? json : json.data;
                         const loaded = {};
 
                         // Use getInitialFields keys to ensure all are present
                         const defaults = getInitialFields();
                         Object.keys(defaults).forEach(key => {
-                            loaded[key] = db[key] !== null ? db[key] : 0;
+                            loaded[key] = dbData[key] !== null ? dbData[key] : 0;
                         });
 
                         setFormData(loaded);
                         setOriginalData(loaded);
 
-                        // Lock if data exists
-                        if (db.spec_math_major > 0 || db.spec_guidance > 0) setIsLocked(true);
+                        // Lock if data exists or viewOnly
+                        if (dbData.spec_math_major > 0 || dbData.spec_guidance > 0 || viewOnly) setIsLocked(true);
                     } else {
                         setFormData(getInitialFields());
                     }
@@ -154,10 +169,10 @@ const TeacherSpecialization = () => {
                     {mismatch && <span className="text-[10px] text-orange-500 font-bold flex items-center gap-1">⚠️ Load exceeds majors</span>}
                 </div>
                 <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
+                    <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
                 </div>
                 <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-green-50 dark:bg-green-900/30 text-green-900 dark:text-green-200 font-bold focus:ring-2 focus:ring-green-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
+                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-green-50 dark:bg-green-900/30 text-green-900 dark:text-green-200 font-bold focus:ring-2 focus:ring-green-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
                 </div>
             </div>
         );
@@ -170,10 +185,10 @@ const TeacherSpecialization = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">←</button>
+                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white text-2xl transition">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Teacher Specialization</h1>
-                        <p className="text-blue-200 text-xs mt-1">Majors vs. Actual Teaching Loads</p>
+                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Actual Teaching Loads"}</p>
                     </div>
                 </div>
             </div>
@@ -190,7 +205,7 @@ const TeacherSpecialization = () => {
                         ].map((item) => (
                             <div key={item.k} className="bg-gray-50 dark:bg-slate-900/50 p-3 rounded-xl flex justify-between items-center border border-gray-100 dark:border-slate-700">
                                 <span className="text-[10px] font-extrabold text-gray-400 dark:text-slate-500 uppercase tracking-tight">{item.l}</span>
-                                <input type="number" min="0" name={item.k} value={formData[item.k]} onChange={handleChange} disabled={isLocked} className="w-10 text-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg font-bold py-1 disabled:bg-gray-100 dark:disabled:bg-slate-900 dark:text-slate-200" />
+                                <input type="number" min="0" name={item.k} value={formData[item.k]} onChange={handleChange} disabled={isLocked || viewOnly} className="w-10 text-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg font-bold py-1 disabled:bg-gray-100 dark:disabled:bg-slate-900 dark:text-slate-200" />
                             </div>
                         ))}
                     </div>
@@ -219,7 +234,14 @@ const TeacherSpecialization = () => {
 
             {/* Floating Action Bar */}
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
-                {isLocked ? (
+                {viewOnly ? (
+                    <button 
+                        onClick={() => navigate('/jurisdiction-schools')} 
+                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
+                    >
+                        Back to Schools List
+                    </button>
+                ) : isLocked ? (
                     <button onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition">✏️ Unlock to Edit</button>
                 ) : (
                     <>
@@ -239,5 +261,18 @@ const TeacherSpecialization = () => {
         </div>
     );
 };
+
+const getInitialFields = () => ({
+    spec_math_major: 0, spec_math_teaching: 0,
+    spec_english_major: 0, spec_english_teaching: 0,
+    spec_filipino_major: 0, spec_filipino_teaching: 0,
+    spec_science_major: 0, spec_science_teaching: 0,
+    spec_ap_major: 0, spec_ap_teaching: 0,
+    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
+    spec_esp_major: 0, spec_esp_teaching: 0,
+    spec_tle_major: 0, spec_tle_teaching: 0,
+    spec_guidance: 0, spec_librarian: 0,
+    spec_ict_coord: 0, spec_drrm_coord: 0
+});
 
 export default TeacherSpecialization;

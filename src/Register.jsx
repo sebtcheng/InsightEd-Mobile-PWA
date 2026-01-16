@@ -274,6 +274,7 @@ const Register = () => {
             lastName: lastName,
             schoolId: schoolIdToSave,
             region: formData.region || "",
+            division: formData.division || "",
             province: formData.province || "",
             city: formData.city || "",
             barangay: formData.barangay || "",

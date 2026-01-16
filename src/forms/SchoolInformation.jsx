@@ -1,6 +1,6 @@
 // src/forms/SchoolInformation.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed 
@@ -11,6 +11,11 @@ const SchoolInformation = () => {
     const navigate = useNavigate();
 
     // --- STATE MANAGEMENT ---
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const schoolIdParam = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
@@ -91,11 +96,23 @@ const SchoolInformation = () => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
-                    const response = await fetch(`/api/school-head/${user.uid}`);
+                    // Determine which ID to use for fetching
+                    // If viewOnly and schoolIdParam are present, we fetch by School ID
+                    // BUT /api/school-head/:uid usually takes user UID. 
+                    // Let's check api/index.js for a dedicated monitor endpoint or use school-detail
+                    
+                    let fetchUrl = `/api/school-head/${user.uid}`;
+                    if (viewOnly && schoolIdParam) {
+                        fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                    }
+
+                    const response = await fetch(fetchUrl);
                     if (response.ok) {
                         const result = await response.json();
-                        if (result.exists) {
-                            const data = result.data;
+                        // Handle difference in response structure: result.data (from school-head) vs result (from school-detail)
+                        const data = (viewOnly && schoolIdParam) ? result : (result.exists ? result.data : null);
+                        
+                        if (data) {
                             const loadedData = {
                                 lastName: data.head_last_name || data.last_name || '',
                                 firstName: data.head_first_name || data.first_name || '',
@@ -109,7 +126,7 @@ const SchoolInformation = () => {
                             };
                             setFormData(loadedData);
                             setOriginalData(loadedData);
-                            setLastUpdated(data.updated_at);
+                            setLastUpdated(data.updated_at || data.submitted_at);
                             setIsLocked(true);
                         }
                     }
@@ -193,11 +210,11 @@ const SchoolInformation = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">School Head Info</h1>
                         <p className="text-blue-200 text-xs mt-1">
-                            {lastUpdated ? `Last Verified: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage personnel record'}
+                            {viewOnly ? "Monitor View (Read-Only)" : (lastUpdated ? `Last Verified: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage personnel record')}
                         </p>
                     </div>
                 </div>
@@ -216,7 +233,7 @@ const SchoolInformation = () => {
                             onBlur={handleItemNumberBlur}
                             placeholder="Enter PSI_CD for autofill..."
                             className={`${inputClass} !border-blue-200`}
-                            disabled={isLocked}
+                            disabled={isLocked || viewOnly}
                         />
                         {isSearching && <span className="absolute right-4 top-3 animate-spin">⏳</span>}
                     </div>
@@ -233,15 +250,15 @@ const SchoolInformation = () => {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className={labelClass}>First Name</label>
-                            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked} />
+                            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
                         </div>
                         <div>
                             <label className={labelClass}>Middle Name</label>
-                            <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked} />
+                            <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
                         </div>
                         <div>
                             <label className={labelClass}>Last Name</label>
-                            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked} />
+                            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
                         </div>
                         <div className="md:col-span-3">
                             <label className={labelClass}>Sex</label>
@@ -275,14 +292,14 @@ const SchoolInformation = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className={labelClass}>Position Title</label>
-                            <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked}>
+                            <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly}>
                                 <option value="">Select Position...</option>
                                 {positionOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             </select>
                         </div>
                         <div>
                             <label className={labelClass}>Date of Appointment</label>
-                            <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked} />
+                            <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly} />
                         </div>
                     </div>
                 </div>
