@@ -64,7 +64,7 @@ const Outbox = () => {
                 console.error("Sync error:", error);
                 setStatusMap(prev => ({ ...prev, [item.id]: 'error' }));
             }
-            
+
             await new Promise(r => setTimeout(r, 500));
         }
 
@@ -72,60 +72,94 @@ const Outbox = () => {
         loadItems();
     };
 
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
-            
-            {/* --- HEADER --- */}
-            <div className="bg-white p-4 shadow-sm flex items-center gap-3 sticky top-0 z-20 border-b border-gray-100">
-                <button onClick={() => navigate(-1)} className="text-2xl text-gray-600 hover:text-[#004A99] transition">&larr;</button>
-                <div>
-                    <h1 className="text-xl font-bold text-gray-800">Sync Center</h1>
-                    <p className="text-xs text-gray-400">
-                        {items.length} item{items.length !== 1 && 's'} pending
-                    </p>
+
+            {/* HEADER SECTION (Themed) */}
+            <div className="relative bg-[#004A99] pt-12 pb-24 px-6 rounded-b-[3rem] shadow-2xl z-0 overflow-hidden">
+                {/* Background Decorative Circles */}
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl"></div>
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/10 rounded-full translate-y-1/2 -translate-x-1/4 blur-2xl"></div>
+
+                <div className="relative z-10 flex items-center gap-3 text-white mb-2">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 -ml-2 hover:bg-white/10 rounded-full transition-colors"
+                    >
+                        <span className="text-2xl">&larr;</span>
+                    </button>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Sync Center</h1>
+                        <p className="text-blue-100 text-sm opacity-90">
+                            Manage your offline data and submissions.
+                        </p>
+                    </div>
                 </div>
             </div>
 
             {/* --- CONTENT --- */}
-            <div className="p-5">
-                
-                {/* Sync Button */}
-                {items.length > 0 ? (
-                    <button 
-                        onClick={handleSyncAll} 
-                        disabled={isSyncing}
-                        className={`w-full py-4 rounded-xl font-bold text-white shadow-lg mb-6 flex items-center justify-center gap-2 transition-all active:scale-95
-                        ${isSyncing ? 'bg-blue-400 cursor-progress' : 'bg-[#004A99] hover:bg-blue-800'}
-                        `}
-                    >
-                        {isSyncing ? (
-                            <>
-                                <span className="animate-spin text-xl">⏳</span> Syncing...
-                            </>
-                        ) : (
-                            <>
-                                <span className="text-xl">☁️</span> Sync All Now
-                            </>
-                        )}
-                    </button>
-                ) : (
-                    <div className="text-center py-20 opacity-50 flex flex-col items-center">
-                        <div className="text-6xl mb-4 bg-gray-100 p-6 rounded-full">✅</div>
-                        <h3 className="font-bold text-gray-600 text-lg">All caught up!</h3>
-                        <p className="text-sm text-gray-400">No pending forms to upload.</p>
+            <div className="px-6 -mt-12 relative z-10">
+
+                {/* STATUS CARD / SYNC BUTTON */}
+                <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 mb-6">
+                    <div className="flex justify-between items-end mb-6">
+                        <div>
+                            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Queue Status</p>
+                            <h2 className="text-2xl font-bold text-slate-800">
+                                {items.length} <span className="text-base font-normal text-slate-500">Pending</span>
+                            </h2>
+                        </div>
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl ${items.length > 0 ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                            }`}>
+                            {items.length > 0 ? '☁️' : '✅'}
+                        </div>
                     </div>
+
+                    {items.length > 0 ? (
+                        <button
+                            onClick={handleSyncAll}
+                            disabled={isSyncing}
+                            className={`w-full py-4 rounded-2xl font-bold text-white shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 transition-all active:scale-95
+                            ${isSyncing ? 'bg-blue-400 cursor-progress' : 'bg-[#004A99] hover:bg-blue-800'}
+                            `}
+                        >
+                            {isSyncing ? (
+                                <>
+                                    <span className="animate-spin text-xl">⏳</span> Syncing Data...
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-xl">🚀</span> Sync All Now
+                                </>
+                            )}
+                        </button>
+                    ) : (
+                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-dashed border-slate-200">
+                            <p className="text-slate-400 text-sm">You're all caught up! No pending data.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* LIST header */}
+                {items.length > 0 && (
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 pl-2">Pending Items</h3>
                 )}
 
                 {/* List */}
-                <div className="space-y-3">
+                <div className="space-y-3 pb-6">
                     {items.map((item) => (
-                        <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between group">
-                            
-                            <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold
-                                    ${statusMap[item.id] === 'success' ? 'bg-green-100 text-green-600' : 
-                                      statusMap[item.id] === 'error' ? 'bg-red-100 text-red-600' :
-                                      'bg-blue-50 text-blue-600'}
+                        <div key={item.id} className="bg-white p-5 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 flex items-center justify-between group relative overflow-hidden">
+                            {/* Progress Bar Background for Syncing */}
+                            {statusMap[item.id] === 'syncing' && (
+                                <div className="absolute bottom-0 left-0 h-1 bg-blue-500 animate-pulse w-full"></div>
+                            )}
+
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shrink-0 transition-colors
+                                    ${statusMap[item.id] === 'success' ? 'bg-green-100 text-green-600' :
+                                        statusMap[item.id] === 'error' ? 'bg-red-100 text-red-600' :
+                                            'bg-slate-50 text-blue-600 group-hover:bg-blue-50'}
                                 `}>
                                     {item.type === 'SCHOOL_PROFILE' && '🏫'}
                                     {item.type === 'ENROLMENT' && '📊'}
@@ -137,26 +171,28 @@ const Outbox = () => {
                                     {!item.type && '📄'}
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-gray-800 text-sm">{item.label || "Untitled Form"}</h3>
-                                    <p className="text-[10px] text-gray-400">
+                                    <h3 className="font-bold text-slate-800 text-sm leading-tight mb-1">{item.label || "Untitled Form"}</h3>
+                                    <p className="text-[10px] text-slate-400 font-medium">
                                         {new Date(item.timestamp).toLocaleString()}
                                     </p>
-                                    
-                                    {statusMap[item.id] === 'syncing' && <p className="text-[10px] text-blue-500 font-bold animate-pulse">Uploading...</p>}
-                                    {statusMap[item.id] === 'success' && <p className="text-[10px] text-green-500 font-bold">Synced!</p>}
-                                    {statusMap[item.id] === 'error' && <p className="text-[10px] text-red-500 font-bold">Failed. Try again.</p>}
+
+                                    {statusMap[item.id] === 'syncing' && <p className="text-[10px] text-blue-500 font-bold mt-1">Uploading...</p>}
+                                    {statusMap[item.id] === 'success' && <p className="text-[10px] text-green-500 font-bold mt-1">Synced Successfully</p>}
+                                    {statusMap[item.id] === 'error' && <p className="text-[10px] text-red-500 font-bold mt-1">Failed. Please retry.</p>}
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="relative z-10 pl-2">
                                 {statusMap[item.id] === 'success' ? (
-                                    <span className="text-green-500 text-xl">✓</span>
+                                    <div className="w-8 h-8 rounded-full bg-green-50 text-green-500 flex items-center justify-center">
+                                        <span className="text-sm">✓</span>
+                                    </div>
                                 ) : (
                                     <>
                                         {!isSyncing && (
-                                            <button 
+                                            <button
                                                 onClick={() => handleDelete(item.id)}
-                                                className="p-2 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition"
+                                                className="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
                                                 title="Discard Draft"
                                             >
                                                 🗑️

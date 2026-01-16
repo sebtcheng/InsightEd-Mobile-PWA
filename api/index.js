@@ -673,6 +673,59 @@ app.get('/api/projects/:id', async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+// --- 11b. GET: Get Projects by School ID (For School Head Validation) ---
+app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const query = `
+      SELECT 
+        project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
+        school_id AS "schoolId", division, region, status, validation_status,
+        validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
+        accomplishment_percentage AS "accomplishmentPercentage",
+        project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
+        contractor_name AS "contractorName", other_remarks AS "otherRemarks",
+        TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
+        TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
+        TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
+      FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
+      ORDER BY project_id DESC;
+    `;
+    const result = await pool.query(query, [schoolId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Projects by School Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- 11c. POST: Validate Project (School Head) ---
+app.post('/api/validate-project', async (req, res) => {
+  const { projectId, status, userUid, userName, remarks } = req.body;
+  try {
+    const query = `
+      UPDATE "engineer_form" 
+      SET validation_status = $1, validation_remarks = $3, validated_by = $4
+      WHERE project_id = $2;
+    `;
+    await pool.query(query, [status, projectId, remarks || '', userName]);
+
+    await logActivity(
+      userUid,
+      userName || 'School Head',
+      'School Head',
+      'VALIDATE',
+      `Project ID: ${projectId}`,
+      `Marked as ${status}. Remarks: ${remarks || 'None'}`
+    );
+
+    res.json({ success: true, message: `Project ${status}` });
+  } catch (err) {
+    console.error("Validation Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // --- 20. POST: Upload Project Image (Base64) ---
 app.post('/api/upload-image', async (req, res) => {
