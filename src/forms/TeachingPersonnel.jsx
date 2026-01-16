@@ -5,7 +5,7 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-// SchoolHeadBottomNav import removed
+import BottomNav from '../modules/BottomNav';
 
 const TeachingPersonnel = () => {
     const navigate = useNavigate();
@@ -168,20 +168,20 @@ const TeachingPersonnel = () => {
 
     const TeacherInput = ({ label, name }) => (
         <div className="flex flex-col items-center">
-            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 text-center">{label}</label>
+            <label className="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 text-center">{label}</label>
             <input
                 type="number" min="0"
                 name={name}
                 value={formData[name]}
                 onChange={handleChange}
                 disabled={isLocked}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all"
+                className="w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all"
             />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -194,21 +194,21 @@ const TeachingPersonnel = () => {
             </div>
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto">
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex justify-between items-center">
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 mb-4 flex justify-between items-center">
                     <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Curricular Offering</p>
-                        <p className="text-blue-900 font-bold text-sm uppercase">{offering || 'Not Set'}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">Curricular Offering</p>
+                        <p className="text-blue-900 dark:text-blue-400 font-bold text-sm uppercase">{offering || 'Not Set'}</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Total Faculty</p>
-                        <p className="text-2xl font-extrabold text-[#004A99]">{getTotal()}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total Faculty</p>
+                        <p className="text-2xl font-extrabold text-[#004A99] dark:text-blue-500">{getTotal()}</p>
                     </div>
                 </div>
 
                 <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
                     {showElem() && (
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">🎒 Elementary</h2>
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">🎒 Elementary</h2>
                             <div className="grid grid-cols-2 gap-4">
                                 <TeacherInput label="Kinder" name="teach_kinder" />
                                 <TeacherInput label="Grade 1" name="teach_g1" />
@@ -222,8 +222,8 @@ const TeachingPersonnel = () => {
                     )}
 
                     {showJHS() && (
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">📘 Junior High</h2>
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">📘 Junior High</h2>
                             <div className="grid grid-cols-2 gap-4">
                                 <TeacherInput label="Grade 7" name="teach_g7" />
                                 <TeacherInput label="Grade 8" name="teach_g8" />
@@ -234,8 +234,8 @@ const TeachingPersonnel = () => {
                     )}
 
                     {showSHS() && (
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                            <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2">🎓 Senior High</h2>
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                            <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2">🎓 Senior High</h2>
                             <div className="grid grid-cols-2 gap-4">
                                 <TeacherInput label="Grade 11" name="teach_g11" />
                                 <TeacherInput label="Grade 12" name="teach_g12" />
@@ -245,12 +245,12 @@ const TeachingPersonnel = () => {
                 </form>
             </div>
 
-            <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 pb-10 z-50 flex gap-3 shadow-2xl">
+            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
                 {isLocked ? (
                     <button onClick={handleUpdateClick} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg">✏️ Unlock to Edit</button>
                 ) : (
                     <>
-                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-500 font-bold py-4 rounded-xl">Cancel</button>}
+                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300 font-bold py-4 rounded-xl">Cancel</button>}
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg">
                             {isSaving ? "Saving..." : "Save Changes"}
                         </button>
@@ -258,10 +258,10 @@ const TeachingPersonnel = () => {
                 )}
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Personnel?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Edit Personnel?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Save Changes?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
 
-            {/* <SchoolHeadBottomNav /> removed as per request */}
+            <BottomNav userRole="School Head" />
         </div>
     );
 };

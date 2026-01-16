@@ -426,12 +426,12 @@ const SchoolProfile = () => {
 
     // LoadingScreen check removed
 
-    const inputClass = `w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all`;
-    const labelClass = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 ml-1";
-    const sectionClass = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6";
+    const inputClass = `w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all`;
+    const labelClass = "block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 ml-1";
+    const sectionClass = "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-6";
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
 
             {/* HEADER */}
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">

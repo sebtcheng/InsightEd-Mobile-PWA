@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getOutbox, deleteFromOutbox } from '../db';
-import SchoolHeadBottomNav from './SchoolHeadBottomNav'; // ✅ UPDATED IMPORT
+import BottomNav from './BottomNav'; // ✅ UPDATED IMPORT
 
 const Outbox = () => {
     const navigate = useNavigate();
@@ -207,7 +207,7 @@ const Outbox = () => {
             </div>
 
             {/* ✅ UPDATED NAVIGATION CALL */}
-            <SchoolHeadBottomNav />
+            <BottomNav userRole="School Head" />
         </div>
     );
 };

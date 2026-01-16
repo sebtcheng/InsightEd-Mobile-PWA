@@ -15,7 +15,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
 
-import SchoolHeadBottomNav from './SchoolHeadBottomNav';
+import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 
 const SchoolHeadDashboard = () => {
@@ -135,7 +135,7 @@ const SchoolHeadDashboard = () => {
     return (
         <>
             <PageTransition>
-                <div className="min-h-screen bg-slate-50 font-sans pb-28 relative">
+                <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-28 relative">
 
                     {/* --- HEADER SECTION --- */}
                     <div className="relative bg-[#004A99] pt-14 pb-20 px-6 rounded-b-[3rem] shadow-2xl z-0 overflow-hidden">
@@ -187,26 +187,26 @@ const SchoolHeadDashboard = () => {
                             {searchQuery && (
                                 <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[60] animate-in fade-in zoom-in-95 duration-200">
                                     {searchResults.length > 0 ? (
-                                        <ul className="max-h-60 overflow-y-auto">
+                                        <ul className="max-h-60 overflow-y-auto dark:bg-slate-800">
                                             {searchResults.map((item, idx) => (
                                                 <li key={idx}>
                                                     <button
                                                         onClick={() => navigate(item.route)}
-                                                        className="w-full text-left px-5 py-4 hover:bg-slate-50 transition-colors flex items-center justify-between group border-b border-slate-50 last:border-none"
+                                                        className="w-full text-left px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group border-b border-slate-50 dark:border-slate-700 last:border-none"
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#004A99] flex items-center justify-center">
+                                                            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-[#004A99] dark:text-blue-400 flex items-center justify-center">
                                                                 <LuFileCheck size={16} />
                                                             </div>
-                                                            <span className="text-sm font-semibold text-slate-700 group-hover:text-[#004A99] transition-colors">{item.name}</span>
+                                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors">{item.name}</span>
                                                         </div>
-                                                        <TbChevronRight size={16} className="text-slate-300 group-hover:text-[#004A99] transition-colors" />
+                                                        <TbChevronRight size={16} className="text-slate-300 dark:text-slate-500 group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors" />
                                                     </button>
                                                 </li>
                                             ))}
                                         </ul>
                                     ) : (
-                                        <div className="p-6 text-center text-slate-400 text-xs italic">
+                                        <div className="p-6 text-center text-slate-400 dark:text-slate-500 text-xs italic dark:bg-slate-800">
                                             No forms found matching "{searchQuery}"
                                         </div>
                                     )}
@@ -221,28 +221,28 @@ const SchoolHeadDashboard = () => {
                         {/* 1. Quick Stats Row */}
                         <div className="grid grid-cols-3 gap-3">
                             {/* Progress Card */}
-                            <div className="col-span-1 bg-white p-4 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 flex flex-col justify-center items-center text-center">
+                            <div className="col-span-1 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 dark:border-slate-700 flex flex-col justify-center items-center text-center">
                                 <div className="relative w-12 h-12 flex items-center justify-center mb-2">
                                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                                        <path className="text-slate-100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
-                                        <path className={`${progress === 100 ? 'text-green-500' : 'text-[#004A99]'} transition-all duration-1000 ease-out`} strokeDasharray={`${progress}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                        <path className="text-slate-100 dark:text-slate-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                                        <path className={`${progress === 100 ? 'text-green-500' : 'text-[#004A99] dark:text-blue-400'} transition-all duration-1000 ease-out`} strokeDasharray={`${progress}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
                                     </svg>
-                                    <span className="absolute text-[10px] font-bold text-slate-700">{progress}%</span>
+                                    <span className="absolute text-[10px] font-bold text-slate-700 dark:text-slate-200">{progress}%</span>
                                 </div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Overall</p>
+                                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wide">Overall</p>
                             </div>
 
                             {/* Forms Count */}
-                            <div className="col-span-1 bg-white p-4 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 flex flex-col justify-center items-center text-center">
-                                <div className="w-10 h-10 rounded-full bg-blue-50 text-[#004A99] flex items-center justify-center mb-2">
+                            <div className="col-span-1 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+                                <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#004A99] dark:text-blue-400 flex items-center justify-center mb-2">
                                     <LuFileCheck size={20} />
                                 </div>
-                                <p className="text-xl font-bold text-slate-800 leading-none">{completedForms}<span className="text-slate-300 text-sm">/{totalForms}</span></p>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">Forms</p>
+                                <p className="text-xl font-bold text-slate-800 dark:text-white leading-none">{completedForms}<span className="text-slate-300 dark:text-slate-600 text-sm">/{totalForms}</span></p>
+                                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wide mt-1">Forms</p>
                             </div>
 
                             {/* Learners Highlight */}
-                            <div className="col-span-1 bg-gradient-to-br from-[#004A99] to-[#003377] p-4 rounded-2xl shadow-xl shadow-blue-900/20 flex flex-col justify-center items-center text-center text-white relative overflow-hidden">
+                            <div className="col-span-1 bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 p-4 rounded-2xl shadow-xl shadow-blue-900/20 flex flex-col justify-center items-center text-center text-white relative overflow-hidden">
                                 <div className="absolute top-0 right-0 p-2 opacity-10">
                                     <TbUsers size={40} />
                                 </div>
@@ -262,14 +262,14 @@ const SchoolHeadDashboard = () => {
                                 className="w-full rounded-2xl"
                             >
                                 <SwiperSlide>
-                                    <div className="bg-white p-6 rounded-2xl shadow-sm border-l-4 border-[#FDB913] min-h-[140px] flex flex-col justify-center relative overflow-hidden">
-                                        <div className="absolute right-[-10px] top-[-10px] opacity-5">
-                                            <TbSchool size={100} />
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border-l-4 border-[#FDB913] min-h-[140px] flex flex-col justify-center relative overflow-hidden">
+                                        <div className="absolute right-[-10px] top-[-10px] opacity-5 dark:opacity-10">
+                                            <TbSchool size={100} className="dark:text-white" />
                                         </div>
-                                        <h3 className="text-[#004A99] font-bold text-lg flex items-center mb-2 z-10">
+                                        <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-lg flex items-center mb-2 z-10">
                                             Welcome, Principal!
                                         </h3>
-                                        <p className="text-slate-500 text-xs leading-relaxed max-w-[85%] z-10">
+                                        <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed max-w-[85%] z-10">
                                             Ensure all school forms are up to date before the division deadline. Sync your data when online.
                                         </p>
                                     </div>
@@ -281,8 +281,8 @@ const SchoolHeadDashboard = () => {
                         {/* 3. Quick Actions Grid (NEW) */}
                         <div>
                             <div className="flex justify-between items-end mb-4 px-1">
-                                <h3 className="text-slate-700 font-bold text-sm uppercase tracking-wider">Quick Actions</h3>
-                                <button onClick={() => navigate('/school-forms')} className="text-[#004A99] text-xs font-semibold">View All</button>
+                                <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider">Quick Actions</h3>
+                                <button onClick={() => navigate('/school-forms')} className="text-[#004A99] dark:text-blue-400 text-xs font-semibold">View All</button>
                             </div>
                             <div className="grid grid-cols-4 gap-3">
                                 {SEARCHABLE_ITEMS.map((item, index) => (
@@ -291,10 +291,10 @@ const SchoolHeadDashboard = () => {
                                         onClick={() => navigate(item.route)}
                                         className="flex flex-col items-center gap-2 group"
                                     >
-                                        <div className={`w-14 h-14 rounded-2xl ${item.color} flex items-center justify-center shadow-sm group-active:scale-95 transition-all border border-transparent group-hover:border-slate-200`}>
+                                        <div className={`w-14 h-14 rounded-2xl ${item.color} dark:bg-slate-800 dark:text-blue-400 flex items-center justify-center shadow-sm group-active:scale-95 transition-all border border-transparent dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600`}>
                                             <item.icon size={24} />
                                         </div>
-                                        <span className="text-[10px] font-semibold text-slate-600 text-center leading-tight max-w-[60px]">
+                                        <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 text-center leading-tight max-w-[60px]">
                                             {item.name}
                                         </span>
                                     </button>
@@ -304,29 +304,29 @@ const SchoolHeadDashboard = () => {
 
                         {/* 4. Recent Activity Timeline */}
                         <div className="pb-4">
-                            <h3 className="text-slate-700 font-bold text-sm uppercase tracking-wider mb-4 px-1">Recent History</h3>
-                            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+                            <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider mb-4 px-1">Recent History</h3>
+                            <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-5">
                                 {schoolProfile?.history_logs && schoolProfile.history_logs.length > 0 ? (
-                                    <div className="relative border-l-2 border-slate-100 ml-2 space-y-6 my-2">
+                                    <div className="relative border-l-2 border-slate-100 dark:border-slate-700 ml-2 space-y-6 my-2">
                                         {[...schoolProfile.history_logs].reverse().slice(0, 5).map((log, idx) => (
                                             <div key={idx} className="relative pl-6">
                                                 {/* Timeline Dot */}
-                                                <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white border-4 border-blue-500"></div>
+                                                <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white dark:bg-slate-800 border-4 border-blue-500"></div>
 
                                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start">
-                                                    <p className="text-sm font-bold text-slate-700">{log.action}</p>
-                                                    <span className="text-[10px] font-medium text-slate-400 mt-0.5 bg-slate-50 px-2 py-0.5 rounded-full w-fit">
+                                                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{log.action}</p>
+                                                    <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mt-0.5 bg-slate-50 dark:bg-slate-900 px-2 py-0.5 rounded-full w-fit">
                                                         {new Date(log.timestamp).toLocaleDateString()}
                                                     </span>
                                                 </div>
-                                                <p className="text-xs text-slate-500 mt-1">
-                                                    Updated by <span className="text-[#004A99] font-medium">{userName}</span>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                    Updated by <span className="text-[#004A99] dark:text-blue-400 font-medium">{userName}</span>
                                                 </p>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <div className="py-8 flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                    <div className="py-8 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 opacity-60">
                                         <LuHistory size={32} className="mb-2" />
                                         <p className="text-xs">No recent activity recorded</p>
                                     </div>
@@ -338,7 +338,7 @@ const SchoolHeadDashboard = () => {
 
                 </div>
             </PageTransition>
-            <SchoolHeadBottomNav />
+            <BottomNav userRole="School Head" />
         </>
     );
 };

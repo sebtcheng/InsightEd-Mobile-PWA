@@ -26,13 +26,13 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
         ],
         'Admin': [
             { label: 'Home', path: '/admin-dashboard', icon: TbHomeEdit },
-            { label: 'Activity', path: '/activity', icon: TbClipboardList },
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
+           // { label: 'Activity', path: '/activity', icon: TbClipboardList },
+          //  { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Human Resource': [
-            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Home', path: '/hr-dashboard', icon: TbHomeEdit },
+            { label: 'Sync', path: '/outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ]
     };

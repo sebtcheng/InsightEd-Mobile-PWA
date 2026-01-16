@@ -5,7 +5,7 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-import SchoolHeadBottomNav from '../modules/SchoolHeadBottomNav'; // Ensure correct path
+import BottomNav from '../modules/BottomNav'; // Ensure correct path
 
 const OrganizedClasses = () => {
     const navigate = useNavigate();
@@ -188,9 +188,9 @@ const OrganizedClasses = () => {
     };
 
     // --- STYLES ---
-    const inputClass = "w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all";
-    const labelClass = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 text-center";
-    const sectionClass = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6";
+    const inputClass = "w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-bold text-center text-lg shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all";
+    const labelClass = "block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 text-center";
+    const sectionClass = "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-6";
 
     // LoadingScreen check removed
 
@@ -209,7 +209,7 @@ const OrganizedClasses = () => {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
 
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
@@ -223,14 +223,14 @@ const OrganizedClasses = () => {
             </div>
 
             <div className="px-5 -mt-12 relative z-20">
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 flex justify-between items-center">
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-slate-700 mb-4 flex justify-between items-center">
                     <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Curricular Offering</p>
-                        <p className="text-blue-900 font-bold text-sm uppercase">{offering || 'Not Set'}</p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">Curricular Offering</p>
+                        <p className="text-blue-900 dark:text-blue-400 font-bold text-sm uppercase">{offering || 'Not Set'}</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Total Sections</p>
-                        <p className="text-2xl font-extrabold text-[#004A99]">{getTotalClasses()}</p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total Sections</p>
+                        <p className="text-2xl font-extrabold text-[#004A99] dark:text-blue-500">{getTotalClasses()}</p>
                     </div>
                 </div>
 
@@ -279,15 +279,15 @@ const OrganizedClasses = () => {
                     )}
 
                     {!showElem() && !showJHS() && !showSHS() && (
-                        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
-                            <p className="text-gray-400 font-bold">No offering details found.</p>
-                            <p className="text-xs text-gray-400 mt-2">Please ensure your <b>School Profile</b> is complete.</p>
+                        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 text-center">
+                            <p className="text-gray-400 dark:text-slate-500 font-bold">No offering details found.</p>
+                            <p className="text-xs text-gray-400 dark:text-slate-600 mt-2">Please ensure your <b>School Profile</b> is complete.</p>
                         </div>
                     )}
                 </form>
             </div>
 
-            <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                 {isLocked ? (
                     <button
                         onClick={handleUpdateClick}
@@ -297,7 +297,7 @@ const OrganizedClasses = () => {
                     </button>
                 ) : (
                     <>
-                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
+                        {originalData && <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>}
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
                             {isSaving ? "Saving..." : "Save Changes"}
                         </button>
@@ -305,11 +305,11 @@ const OrganizedClasses = () => {
                 )}
             </div>
 
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Classes?</h3><p className="text-gray-500 text-sm mt-2">Modify the section counts in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Edit Classes?</h3><p className="text-gray-500 dark:text-slate-400 text-sm mt-2">Modify the section counts in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold shadow-md">Unlock</button></div></div></div>}
 
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Save Changes?</h3><p className="text-gray-500 text-sm mt-2">This will update the records in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Save Changes?</h3><p className="text-gray-500 dark:text-slate-400 text-sm mt-2">This will update the records in the database.</p><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-md">Confirm Save</button></div></div></div>}
 
-            <SchoolHeadBottomNav />
+            <BottomNav userRole="School Head" />
         </div>
     );
 };

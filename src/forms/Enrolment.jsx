@@ -252,17 +252,17 @@ const Enrolment = () => {
 
     const Input = ({ label, name, val, onChange }) => (
         <div className="w-full">
-            {label && <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">{label}</label>}
+            {label && <label className="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase mb-1">{label}</label>}
             <input
                 type="number" min="0" name={name} value={val} onChange={onChange} disabled={isLocked}
-                className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-[#004A99] transition-all 
-                ${isLocked ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white border-gray-300'}`}
+                className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 transition-all 
+                ${isLocked ? 'bg-gray-100 dark:bg-slate-900 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-700 text-gray-800 dark:text-slate-200'}`}
             />
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
 
             {/* HEADER */}
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
@@ -292,20 +292,20 @@ const Enrolment = () => {
                     </div>
                 </div>
 
-                <div className={`bg-white p-6 md:p-8 rounded-2xl shadow-lg border transition-all ${!isLocked ? 'border-blue-400 ring-4 ring-blue-50' : 'border-gray-100'}`}>
+                <div className={`bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-lg border transition-all ${!isLocked ? 'border-blue-400 dark:border-blue-500 ring-4 ring-blue-50 dark:ring-blue-900/20' : 'border-gray-100 dark:border-slate-700'}`}>
 
                     {!curricularOffering && (
-                        <div className="p-6 text-center text-gray-400 italic">
+                        <div className="p-6 text-center text-gray-400 dark:text-slate-500 italic">
                             ⚠️ Please set "Curricular Offering" in School Profile first.
                         </div>
                     )}
 
                     {/* 2. ELEMENTARY SECTION */}
                     {showElem() && (
-                        <div className="mb-8 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div className="mb-8 p-5 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-slate-700">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700">Elementary School</h3>
-                                <span className="bg-white px-3 py-1 rounded-lg border border-gray-200 text-xs font-bold text-blue-600 shadow-sm">Total: {getESTotal()}</span>
+                                <h3 className="font-bold text-gray-700 dark:text-slate-300">Elementary School</h3>
+                                <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 shadow-sm">Total: {getESTotal()}</span>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <Input label="Kinder" name="gradeKinder" val={basicGrades.gradeKinder} onChange={handleBasicChange} />
@@ -321,10 +321,10 @@ const Enrolment = () => {
 
                     {/* 3. JHS SECTION */}
                     {showJHS() && (
-                        <div className="mb-8 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div className="mb-8 p-5 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-slate-700">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700">Junior High School</h3>
-                                <span className="bg-white px-3 py-1 rounded-lg border border-gray-200 text-xs font-bold text-blue-600 shadow-sm">Total: {getJHSTotal()}</span>
+                                <h3 className="font-bold text-gray-700 dark:text-slate-300">Junior High School</h3>
+                                <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 shadow-sm">Total: {getJHSTotal()}</span>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <Input label="Grade 7" name="grade7" val={basicGrades.grade7} onChange={handleBasicChange} />
@@ -337,39 +337,39 @@ const Enrolment = () => {
 
                     {/* 4. SHS SECTION */}
                     {showSHS() && (
-                        <div className="mb-8 p-5 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div className="mb-8 p-5 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-slate-700">
                             <div className="flex justify-between items-center mb-4">
                                 <div>
-                                    <h3 className="font-bold text-gray-700">Senior High School</h3>
-                                    <p className="text-[10px] text-gray-400 mt-0.5">Please encode per strand.</p>
+                                    <h3 className="font-bold text-gray-700 dark:text-slate-300">Senior High School</h3>
+                                    <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">Please encode per strand.</p>
                                 </div>
-                                <span className="bg-white px-3 py-1 rounded-lg border border-gray-200 text-xs font-bold text-blue-600 shadow-sm">Total: {getSHSTotal()}</span>
+                                <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 shadow-sm">Total: {getSHSTotal()}</span>
                             </div>
 
-                            <div className="overflow-x-auto rounded-xl border border-gray-200">
+                            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
                                 <table className="w-full text-sm text-left">
-                                    <thead className="text-[10px] text-gray-500 uppercase bg-gray-100 font-bold tracking-wider">
+                                    <thead className="text-[10px] text-gray-500 dark:text-slate-400 uppercase bg-gray-100 dark:bg-slate-900 font-bold tracking-wider">
                                         <tr><th className="px-4 py-3">Track / Strand</th><th className="px-2 py-3 w-24">Grade 11</th><th className="px-2 py-3 w-24">Grade 12</th></tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 bg-white">
+                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
                                         {/* ACADEMIC */}
-                                        <tr><td className="px-4 py-2 font-bold text-gray-700 bg-gray-50" colSpan="3">Academic Track</td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600">ABM</td><td className="p-2"><Input name="abm11" val={shsStrands.abm11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="abm12" val={shsStrands.abm12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600">STEM</td><td className="p-2"><Input name="stem11" val={shsStrands.stem11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="stem12" val={shsStrands.stem12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600">HUMSS</td><td className="p-2"><Input name="humss11" val={shsStrands.humss11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="humss12" val={shsStrands.humss12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600">GAS</td><td className="p-2"><Input name="gas11" val={shsStrands.gas11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="gas12" val={shsStrands.gas12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-bold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/50" colSpan="3">Academic Track</td></tr>
+                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">ABM</td><td className="p-2"><Input name="abm11" val={shsStrands.abm11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="abm12" val={shsStrands.abm12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">STEM</td><td className="p-2"><Input name="stem11" val={shsStrands.stem11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="stem12" val={shsStrands.stem12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">HUMSS</td><td className="p-2"><Input name="humss11" val={shsStrands.humss11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="humss12" val={shsStrands.humss12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">GAS</td><td className="p-2"><Input name="gas11" val={shsStrands.gas11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="gas12" val={shsStrands.gas12} onChange={handleStrandChange} /></td></tr>
 
                                         {/* TVL */}
-                                        <tr><td className="px-4 py-2 font-bold text-gray-700 bg-gray-50" colSpan="3">TVL Track</td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600">ICT</div><div className="text-[10px] text-gray-400">Prog, CSS, Animation</div></td><td className="p-2"><Input name="ict11" val={shsStrands.ict11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="ict12" val={shsStrands.ict12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600">Home Economics</div><div className="text-[10px] text-gray-400">Beauty, Cookery, etc.</div></td><td className="p-2"><Input name="he11" val={shsStrands.he11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="he12" val={shsStrands.he12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600">Industrial Arts</div><div className="text-[10px] text-gray-400">Auto, SMAW, EIM</div></td><td className="p-2"><Input name="ia11" val={shsStrands.ia11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="ia12" val={shsStrands.ia12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600">Agri-Fishery</div><div className="text-[10px] text-gray-400">Agri, Fishing</div></td><td className="p-2"><Input name="afa11" val={shsStrands.afa11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="afa12" val={shsStrands.afa12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-bold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/50" colSpan="3">TVL Track</td></tr>
+                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">ICT</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Prog, CSS, Animation</div></td><td className="p-2"><Input name="ict11" val={shsStrands.ict11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="ict12" val={shsStrands.ict12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">Home Economics</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Beauty, Cookery, etc.</div></td><td className="p-2"><Input name="he11" val={shsStrands.he11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="he12" val={shsStrands.he12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">Industrial Arts</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Auto, SMAW, EIM</div></td><td className="p-2"><Input name="ia11" val={shsStrands.ia11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="ia12" val={shsStrands.ia12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">Agri-Fishery</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Agri, Fishing</div></td><td className="p-2"><Input name="afa11" val={shsStrands.afa11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="afa12" val={shsStrands.afa12} onChange={handleStrandChange} /></td></tr>
 
                                         {/* OTHERS */}
-                                        <tr><td className="px-4 py-2 font-bold text-gray-700 bg-gray-50" colSpan="3">Other Tracks</td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600">Arts & Design</td><td className="p-2"><Input name="arts11" val={shsStrands.arts11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="arts12" val={shsStrands.arts12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600">Sports</td><td className="p-2"><Input name="sports11" val={shsStrands.sports11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="sports12" val={shsStrands.sports12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-bold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/50" colSpan="3">Other Tracks</td></tr>
+                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">Arts & Design</td><td className="p-2"><Input name="arts11" val={shsStrands.arts11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="arts12" val={shsStrands.arts12} onChange={handleStrandChange} /></td></tr>
+                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">Sports</td><td className="p-2"><Input name="sports11" val={shsStrands.sports11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="sports12" val={shsStrands.sports12} onChange={handleStrandChange} /></td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -389,7 +389,7 @@ const Enrolment = () => {
             </div>
 
             {/* --- FLOATING ACTION BAR --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                 {isLocked ? (
                     <button
                         onClick={handleUpdateClick}
@@ -399,7 +399,7 @@ const Enrolment = () => {
                     </button>
                 ) : (
                     <>
-                        <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>
+                        <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
                         <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
                             {isSaving ? "Saving..." : "Save Changes"}
                         </button>
@@ -410,19 +410,19 @@ const Enrolment = () => {
             {/* --- MODALS --- */}
             {showEditModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
-                        <div className="w-12 h-12 bg-amber-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">⚠️</span></div>
-                        <h3 className="font-bold text-lg text-gray-900">Edit Enrolment?</h3>
-                        <p className="text-sm text-gray-500 mt-2 mb-4">To change the school type (e.g. add Senior High), please update your School Profile.</p>
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
+                        <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">⚠️</span></div>
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-slate-200">Edit Enrolment?</h3>
+                        <p className="text-sm text-gray-500 dark:text-slate-400 mt-2 mb-4">To change the school type (e.g. add Senior High), please update your School Profile.</p>
 
-                        <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer mb-6 border border-transparent hover:border-gray-200 transition">
+                        <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer mb-6 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 transition">
                             <input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" />
-                            <span className="text-xs font-bold text-gray-700 select-none">I understand and wish to proceed.</span>
+                            <span className="text-xs font-bold text-gray-700 dark:text-slate-400 select-none">I understand and wish to proceed.</span>
                         </label>
 
                         <div className="flex gap-2">
-                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
-                            <button onClick={handleConfirmEdit} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 cursor-not-allowed'}`}>Proceed</button>
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button>
+                            <button onClick={handleConfirmEdit} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed'}`}>Proceed</button>
                         </div>
                     </div>
                 </div>
@@ -430,17 +430,17 @@ const Enrolment = () => {
 
             {showSaveModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
-                        <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">💾</span></div>
-                        <h3 className="font-bold text-lg text-gray-900">Confirm Submission</h3>
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
+                        <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">💾</span></div>
+                        <h3 className="font-bold text-lg text-gray-900 dark:text-slate-200">Confirm Submission</h3>
 
-                        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 my-4 flex justify-between items-center">
-                            <span className="text-sm font-bold text-blue-800">Grand Total:</span>
-                            <span className="text-xl font-extrabold text-blue-900">{getGrandTotal()}</span>
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 my-4 flex justify-between items-center">
+                            <span className="text-sm font-bold text-blue-800 dark:text-blue-300">Grand Total:</span>
+                            <span className="text-xl font-extrabold text-blue-900 dark:text-blue-100">{getGrandTotal()}</span>
                         </div>
 
                         <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button>
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button>
                             <button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-lg hover:bg-[#A30000]">Submit</button>
                         </div>
                     </div>

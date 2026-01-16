@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
-import SchoolHeadBottomNav from './SchoolHeadBottomNav';
 import PageTransition from '../components/PageTransition';
 import { useTheme } from '../context/ThemeContext'; // Import Hook
 

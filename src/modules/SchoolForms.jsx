@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import SchoolHeadBottomNav from './SchoolHeadBottomNav';
+import BottomNav from './BottomNav'; // ✅ UPDATED IMPORT
 
 // Icons
 import {
@@ -188,7 +188,7 @@ const SchoolForms = () => {
             onClick={() => setFilter(value)}
             className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-xl transition-all ${filter === value
                 ? 'bg-[#004A99] text-white shadow-md'
-                : 'bg-white text-gray-400 hover:bg-gray-50'
+                : 'bg-white dark:bg-slate-800 text-gray-400 dark:text-slate-500 hover:bg-gray-50 dark:hover:bg-slate-700'
                 }`}
         >
             {label}
@@ -204,8 +204,8 @@ const SchoolForms = () => {
                 onClick={() => navigate(item.route)}
                 className={`group relative p-4 mb-3 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center gap-4
                     ${isDone
-                        ? 'bg-slate-50 border-slate-100 opacity-80 hover:opacity-100'
-                        : 'bg-white border-orange-100 shadow-[0_4px_20px_rgba(249,115,22,0.08)] hover:-translate-y-1 hover:shadow-lg'
+                        ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-700 opacity-80 hover:opacity-100'
+                        : 'bg-white dark:bg-slate-800 border-orange-100 dark:border-orange-900/30 shadow-[0_4px_20px_rgba(249,115,22,0.08)] hover:-translate-y-1 hover:shadow-lg'
                     }
                 `}
             >
@@ -222,12 +222,12 @@ const SchoolForms = () => {
                 {/* Text Content */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                        <h3 className={`font-bold text-sm truncate ${isDone ? 'text-slate-600' : 'text-slate-800'}`}>
+                        <h3 className={`font-bold text-sm truncate ${isDone ? 'text-slate-600 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
                             {item.name}
                         </h3>
                         {!isDone && <FiAlertCircle className="text-orange-400 text-xs animate-pulse" />}
                     </div>
-                    <p className="text-[11px] text-slate-400 leading-tight mt-0.5 truncate">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 truncate">
                         {item.description}
                     </p>
                 </div>
@@ -239,7 +239,7 @@ const SchoolForms = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50/50 font-sans pb-24">
+        <div className="min-h-screen bg-slate-50/50 dark:bg-slate-900 font-sans pb-24">
 
             {/* --- HEADER --- */}
             <div className="bg-[#004A99] pt-8 pb-20 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
@@ -259,7 +259,7 @@ const SchoolForms = () => {
                     {/* Progress Donut */}
                     <div className="relative w-16 h-16 flex items-center justify-center">
                         <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                            <path className="text-blue-900/30" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
+                            <path className="text-blue-900/30 dark:text-blue-900/50" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
                             <path className="text-green-400 transition-all duration-1000 ease-out" strokeDasharray={`${progress}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="4" />
                         </svg>
                         <span className="absolute text-[10px] font-bold text-white">{progress}%</span>
@@ -271,7 +271,7 @@ const SchoolForms = () => {
             <div className="px-5 -mt-10 relative z-20">
 
                 {/* Filter Tabs */}
-                <div className="bg-slate-100/80 p-1 rounded-2xl flex gap-1 mb-6 backdrop-blur-sm">
+                <div className="bg-slate-100/80 dark:bg-slate-800/80 p-1 rounded-2xl flex gap-1 mb-6 backdrop-blur-sm">
                     <FilterTab label="All" value="all" />
                     <FilterTab label="Pending" value="pending" />
                     <FilterTab label="Completed" value="completed" />
@@ -282,8 +282,8 @@ const SchoolForms = () => {
                     {Object.keys(categorizedForms).length > 0 ? (
                         Object.entries(categorizedForms).map(([category, items]) => (
                             <div key={category} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 ml-2 flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-2 flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                                     {category}
                                 </h3>
                                 <div>
@@ -302,7 +302,7 @@ const SchoolForms = () => {
                 </div>
             </div>
 
-            <SchoolHeadBottomNav />
+            <BottomNav userRole="School Head" />
         </div>
     );
 };

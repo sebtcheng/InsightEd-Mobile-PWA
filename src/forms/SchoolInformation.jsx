@@ -184,12 +184,12 @@ const SchoolInformation = () => {
 
     // LoadingScreen check removed
 
-    const inputClass = `w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#004A99] bg-white text-gray-800 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 disabled:text-gray-500 transition-all`;
-    const labelClass = "block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1 ml-1";
-    const sectionClass = "bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6";
+    const inputClass = `w-full px-4 py-3 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-800 dark:text-slate-200 font-semibold text-[14px] shadow-sm disabled:bg-gray-100 dark:disabled:bg-slate-900 disabled:text-gray-500 transition-all`;
+    const labelClass = "block text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1 ml-1";
+    const sectionClass = "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-6";
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -227,7 +227,7 @@ const SchoolInformation = () => {
 
                 {/* PERSONAL DETAILS */}
                 <div className={sectionClass}>
-                    <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4">
+                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4">
                         <span className="text-xl">🆔</span> Personal Details
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -252,7 +252,7 @@ const SchoolInformation = () => {
 
                 {/* STATION DETAILS */}
                 <div className={sectionClass}>
-                    <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4">
+                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4">
                         <span className="text-xl">📍</span> Station Details
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -269,7 +269,7 @@ const SchoolInformation = () => {
 
                 {/* APPOINTMENT DATA */}
                 <div className={sectionClass}>
-                    <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2 mb-4">
+                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-lg flex items-center gap-2 mb-4">
                         <span className="text-xl">💼</span> Appointment Data
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -288,7 +288,7 @@ const SchoolInformation = () => {
                 </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-lg">
+            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-lg">
                 {isLocked ? (
                     <button onClick={() => { setIsLocked(false); setShowEditModal(true); }} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl">✏️ Update Info</button>
                 ) : (
@@ -301,14 +301,14 @@ const SchoolInformation = () => {
             {/* Save Modal */}
             {showSaveModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
-                    <div className="bg-white p-6 rounded-2xl w-full max-w-sm">
-                        <h3 className="text-lg font-bold">Confirm Updates</h3>
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
+                        <h3 className="text-lg font-bold dark:text-slate-200">Confirm Updates</h3>
                         <label className="flex items-start gap-3 my-6">
                             <input type="checkbox" checked={isChecked} onChange={(e) => setIsChecked(e.target.checked)} className="mt-1" />
-                            <span className="text-xs font-bold text-gray-700">I certify this information is correct.</span>
+                            <span className="text-xs font-bold text-gray-700 dark:text-slate-400">I certify this information is correct.</span>
                         </label>
                         <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button>
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl dark:text-slate-400">Cancel</button>
                             <button onClick={confirmSave} disabled={!isChecked} className="flex-1 py-3 rounded-xl bg-[#CC0000] text-white font-bold">Save</button>
                         </div>
                     </div>

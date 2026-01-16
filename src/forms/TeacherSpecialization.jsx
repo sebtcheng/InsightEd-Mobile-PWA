@@ -5,20 +5,7 @@ import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
-// SchoolHeadBottomNav import removed
-
-const SUBJECTS = ['english', 'filipino', 'math', 'science', 'ap', 'mapeh', 'esp', 'tle'];
-const ANCILLARY = ['guidance', 'librarian', 'ict_coord', 'drrm_coord'];
-
-const getInitialFields = () => {
-    const fields = {};
-    SUBJECTS.forEach(s => {
-        fields[`spec_${s}_major`] = 0;
-        fields[`spec_${s}_teaching`] = 0;
-    });
-    ANCILLARY.forEach(a => { fields[`spec_${a}`] = 0; });
-    return fields;
-};
+import BottomNav from '../modules/BottomNav';
 
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
@@ -143,16 +130,16 @@ const TeacherSpecialization = () => {
         const mismatch = teaching > major;
 
         return (
-            <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 py-4 last:border-0">
+            <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 dark:border-slate-700 py-4 last:border-0">
                 <div className="col-span-3">
-                    <span className="font-bold text-gray-700 text-sm block">{label}</span>
+                    <span className="font-bold text-gray-700 dark:text-slate-300 text-sm block">{label}</span>
                     {mismatch && <span className="text-[10px] text-orange-500 font-bold flex items-center gap-1">⚠️ Load exceeds majors</span>}
                 </div>
                 <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked} className="w-full text-center border-gray-200 rounded-lg py-2 bg-blue-50 text-blue-900 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100" />
+                    <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
                 </div>
                 <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked} className="w-full text-center border-gray-200 rounded-lg py-2 bg-green-50 text-green-900 font-bold focus:ring-2 focus:ring-green-500 outline-none disabled:bg-gray-100" />
+                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-green-50 dark:bg-green-900/30 text-green-900 dark:text-green-200 font-bold focus:ring-2 focus:ring-green-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
                 </div>
             </div>
         );
@@ -161,7 +148,7 @@ const TeacherSpecialization = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative text-sm">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative text-sm">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -176,28 +163,28 @@ const TeacherSpecialization = () => {
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
 
                 {/* 1. ANCILLARY SERVICES */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold text-md mb-4 flex items-center gap-2"><span className="text-xl">🛠️</span> Ancillary Services</h2>
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
+                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2"><span className="text-xl">🛠️</span> Ancillary Services</h2>
                     <div className="grid grid-cols-2 gap-4">
                         {[
                             { l: 'Guidance', k: 'spec_guidance' }, { l: 'Librarian', k: 'spec_librarian' },
                             { l: 'ICT Coord', k: 'spec_ict_coord' }, { l: 'DRRM Coord', k: 'spec_drrm_coord' }
                         ].map((item) => (
-                            <div key={item.k} className="bg-gray-50 p-3 rounded-xl flex justify-between items-center border border-gray-100">
-                                <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-tight">{item.l}</span>
-                                <input type="number" min="0" name={item.k} value={formData[item.k]} onChange={handleChange} disabled={isLocked} className="w-10 text-center bg-white border border-gray-200 rounded-lg font-bold py-1 disabled:bg-gray-100" />
+                            <div key={item.k} className="bg-gray-50 dark:bg-slate-900/50 p-3 rounded-xl flex justify-between items-center border border-gray-100 dark:border-slate-700">
+                                <span className="text-[10px] font-extrabold text-gray-400 dark:text-slate-500 uppercase tracking-tight">{item.l}</span>
+                                <input type="number" min="0" name={item.k} value={formData[item.k]} onChange={handleChange} disabled={isLocked} className="w-10 text-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg font-bold py-1 disabled:bg-gray-100 dark:disabled:bg-slate-900 dark:text-slate-200" />
                             </div>
                         ))}
                     </div>
                 </div>
 
                 {/* 2. CORE SUBJECTS TABLE */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-20">
-                    <div className="flex justify-between items-end mb-4 border-b pb-2 border-gray-100">
-                        <h2 className="text-gray-800 font-bold text-md flex items-center gap-2"><span className="text-xl">📚</span> Core Subjects</h2>
-                        <div className="flex gap-4 text-[10px] uppercase font-bold text-gray-400">
-                            <span className="text-blue-600">Major</span>
-                            <span className="text-green-600">Load</span>
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-20">
+                    <div className="flex justify-between items-end mb-4 border-b pb-2 border-gray-100 dark:border-slate-700">
+                        <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md flex items-center gap-2"><span className="text-xl">📚</span> Core Subjects</h2>
+                        <div className="flex gap-4 text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">
+                            <span className="text-blue-600 dark:text-blue-400">Major</span>
+                            <span className="text-green-600 dark:text-green-400">Load</span>
                         </div>
                     </div>
 
@@ -213,7 +200,7 @@ const TeacherSpecialization = () => {
             </div>
 
             {/* Floating Action Bar */}
-            <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 pb-10 z-50 flex gap-3 shadow-2xl">
+            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
                 {isLocked ? (
                     <button onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg active:scale-95 transition">✏️ Unlock to Edit</button>
                 ) : (
@@ -227,10 +214,10 @@ const TeacherSpecialization = () => {
             </div>
 
             {/* Modals */}
-            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Modify Data?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
-            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl font-bold text-gray-600">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
+            {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Modify Data?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
+            {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in"><div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg dark:text-slate-200">Confirm Save?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Save</button></div></div></div>}
 
-            {/* <SchoolHeadBottomNav /> removed as per request */}
+            <BottomNav userRole="School Head" />
         </div>
     );
 };
