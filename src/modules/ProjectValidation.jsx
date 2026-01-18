@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto } from "react-icons/tb";
+import { TbArrowLeft, TbCheck, TbX, TbBuildingSkyscraper, TbFileDescription, TbCalendar, TbCoin, TbActivity, TbPhoto, TbSearch } from "react-icons/tb";
 import { FiChevronRight } from "react-icons/fi";
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -105,7 +105,6 @@ const ProjectValidation = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     projectId: selectedProject.id,
-                    status,
                     status,
                     userUid: user.uid,
                     userName: schoolHeadName || user.displayName || 'School Head',
@@ -412,49 +411,26 @@ const ProjectValidation = () => {
                                             <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0 shadow-sm group-hover:bg-[#004A99] group-hover:text-white transition-colors duration-300">
                                                 <TbBuildingSkyscraper size={24} />
                                             </div>
-                                            <div className="flex-1 min-w-0 pr-16">
+                                            <div className="flex-1 min-w-0 pr-6">
                                                 <h3 className="font-bold text-slate-800 leading-tight truncate">{project.projectName}</h3>
                                                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                                                     <TbCalendar size={12} />
                                                     {formatDate(project.statusAsOfDate)}
                                                 </p>
-                                            </div>
-                                            <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
-                                                <FiChevronRight size={20} />
-                                            </div>
-
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0 shadow-sm group-hover:bg-[#004A99] group-hover:text-white transition-colors duration-300">
-                                                    <TbBuildingSkyscraper size={24} />
-                                                </div>
-                                                <div className="flex-1 min-w-0 pr-16">
-                                                    <h3 className="font-bold text-slate-800 leading-tight truncate">{project.projectName}</h3>
-                                                    <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                                                        <TbCalendar size={12} />
-                                                        {formatDate(project.statusAsOfDate)}
-                                                    </p>
-                                                </div>
-                                                <div className="text-slate-300 group-hover:text-[#004A99] transition-colors pr-1">
-                                                    <TbArrowLeft className="rotate-180" size={20} />
-                                                </div>
-                                            </div>
-
-                                            <div className="mt-4 pt-3 border-t border-slate-50 flex justify-between items-center">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Progress</span>
-                                                    <span className="text-sm font-bold text-slate-700">{project.accomplishmentPercentage}%</span>
-                                                </div>
-                                                {/* Mini visual bar/pill could go here */}
-                                                <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className="mt-2 h-1 w-full bg-slate-100 rounded-full overflow-hidden">
                                                     <div
                                                         className="h-full bg-blue-500 rounded-full"
                                                         style={{ width: `${project.accomplishmentPercentage}%` }}
                                                     ></div>
                                                 </div>
                                             </div>
+                                            <div className="text-slate-300 group-hover:text-[#004A99] transition-colors">
+                                                <FiChevronRight size={20} />
+                                            </div>
                                         </div>
-                                    ))
-                                )}
+                                    </div>
+                                ))
+                                }
                             </div>
                         )
                     )}

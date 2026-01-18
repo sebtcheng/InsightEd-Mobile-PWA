@@ -7,25 +7,6 @@ import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
 
-
-const getInitialFields = () => ({
-    // Core Subjects (Major & Teaching)
-    spec_english_major: 0, spec_english_teaching: 0,
-    spec_filipino_major: 0, spec_filipino_teaching: 0,
-    spec_math_major: 0, spec_math_teaching: 0,
-    spec_science_major: 0, spec_science_teaching: 0,
-    spec_ap_major: 0, spec_ap_teaching: 0,
-    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
-    spec_esp_major: 0, spec_esp_teaching: 0,
-    spec_tle_major: 0, spec_tle_teaching: 0,
-
-    // Ancillary Services
-    spec_guidance: 0,
-    spec_librarian: 0,
-    spec_ict_coord: 0,
-    spec_drrm_coord: 0
-});
-
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
     const location = useLocation();
