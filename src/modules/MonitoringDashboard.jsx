@@ -129,11 +129,11 @@ const MonitoringDashboard = () => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
                                         <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">{stats?.total_schools || 0}</span>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Total Schools</p>
+                                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">Total Schools</p>
                                     </div>
                                     <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl">
                                         <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">Infra Projects</p>
+                                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">Infra Projects</p>
                                     </div>
                                 </div>
                             </div>
@@ -142,12 +142,12 @@ const MonitoringDashboard = () => {
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Quick Stats</h2>
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500">Avg. Project Progress</span>
-                                        <span className="font-bold text-[#004A99]">{engStats?.avg_progress || 0}%</span>
+                                        <span className="text-slate-500 dark:text-slate-400">Avg. Project Progress</span>
+                                        <span className="font-bold text-[#004A99] dark:text-blue-400">{engStats?.avg_progress || 0}%</span>
                                     </div>
                                     <div className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-500">Profile Completion</span>
-                                        <span className="font-bold text-emerald-600">
+                                        <span className="text-slate-500 dark:text-slate-400">Profile Completion</span>
+                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
                                             {stats?.total_schools ? Math.round(((stats?.profile || 0) / stats.total_schools) * 100) : 0}%
                                         </span>
                                     </div>
@@ -205,7 +205,7 @@ const MonitoringDashboard = () => {
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Completed</p>
                                     </div>
                                     <div className="text-center col-span-2 pt-4 border-t border-slate-50 dark:border-slate-700">
-                                        <p className="text-4xl font-black text-amber-500">{engStats?.avg_progress || 0}%</p>
+                                        <p className="text-4xl font-black text-amber-500 dark:text-amber-400">{engStats?.avg_progress || 0}%</p>
                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avg. Physical Accomplishment</p>
                                     </div>
                                 </div>

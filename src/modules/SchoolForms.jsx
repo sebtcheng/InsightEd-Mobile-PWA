@@ -62,7 +62,7 @@ const SchoolForms = () => {
             category: 'Learners',
             name: "Shifting & Modality",
             description: "Schedules & delivery modes.",
-            route: "/shifting-modality",
+            route: "/shifting-modalities",
             icon: TbReportAnalytics
         },
         // CATEGORY: FACULTY

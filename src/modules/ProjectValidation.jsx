@@ -106,7 +106,6 @@ const ProjectValidation = () => {
                 body: JSON.stringify({
                     projectId: selectedProject.id,
                     status,
-                    status,
                     userUid: user.uid,
                     userName: schoolHeadName || user.displayName || 'School Head',
                     remarks: remarks
@@ -411,7 +410,7 @@ const ProjectValidation = () => {
                                             <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center shrink-0 shadow-sm group-hover:bg-[#004A99] group-hover:text-white transition-colors duration-300">
                                                 <TbBuildingSkyscraper size={24} />
                                             </div>
-                                            <div className="flex-1 min-w-0 pr-16">
+                                            <div className="flex-1 min-w-0 pr-6">
                                                 <h3 className="font-bold text-slate-800 leading-tight truncate">{project.projectName}</h3>
                                                 <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                                                     <TbCalendar size={12} />
@@ -436,6 +435,9 @@ const ProjectValidation = () => {
                                                     className="h-full bg-blue-500 rounded-full"
                                                     style={{ width: `${project.accomplishmentPercentage}%` }}
                                                 ></div>
+                                            </div>
+                                            <div className="text-slate-300 group-hover:text-[#004A99] transition-colors">
+                                                <FiChevronRight size={20} />
                                             </div>
                                         </div>
                                     </div>

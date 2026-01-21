@@ -7,25 +7,6 @@ import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
 
-
-const getInitialFields = () => ({
-    // Core Subjects (Major & Teaching)
-    spec_english_major: 0, spec_english_teaching: 0,
-    spec_filipino_major: 0, spec_filipino_teaching: 0,
-    spec_math_major: 0, spec_math_teaching: 0,
-    spec_science_major: 0, spec_science_teaching: 0,
-    spec_ap_major: 0, spec_ap_teaching: 0,
-    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
-    spec_esp_major: 0, spec_esp_teaching: 0,
-    spec_tle_major: 0, spec_tle_teaching: 0,
-
-    // Ancillary Services
-    spec_guidance: 0,
-    spec_librarian: 0,
-    spec_ict_coord: 0,
-    spec_drrm_coord: 0
-});
-
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -44,7 +25,7 @@ const TeacherSpecialization = () => {
     const [formData, setFormData] = useState(getInitialFields());
     const [originalData, setOriginalData] = useState(null);
 
-    const goBack = () => navigate('/school-forms');
+    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -185,7 +166,7 @@ const TeacherSpecialization = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white text-2xl transition">←</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Teacher Specialization</h1>
                         <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Actual Teaching Loads"}</p>

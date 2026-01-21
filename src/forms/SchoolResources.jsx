@@ -28,7 +28,7 @@ const SchoolResources = () => {
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
 
-    const goBack = () => navigate('/school-forms');
+    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
 
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
@@ -284,7 +284,7 @@ const SchoolResources = () => {
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-40">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={() => navigate(-1)} className="text-white text-2xl">←</button>
+                    <button onClick={goBack} className="text-white text-2xl">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
                         <p className="text-blue-100 text-[10px] uppercase font-bold tracking-widest opacity-80">{viewOnly ? "Monitor View (Read-Only)" : "Neon Inventory System"}</p>

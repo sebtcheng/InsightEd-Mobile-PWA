@@ -54,7 +54,7 @@ const SchoolHeadDashboard = () => {
         { name: "Enrollment per Grade Level", route: "/enrolment" },
         { name: "Organized Classes", route: "/organized-classes" },
         { name: "Teaching Personnel", route: "/teaching-personnel" },
-        { name: "Shifting & Modality", route: "/shifting-modality" },
+        { name: "Shifting & Modality", route: "/shifting-modalities" },
         { name: "School Resources", route: "/school-resources" },
         { name: "Teacher Specialization", route: "/teacher-specialization" },
         { name: "Validate Projects", route: "/project-validation" },

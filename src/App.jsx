@@ -86,7 +86,7 @@ const AnimatedRoutes = () => {
         <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
         <Route path="/school-resources" element={<SchoolResources />} />
         <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
-        <Route path="/shifting-modality" element={<ShiftingModalities />} />
+        <Route path="/shifting-modalities" element={<ShiftingModalities />} />
         <Route path="/project-validation" element={<ProjectValidation />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
 

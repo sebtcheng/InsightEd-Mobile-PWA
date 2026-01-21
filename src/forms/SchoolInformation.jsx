@@ -50,7 +50,7 @@ const SchoolInformation = () => {
         "Public School District Supervisor"
     ];
 
-    const goBack = () => navigate('/school-forms');
+    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
 
     // --- 1. CSV LOOKUP LOGIC ---
     // This function matches PSI_CD from Oct2025-GMIS-Filled RAW.csv
@@ -217,7 +217,7 @@ const SchoolInformation = () => {
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">School Head Info</h1>
                         <p className="text-blue-200 text-xs mt-1">

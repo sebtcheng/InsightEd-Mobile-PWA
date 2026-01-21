@@ -277,6 +277,27 @@ const EditProjectModal = ({
     });
   };
 
+  const handleUpdatePercentage = (newVal) => {
+    const percent = Math.min(100, Math.max(0, Number(newVal)));
+    setFormData((prev) => {
+      let newData = { ...prev, accomplishmentPercentage: percent };
+      
+      if (percent === 100) {
+          if (prev.status !== ProjectStatus.Completed)
+            newData.status = ProjectStatus.ForFinalInspection;
+      } else if (percent >= 1 && percent < 100) {
+          if (
+            prev.status === ProjectStatus.Completed ||
+            prev.status === ProjectStatus.ForFinalInspection
+          )
+            newData.status = ProjectStatus.Ongoing;
+      } else if (percent === 0) {
+          newData.status = ProjectStatus.NotYetStarted;
+      }
+      return newData;
+    });
+  };
+
   const isDisabledPercentageInput =
     formData.status === ProjectStatus.NotYetStarted ||
     formData.status === ProjectStatus.UnderProcurement ||
@@ -322,7 +343,13 @@ const EditProjectModal = ({
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Percentage (%)</label>
+              <div className="flex justify-between items-center ml-1">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
+                 <div className="flex gap-1.5">
+                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage||0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
+                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage||0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
+                 </div>
+              </div>
               <input
                 type="number"
                 name="accomplishmentPercentage"

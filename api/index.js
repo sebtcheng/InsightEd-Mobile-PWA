@@ -587,19 +587,18 @@ app.post('/api/save-enrolment', async (req, res) => {
 
 // --- 8. POST: Save New Project (Updated for Images & Transactions) ---
 app.post('/api/save-project', async (req, res) => {
-  const client = await pool.connect(); // Use a client to handle transactions
   const data = req.body;
 
   if (!data.schoolName || !data.projectName || !data.schoolId) {
-    client.release();
     return res.status(400).json({ message: "Missing required fields" });
   }
 
+  let client;
   try {
+    client = await pool.connect();
     await client.query('BEGIN'); // Start Transaction
 
     // 1. Prepare Project Data
-    // We added data.uid (the Firestore ID) as the 16th value ($16)
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
       valueOrNull(data.region), valueOrNull(data.division),
@@ -608,7 +607,7 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
       valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
-      data.uid // <--- This captures the Firestore UID from the frontend
+      data.uid
     ];
 
     const projectQuery = `
@@ -634,34 +633,35 @@ app.post('/api/save-project', async (req, res) => {
         VALUES ($1, $2, $3)
       `;
 
-      // Loop through images and insert them linked to the newProjectId
       for (const imgBase64 of data.images) {
         await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
       }
     }
 
-    await client.query('COMMIT'); // Commit the transaction (save everything)
+    await client.query('COMMIT');
 
-    // 4. Log Activity (Outside transaction is fine, or inside if preferred)
-    // Note: Ensure logActivity uses 'pool' internally or pass 'client' if you want it in the transaction. 
-    // Assuming logActivity works independently:
-    await logActivity(
-      data.uid,
-      data.modifiedBy,
-      'Engineer',
-      'CREATE',
-      `Project: ${newProject.project_name}`,
-      `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
-    );
+    // 4. Log Activity
+    try {
+      await logActivity(
+        data.uid,
+        data.modifiedBy,
+        'Engineer',
+        'CREATE',
+        `Project: ${newProject.project_name}`,
+        `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
+      );
+    } catch (logErr) {
+      console.error("⚠️ Activity Log Error (Non-blocking):", logErr.message);
+    }
 
     res.status(200).json({ message: "Project and images saved!", project: newProject });
 
   } catch (err) {
-    await client.query('ROLLBACK'); // Revert changes if anything fails
+    if (client) await client.query('ROLLBACK');
     console.error("❌ SQL ERROR:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   } finally {
-    client.release(); // Release the client back to the pool
+    if (client) client.release();
   }
 });
 // --- 9. PUT: Update Project ---

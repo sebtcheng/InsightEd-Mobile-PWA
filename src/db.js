@@ -8,8 +8,8 @@ const ENG_STORE = 'engineer_pending'; // New store for Engineer
 
 // 1. Initialize the Database
 export async function initDB() {
-  // Version bumped to 2 to trigger the upgrade and create the new store
-  return openDB(DB_NAME, 2, {
+  // Version bumped to 4 to resolve conflict and trigger upgrade
+  return openDB(DB_NAME, 4, {
     upgrade(db) {
       // Ensure School Head store exists
       if (!db.objectStoreNames.contains(SH_STORE)) {
@@ -32,7 +32,7 @@ export async function addToOutbox(requestData) {
   return db.add(SH_STORE, {
     ...requestData,
     timestamp: new Date().toISOString(),
-    status: 'pending' 
+    status: 'pending'
   });
 }
 
@@ -59,7 +59,7 @@ export async function addEngineerToOutbox(requestData) {
   return db.add(ENG_STORE, {
     ...requestData,
     timestamp: new Date().toISOString(),
-    status: 'pending' 
+    status: 'pending'
   });
 }
 

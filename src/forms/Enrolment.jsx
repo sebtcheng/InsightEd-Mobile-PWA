@@ -47,7 +47,7 @@ const Enrolment = () => {
     });
 
     const [originalData, setOriginalData] = useState(null);
-    const goBack = () => navigate('/school-forms');
+    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
 
     // --- CALCULATIONS ---
     const getG11Total = () => {
@@ -400,7 +400,7 @@ const Enrolment = () => {
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                 {viewOnly ? (
                     <button
-                        onClick={() => navigate(-1)}
+                        onClick={() => navigate('/jurisdiction-schools')}
                         className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
                     >
                         ← Back to Schools List
