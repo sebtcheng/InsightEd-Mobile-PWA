@@ -294,6 +294,7 @@ app.post('/api/save-school', async (req, res) => {
     // 2. DETECT CHANGES
     let changes = [];
     let actionType = "Profile Created"; // Default for new rows
+    let existingIern = oldData ? oldData.iern : null;
 
     if (oldData) {
       actionType = "Profile Updated";
@@ -342,18 +343,38 @@ app.post('/api/save-school', async (req, res) => {
       changes: changes // <--- Now includes the specific changes!
     };
 
-    // 4. PERFORM INSERT OR UPDATE
+    // 4. GENERATE IERN IF MISSING
+    let finalIern = existingIern;
+    if (!finalIern) {
+      const year = new Date().getFullYear();
+      const iernResult = await client.query(
+        "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
+        [`${year}-%`]
+      );
+
+      let nextSeq = 1;
+      if (iernResult.rows.length > 0) {
+        const lastIern = iernResult.rows[0].iern;
+        const lastSeq = parseInt(lastIern.split('-')[1]);
+        nextSeq = lastSeq + 1;
+      }
+      finalIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
+    }
+
+    // 5. PERFORM INSERT OR UPDATE
     const query = `
       INSERT INTO school_profiles (
         school_id, school_name, region, province, division, district, 
         municipality, leg_district, barangay, mother_school_id, 
         latitude, longitude, submitted_by, submitted_at, 
         curricular_offering,
-        history_logs
+        history_logs,
+        iern
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, 
         $14,
-        jsonb_build_array($15::jsonb) 
+        jsonb_build_array($15::jsonb),
+        $16
       )
       ON CONFLICT (school_id) 
       DO UPDATE SET 
@@ -371,7 +392,8 @@ app.post('/api/save-school', async (req, res) => {
         curricular_offering = EXCLUDED.curricular_offering,
         submitted_by = EXCLUDED.submitted_by,
         submitted_at = CURRENT_TIMESTAMP,
-        history_logs = school_profiles.history_logs || $15::jsonb;
+        history_logs = school_profiles.history_logs || $15::jsonb,
+        iern = COALESCE(school_profiles.iern, EXCLUDED.iern);
     `;
 
     const values = [
@@ -380,7 +402,8 @@ app.post('/api/save-school', async (req, res) => {
       data.barangay, data.motherSchoolId, data.latitude, data.longitude,
       data.submittedBy,
       data.curricularOffering, // $14
-      JSON.stringify(newLogEntry) // $15
+      JSON.stringify(newLogEntry), // $15
+      finalIern // $16
     ];
 
     await client.query(query, values);
@@ -401,7 +424,7 @@ app.post('/api/save-school', async (req, res) => {
       console.error("Failed to log activity centrally:", logErr);
     }
 
-    res.status(200).json({ message: "Profile saved successfully!", changes: changes });
+    res.status(200).json({ message: "Profile saved successfully!", changes: changes, iern: finalIern });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1127,7 +1150,7 @@ app.post('/api/save-school-resources', async (req, res) => {
                 res_blackboards_good=$6, res_blackboards_defective=$7,
                 res_desktops_instructional=$8, res_desktops_admin=$9, res_laptops_teachers=$10, res_tablets_learners=$11,
                 res_printers_working=$12, res_projectors_working=$13, res_internet_type=$14,
-                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_faucets=$18, res_water_source=$19,
+                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_toilets_common=$40, res_faucets=$18, res_water_source=$19,
                 res_sci_labs=$20, res_com_labs=$21, res_tvl_workshops=$22,
                 
                 res_ownership_type=$23, res_electricity_source=$24, res_buildable_space=$25,
@@ -1154,7 +1177,9 @@ app.post('/api/save-school-resources', async (req, res) => {
       data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
       data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
       data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-      data.seats_grade_11, data.seats_grade_12
+      data.seats_grade_11, data.seats_grade_12,
+      data.schoolId, // $39 (Wait, counting vars...)
+      data.res_toilets_common // $40
     ]);
     if (result.rowCount === 0) {
       console.warn(`[Resources] ID ${data.schoolId} not found.`);
@@ -1178,7 +1203,46 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- 24. POST: Save Teacher Specialization ---
+// --- 24. GET: Physical Facilities Data ---
+app.get('/api/physical-facilities/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- 25. POST: Save Physical Facilities ---
+app.post('/api/save-physical-facilities', async (req, res) => {
+  const data = req.body;
+  try {
+    const query = `
+            UPDATE school_profiles SET
+                build_classrooms_total=$2, 
+                build_classrooms_new=$3,
+                build_classrooms_good=$4,
+                build_classrooms_repair=$5,
+                build_classrooms_demolition=$6,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE school_id=$1
+        `;
+    await pool.query(query, [
+      data.schoolId,
+      data.build_classrooms_total,
+      data.build_classrooms_new,
+      data.build_classrooms_good,
+      data.build_classrooms_repair,
+      data.build_classrooms_demolition
+    ]);
+    res.json({ message: "Facilities saved!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 26. POST: Save Teacher Specialization ---
 app.post('/api/save-teacher-specialization', async (req, res) => {
   const d = req.body;
   try {

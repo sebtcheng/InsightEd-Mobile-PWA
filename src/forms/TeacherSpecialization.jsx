@@ -7,6 +7,19 @@ import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
 
+// Helper: Define initial state structure
+const getInitialFields = () => ({
+    // Core Subjects (Major & Teaching Load)
+    spec_english_major: 0, spec_english_teaching: 0,
+    spec_filipino_major: 0, spec_filipino_teaching: 0,
+    spec_math_major: 0, spec_math_teaching: 0,
+    spec_science_major: 0, spec_science_teaching: 0,
+    spec_ap_major: 0, spec_ap_teaching: 0,
+    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
+    spec_esp_major: 0, spec_esp_teaching: 0,
+    spec_tle_major: 0, spec_tle_teaching: 0
+});
+
 const TeacherSpecialization = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -141,19 +154,17 @@ const TeacherSpecialization = () => {
     const SubjectRow = ({ label, id }) => {
         const major = formData[`spec_${id}_major`];
         const teaching = formData[`spec_${id}_teaching`];
-        const mismatch = teaching > major;
 
         return (
             <div className="grid grid-cols-5 gap-2 items-center border-b border-gray-100 dark:border-slate-700 py-4 last:border-0">
                 <div className="col-span-3">
                     <span className="font-bold text-gray-700 dark:text-slate-300 text-sm block">{label}</span>
-                    {mismatch && <span className="text-[10px] text-orange-500 font-bold flex items-center gap-1">⚠️ Load exceeds majors</span>}
                 </div>
                 <div className="col-span-1 text-center">
                     <input type="number" min="0" name={`spec_${id}_major`} value={major} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
                 </div>
                 <div className="col-span-1 text-center">
-                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-green-50 dark:bg-green-900/30 text-green-900 dark:text-green-200 font-bold focus:ring-2 focus:ring-green-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
+                    <input type="number" min="0" name={`spec_${id}_teaching`} value={teaching} onChange={handleChange} disabled={isLocked || viewOnly} className="w-full text-center border-gray-200 dark:border-slate-600 rounded-lg py-2 bg-orange-50 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200 font-bold focus:ring-2 focus:ring-orange-500 outline-none disabled:bg-gray-100 dark:disabled:bg-slate-800" />
                 </div>
             </div>
         );
@@ -169,36 +180,20 @@ const TeacherSpecialization = () => {
                     <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">←</button>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Teacher Specialization</h1>
-                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Actual Teaching Loads"}</p>
+                        <p className="text-blue-200 text-xs mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Majors vs. Non-Major Teachers"}</p>
                     </div>
                 </div>
             </div>
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
 
-                {/* 1. ANCILLARY SERVICES */}
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md mb-4 flex items-center gap-2"><span className="text-xl">🛠️</span> Ancillary Services</h2>
-                    <div className="grid grid-cols-2 gap-4">
-                        {[
-                            { l: 'Guidance', k: 'spec_guidance' }, { l: 'Librarian', k: 'spec_librarian' },
-                            { l: 'ICT Coord', k: 'spec_ict_coord' }, { l: 'DRRM Coord', k: 'spec_drrm_coord' }
-                        ].map((item) => (
-                            <div key={item.k} className="bg-gray-50 dark:bg-slate-900/50 p-3 rounded-xl flex justify-between items-center border border-gray-100 dark:border-slate-700">
-                                <span className="text-[10px] font-extrabold text-gray-400 dark:text-slate-500 uppercase tracking-tight">{item.l}</span>
-                                <input type="number" min="0" name={item.k} value={formData[item.k]} onChange={handleChange} disabled={isLocked || viewOnly} className="w-10 text-center bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg font-bold py-1 disabled:bg-gray-100 dark:disabled:bg-slate-900 dark:text-slate-200" />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
                 {/* 2. CORE SUBJECTS TABLE */}
                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 mb-20">
                     <div className="flex justify-between items-end mb-4 border-b pb-2 border-gray-100 dark:border-slate-700">
                         <h2 className="text-gray-800 dark:text-slate-200 font-bold text-md flex items-center gap-2"><span className="text-xl">📚</span> Core Subjects</h2>
                         <div className="flex gap-4 text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500">
-                            <span className="text-blue-600 dark:text-blue-400">Major</span>
-                            <span className="text-green-600 dark:text-green-400">Load</span>
+                            <span className="text-blue-600 dark:text-blue-400">Specialized (Major)</span>
+                            <span className="text-orange-500 dark:text-orange-400">Non-Major (Teaching)</span>
                         </div>
                     </div>
 

@@ -59,7 +59,7 @@ const SchoolInformation = () => {
         if (cleanPsi.length < 5) return;
 
         setIsSearching(true);
-        Papa.parse("/Oct2025-GMIS-Filled RAW.csv", {
+        Papa.parse("/Oct2025-GMIS-Filled_Minified.csv", {
             download: true,
             header: true,
             skipEmptyLines: true,

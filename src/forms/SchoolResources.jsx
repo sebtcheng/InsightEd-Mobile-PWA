@@ -23,6 +23,7 @@ const SchoolResources = () => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
+    const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
@@ -32,23 +33,14 @@ const SchoolResources = () => {
 
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
-        res_armchairs_good: 0,
-        res_armchairs_repair: 0,
-        res_teacher_tables_good: 0,
-        res_teacher_tables_repair: 0,
-        res_blackboards_good: 0,
-        res_blackboards_defective: 0,
-        res_desktops_instructional: 0,
-        res_desktops_admin: 0,
-        res_laptops_teachers: 0,
-        res_tablets_learners: 0,
-        res_printers_working: 0,
-        res_projectors_working: 0,
         res_internet_type: '',
         res_toilets_male: 0,
         res_toilets_female: 0,
+        res_internet_type: '',
+        res_toilets_male: 0,
+        res_toilets_female: 0,
+        res_toilets_common: 0, // [NEW] Common CR
         res_toilets_pwd: 0,
-        res_faucets: 0,
         res_water_source: '',
         res_tvl_workshops: 0,
         res_ownership_type: '',
@@ -295,14 +287,7 @@ const SchoolResources = () => {
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
 
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold mb-4 flex items-center gap-2">💻 ICT Equipment</h2>
-                    <div className="grid gap-3">
-                        <InputField label="Desktop PCs" name="res_desktops_instructional" />
-                        <InputField label="Laptops" name="res_laptops_teachers" />
-                        <InputField label="Printers" name="res_printers_working" />
-                    </div>
-                </div>
+
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🏞️ Site & Utilities</h2>
@@ -333,13 +318,6 @@ const SchoolResources = () => {
                 {/* SEAT ANALYSIS */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🪑 Furniture & Seat Analysis</h2>
-
-                    {/* General Furniture */}
-                    <div className="grid gap-3 mb-6">
-                        <InputField label="Armchairs (Good)" name="res_armchairs_good" />
-                        <InputField label="Armchairs (Repair)" name="res_armchairs_repair" />
-                        <InputField label="Blackboards (Good)" name="res_blackboards_good" />
-                    </div>
 
                     {/* Seat Shortage Table */}
                     <div className="overflow-hidden rounded-xl border border-gray-100">
@@ -384,20 +362,42 @@ const SchoolResources = () => {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🚰 Comfort Rooms</h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-gray-800 font-bold flex items-center gap-2">🚰 Comfort Rooms</h2>
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => !viewOnly && !isLocked && setCrType('Segmented')}
+                                className={`px-3 py-1 text-[10px] font-bold rounded-md transition ${crType === 'Segmented' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}
+                            >
+                                Male/Female
+                            </button>
+                            <button
+                                onClick={() => !viewOnly && !isLocked && setCrType('Shared')}
+                                className={`px-3 py-1 text-[10px] font-bold rounded-md transition ${crType === 'Shared' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}
+                            >
+                                Common/Shared
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="grid gap-3">
-                        <InputField label="Male Toilets" name="res_toilets_male" />
-                        <InputField label="Female Toilets" name="res_toilets_female" />
+                        {crType === 'Segmented' ? (
+                            <>
+                                <InputField label="Male Toilets" name="res_toilets_male" />
+                                <InputField label="Female Toilets" name="res_toilets_female" />
+                            </>
+                        ) : (
+                            <InputField label="Common/Shared Toilets" name="res_toilets_common" />
+                        )}
                         <InputField label="PWD Toilets" name="res_toilets_pwd" />
-                        <InputField label="Faucets" name="res_faucets" />
                     </div>
                 </div>
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
                 {viewOnly ? (
-                    <button 
-                        onClick={() => navigate('/jurisdiction-schools')} 
+                    <button
+                        onClick={() => navigate('/jurisdiction-schools')}
                         className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
                     >
                         Back to Schools List

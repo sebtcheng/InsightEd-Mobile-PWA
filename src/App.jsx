@@ -34,6 +34,7 @@ import TeachingPersonnel from './forms/TeachingPersonnel';
 import ShiftingModalities from './forms/ShiftingModalities';
 import SchoolResources from './forms/SchoolResources';
 import TeacherSpecialization from './forms/TeacherSpecialization';
+import PhysicalFacilities from './forms/PhysicalFacilities';
 
 // Form Imports (Engineer)
 import EngineerSchoolResources from './forms/EngineerSchoolResources';
@@ -85,6 +86,7 @@ const AnimatedRoutes = () => {
         <Route path="/organized-classes" element={<OrganizedClasses />} />
         <Route path="/teaching-personnel" element={<TeachingPersonnel />} />
         <Route path="/school-resources" element={<SchoolResources />} />
+        <Route path="/physical-facilities" element={<PhysicalFacilities />} />
         <Route path="/teacher-specialization" element={<TeacherSpecialization />} />
         <Route path="/shifting-modalities" element={<ShiftingModalities />} />
         <Route path="/project-validation" element={<ProjectValidation />} />

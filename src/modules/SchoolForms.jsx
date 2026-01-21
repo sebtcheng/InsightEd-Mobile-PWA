@@ -89,7 +89,16 @@ const SchoolForms = () => {
             name: "School Resources",
             description: "Equipment & facilities inventory.",
             route: "/school-resources",
+            route: "/school-resources",
             icon: FiBox
+        },
+        {
+            id: 'facilities',
+            category: 'Assets',
+            name: "Physical Facilities",
+            description: "Classroom inventory & status.",
+            route: "/physical-facilities",
+            icon: FiLayers
         },
     ];
 
@@ -147,6 +156,8 @@ const SchoolForms = () => {
                 return ((schoolProfile.spec_math_major > 0) || (schoolProfile.spec_english_major > 0)) ? 'completed' : 'pending';
             case 'resources':
                 return ((schoolProfile.res_armchairs_good > 0) || (schoolProfile.res_toilets_male > 0)) ? 'completed' : 'pending';
+            case 'facilities':
+                return (schoolProfile.build_classrooms_total > 0) ? 'completed' : 'pending';
             case 'infra':
                 const hasShift = schoolProfile.shift_kinder || schoolProfile.shift_g1;
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl;
