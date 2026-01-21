@@ -90,48 +90,43 @@ const NewProjects = () => {
         }
     };
 
-    // --- 2. AUTOFILL LOGIC ---
-    const handleAutoFill = (name, value, currentData) => {
-        let updates = {};
-
-        if (name === 'schoolId') {
-            const foundSchool = schoolData.find(s => s.school_id === value);
-            if (foundSchool) {
-                updates.schoolName = foundSchool.school_name || currentData.schoolName;
-                updates.region = foundSchool.region || currentData.region;
-                updates.division = foundSchool.division || currentData.division;
-            }
+    // --- 2. VALIDATION LOGIC ---
+    const handleValidateSchoolId = () => {
+        // Basic check
+        if (!formData.schoolId) {
+            alert("Please enter a School ID.");
+            return;
         }
-
-        if (name === 'schoolName') {
-            const foundSchool = schoolData.find(s => 
-                s.school_name && s.school_name.toLowerCase() === value.toLowerCase()
-            );
-            if (foundSchool) {
-                updates.schoolId = foundSchool.school_id || currentData.schoolId;
-                updates.region = foundSchool.region || currentData.region;
-                updates.division = foundSchool.division || currentData.division;
-            }
+        
+        const found = schoolData.find(s => String(s.school_id) === String(formData.schoolId));
+        if (found) {
+            setFormData(prev => ({
+                ...prev,
+                schoolName: found.school_name,
+                region: found.region,
+                division: found.division
+            }));
+            alert("✅ School Found: " + found.school_name);
+        } else {
+            alert("❌ School ID not found in database.");
+            setFormData(prev => ({
+                ...prev,
+                schoolName: '',
+                region: '',
+                division: ''
+            }));
         }
-        return updates;
     };
 
-    // --- 3. HANDLE CHANGE WITH STRICT VALIDATION ---
+    // --- 3. HANDLE CHANGE ---
     const handleChange = (e) => {
         let { name, value } = e.target;
+        // Numeric constraint for School ID
         if (name === 'schoolId') {
             value = value.replace(/\D/g, ''); 
             if (value.length > 6) value = value.slice(0, 6);
         }
-
-        setFormData(prev => {
-            let newData = { ...prev, [name]: value };
-            const autoFillUpdates = handleAutoFill(name, value, prev);
-            if (Object.keys(autoFillUpdates).length > 0) {
-                newData = { ...newData, ...autoFillUpdates };
-            }
-            return newData;
-        });
+        setFormData(prev => ({ ...prev, [name]: value }));
     };
 
     // Helper function to convert File objects to Base64 strings
@@ -235,36 +230,53 @@ const NewProjects = () => {
 
                         <SectionHeader title="Project Identification" icon="🏢" />
                         <div className="space-y-4">
+                            {/* 1. PROJECT NAME */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
                                 <input name="projectName" value={formData.projectName} onChange={handleChange} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
                             </div>
-                            
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School Name <span className="text-red-500">*</span></label>
-                                <input 
-                                    list="school-suggestions" 
-                                    name="schoolName" 
-                                    value={formData.schoolName} 
-                                    onChange={handleChange} 
-                                    required 
-                                    placeholder="Type to search..."
-                                    autoComplete="off"
-                                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" 
-                                />
-                                <datalist id="school-suggestions">
-                                    {schoolData.slice(0, 100).map((school, index) => (
-                                        <option key={index} value={school.school_name} />
-                                    ))}
-                                </datalist>
-                            </div>
 
+                            {/* 2. SCHOOL ID + VALIDATE BUTTON */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1"> School ID (6 Digits) <span className="text-red-500">*</span> </label>
-                                <input type="text" inputMode="numeric" name="schoolId" value={formData.schoolId} onChange={handleChange} required maxLength="6" placeholder="e.g. 100001" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 font-mono" />
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <input 
+                                            type="text" 
+                                            inputMode="numeric" 
+                                            name="schoolId" 
+                                            value={formData.schoolId} 
+                                            onChange={handleChange} 
+                                            required 
+                                            maxLength="6" 
+                                            placeholder="e.g. 100001" 
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 font-mono" 
+                                        />
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={handleValidateSchoolId}
+                                        disabled={schoolData.length === 0}
+                                        className="px-4 py-2 bg-blue-100 text-blue-700 font-bold text-xs uppercase rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Validate
+                                    </button>
+                                </div>
                                 <div className="text-right text-xs text-slate-400 mt-1">
                                     {formData.schoolId.length}/6 digits
                                 </div>
+                            </div>
+                            
+                            {/* 3. SCHOOL NAME (READ ONLY) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School Name <span className="text-slate-400 font-normal">(Auto-filled)</span></label>
+                                <input 
+                                    name="schoolName" 
+                                    value={formData.schoolName} 
+                                    readOnly
+                                    placeholder="Click Validate to populate..."
+                                    className="w-full p-3 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-sm focus:outline-none" 
+                                />
                             </div>
 
                             <div className="flex gap-3">
@@ -292,7 +304,13 @@ const NewProjects = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Accomplishment Percentage (%)</label>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
+                                    <div className="flex gap-1">
+                                        <button type="button" onClick={() => setFormData(prev => ({...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5)}))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
+                                        <button type="button" onClick={() => setFormData(prev => ({...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10)}))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
+                                    </div>
+                                </div>
                                 <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
                             </div>
                             <div>
