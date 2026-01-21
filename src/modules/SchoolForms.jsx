@@ -10,7 +10,7 @@ import {
     FiCheckCircle, FiAlertCircle, FiFilter, FiChevronRight,
     FiUser, FiUsers, FiLayers, FiBox
 } from "react-icons/fi";
-import { TbSchool, TbReportAnalytics } from "react-icons/tb";
+import { TbSchool, TbReportAnalytics, TbActivity } from "react-icons/tb";
 
 const SchoolForms = () => {
     const navigate = useNavigate();
@@ -58,6 +58,14 @@ const SchoolForms = () => {
             icon: FiLayers
         },
         {
+            id: 'stats',
+            category: 'Learners',
+            name: "Learner Statistics",
+            description: "Special programs & demographics.",
+            route: "/learner-statistics",
+            icon: TbActivity
+        },
+        {
             id: 'infra',
             category: 'Learners',
             name: "Shifting & Modality",
@@ -88,7 +96,6 @@ const SchoolForms = () => {
             category: 'Assets',
             name: "School Resources",
             description: "Equipment & facilities inventory.",
-            route: "/school-resources",
             route: "/school-resources",
             icon: FiBox
         },
@@ -162,6 +169,8 @@ const SchoolForms = () => {
                 const hasShift = schoolProfile.shift_kinder || schoolProfile.shift_g1;
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl;
                 return (hasShift || hasAdm) ? 'completed' : 'pending';
+            case 'stats':
+                return (schoolProfile.stat_sned_es > 0 || schoolProfile.stat_muslim_k > 0 || schoolProfile.stat_ip > 0) ? 'completed' : 'pending';
             default:
                 return 'pending';
         }

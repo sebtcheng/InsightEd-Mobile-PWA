@@ -993,7 +993,8 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
                 school_id, school_name, curricular_offering,
                 teach_kinder, teach_g1, teach_g2, teach_g3, teach_g4, teach_g5, teach_g6,
                 teach_g7, teach_g8, teach_g9, teach_g10,
-                teach_g11, teach_g12
+                teach_g11, teach_g12,
+                teach_multi_1_2, teach_multi_3_4, teach_multi_5_6, teach_multi_3plus_flag, teach_multi_3plus_count
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -1012,7 +1013,10 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
         teach_g1: row.teach_g1, teach_g2: row.teach_g2, teach_g3: row.teach_g3,
         teach_g4: row.teach_g4, teach_g5: row.teach_g5, teach_g6: row.teach_g6,
         teach_g7: row.teach_g7, teach_g8: row.teach_g8, teach_g9: row.teach_g9, teach_g10: row.teach_g10,
-        teach_g11: row.teach_g11, teach_g12: row.teach_g12
+        teach_g11: row.teach_g11, teach_g12: row.teach_g12,
+        teach_multi_1_2: row.teach_multi_1_2, teach_multi_3_4: row.teach_multi_3_4, teach_multi_5_6: row.teach_multi_5_6,
+        teach_multi_3plus_flag: row.teach_multi_3plus_flag,
+        teach_multi_3plus_count: row.teach_multi_3plus_count
       }
     });
 
@@ -1040,6 +1044,9 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
                 teach_g8 = $8::INT, teach_g9 = $9::INT, teach_g10 = $10::INT, 
                 teach_g11 = $11::INT, teach_g12 = $12::INT, teach_g5 = $13::INT, 
                 teach_g6 = $14::INT,
+                teach_multi_1_2 = $15::INT, teach_multi_3_4 = $16::INT, teach_multi_5_6 = $17::INT,
+                teach_multi_3plus_flag = $18::BOOLEAN,
+                teach_multi_3plus_count = $19::INT,
                 updated_at = CURRENT_TIMESTAMP
             WHERE TRIM(submitted_by) = TRIM($1)
             RETURNING school_id;
@@ -1051,7 +1058,10 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       d.teach_g3 || 0, d.teach_g4 || 0, d.teach_g7 || 0,
       d.teach_g8 || 0, d.teach_g9 || 0, d.teach_g10 || 0,
       d.teach_g11 || 0, d.teach_g12 || 0, d.teach_g5 || 0,
-      d.teach_g6 || 0
+      d.teach_g6 || 0,
+      d.teach_multi_1_2 || 0, d.teach_multi_3_4 || 0, d.teach_multi_5_6 || 0,
+      d.teach_multi_3plus_flag || false,
+      d.teach_multi_3plus_count || 0
     ];
 
     const result = await pool.query(query, values);
@@ -1496,6 +1506,128 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch (err) {
     console.error("Leaderboard Error:", err);
     res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+// --- 24. GET: Fetch Learner Statistics (Enhanced) ---
+app.get('/api/learner-statistics/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    // Dynamically build the SELECT list to include all K-12 flat columns
+    const categories = ['stat_sned', 'stat_disability', 'stat_als', 'stat_muslim', 'stat_ip', 'stat_displaced', 'stat_repetition', 'stat_overage', 'stat_dropout'];
+    const grades = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+
+    let selectFields = [
+      'school_id', 'curricular_offering', 'learner_stats_grids',
+      'stat_sned_es', 'stat_sned_jhs', 'stat_sned_shs', // legacy/subtotal
+      'stat_disability_es', 'stat_disability_jhs', 'stat_disability_shs',
+      'stat_als_es', 'stat_als_jhs', 'stat_als_shs',
+      // 'stat_muslim' cols are covered by the loop below as they follow standard naming now
+      'stat_ip', 'stat_displaced', 'stat_repetition', 'stat_overage', 'stat_dropout_prev_sy', // grand totals
+      'stat_ip_es', 'stat_ip_jhs', 'stat_ip_shs',
+      'stat_displaced_es', 'stat_displaced_jhs', 'stat_displaced_shs',
+      'stat_repetition_es', 'stat_repetition_jhs', 'stat_repetition_shs',
+      'stat_overage_es', 'stat_overage_jhs', 'stat_overage_shs',
+      'stat_dropout_es', 'stat_dropout_jhs', 'stat_dropout_shs'
+    ];
+
+    // Add all K-12 flat columns to fetch list
+    categories.forEach(cat => {
+      grades.forEach(g => {
+        selectFields.push(`${cat}_${g}`);
+      });
+    });
+
+    const query = `SELECT ${selectFields.join(', ')} FROM school_profiles WHERE submitted_by = $1`;
+
+    const result = await pool.query(query, [uid]);
+
+    if (result.rows.length > 0) {
+      res.json({ exists: true, data: result.rows[0] });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error("Fetch Learner Stats Error:", err);
+    res.status(500).json({ error: "Fetch failed" });
+  }
+});
+
+// --- 25. POST: Save Learner Statistics (Dynamic) ---
+app.post('/api/save-learner-statistics', async (req, res) => {
+  const data = req.body;
+  try {
+    const categories = ['stat_sned', 'stat_disability', 'stat_als', 'stat_muslim', 'stat_ip', 'stat_displaced', 'stat_repetition', 'stat_overage', 'stat_dropout'];
+    const grades = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+
+    // Base fields to always update
+    const fields = [
+      'submitted_at = CURRENT_TIMESTAMP',
+      'learner_stats_grids = $' + 2, // Keep JSONB as backup/source if needed
+
+      // Single Totals/Legacy
+      'stat_sned_es = $' + 3, 'stat_sned_jhs = $' + 4, 'stat_sned_shs = $' + 5,
+      'stat_disability_es = $' + 6, 'stat_disability_jhs = $' + 7, 'stat_disability_shs = $' + 8,
+      'stat_als_es = $' + 9, 'stat_als_jhs = $' + 10, 'stat_als_shs = $' + 11,
+
+      'stat_ip = $' + 12, 'stat_displaced = $' + 13, 'stat_repetition = $' + 14,
+      'stat_overage = $' + 15, 'stat_dropout_prev_sy = $' + 16,
+
+      // New Subtotals
+      'stat_ip_es = $' + 17, 'stat_ip_jhs = $' + 18, 'stat_ip_shs = $' + 19,
+      'stat_displaced_es = $' + 20, 'stat_displaced_jhs = $' + 21, 'stat_displaced_shs = $' + 22,
+      'stat_repetition_es = $' + 23, 'stat_repetition_jhs = $' + 24, 'stat_repetition_shs = $' + 25,
+      'stat_overage_es = $' + 26, 'stat_overage_jhs = $' + 27, 'stat_overage_shs = $' + 28,
+      'stat_dropout_es = $' + 29, 'stat_dropout_jhs = $' + 30, 'stat_dropout_shs = $' + 31
+    ];
+
+    const values = [
+      data.schoolId, // $1 (WHERE clause)
+      data.learner_stats_grids || {}, // $2
+
+      parseIntOrNull(data.stat_sned_es), parseIntOrNull(data.stat_sned_jhs), parseIntOrNull(data.stat_sned_shs),
+      parseIntOrNull(data.stat_disability_es), parseIntOrNull(data.stat_disability_jhs), parseIntOrNull(data.stat_disability_shs),
+      parseIntOrNull(data.stat_als_es), parseIntOrNull(data.stat_als_jhs), parseIntOrNull(data.stat_als_shs),
+
+      parseIntOrNull(data.stat_ip), parseIntOrNull(data.stat_displaced), parseIntOrNull(data.stat_repetition),
+      parseIntOrNull(data.stat_overage), parseIntOrNull(data.stat_dropout_prev_sy),
+
+      parseIntOrNull(data.stat_ip_es), parseIntOrNull(data.stat_ip_jhs), parseIntOrNull(data.stat_ip_shs),
+      parseIntOrNull(data.stat_displaced_es), parseIntOrNull(data.stat_displaced_jhs), parseIntOrNull(data.stat_displaced_shs),
+      parseIntOrNull(data.stat_repetition_es), parseIntOrNull(data.stat_repetition_jhs), parseIntOrNull(data.stat_repetition_shs),
+      parseIntOrNull(data.stat_overage_es), parseIntOrNull(data.stat_overage_jhs), parseIntOrNull(data.stat_overage_shs),
+      parseIntOrNull(data.stat_dropout_es), parseIntOrNull(data.stat_dropout_jhs), parseIntOrNull(data.stat_dropout_shs)
+    ];
+
+    // Dynamically add the ~100 flat K-12 columns to fields and values
+    let paramIndex = 32; // Next available index
+    categories.forEach(cat => {
+      grades.forEach(g => {
+        fields.push(`${cat}_${g} = $${paramIndex}`);
+        values.push(parseIntOrNull(data[`${cat}_${g}`]));
+        paramIndex++;
+      });
+    });
+
+    const query = `UPDATE school_profiles SET ${fields.join(', ')} WHERE school_id = $1`;
+
+    await pool.query(query, values);
+
+    // Centrally log activity
+    await logActivity(
+      data.uid,
+      data.userName,
+      data.role,
+      'UPDATE',
+      'Learner Statistics',
+      `Updated learner statistics for school ${data.schoolId}`
+    );
+
+    res.json({ success: true, message: "Learner statistics saved successfully!" });
+
+  } catch (err) {
+    console.error("Save Learner Stats Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
