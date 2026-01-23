@@ -9,6 +9,9 @@ dotenv.config();
 // Destructure Pool from pg
 const { Pool } = pg;
 
+// --- STATE ---
+let isDbConnected = false;
+
 const app = express();
 
 // --- MIDDLEWARE ---
@@ -31,9 +34,32 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-pool.connect(async (err, client, release) => {
+// Initialize OTP Table
+const initOtpTable = async () => {
+  if (!isDbConnected) {
+    console.log("⚠️ Skipping OTP Table Init (Offline Mode)");
+    return;
+  }
+
+  try {
+    await pool.query(`
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                email VARCHAR(255) PRIMARY KEY,
+                code VARCHAR(10) NOT NULL,
+                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
+            );
+        `);
+    console.log("✅ OTP Table Initialized");
+  } catch (err) {
+    console.error("❌ Failed to init OTP table:", err);
+  }
+};
+
+pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
+    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
+    isDbConnected = false;
   } else {
     console.log('✅ Connected to Neon Database successfully!');
 
@@ -142,21 +168,7 @@ app.post('/api/log-activity', async (req, res) => {
 // ==================================================================
 
 // Initialize OTP Table
-const initOtpTable = async () => {
-  try {
-    await pool.query(`
-            CREATE TABLE IF NOT EXISTS verification_codes (
-                email VARCHAR(255) PRIMARY KEY,
-                code VARCHAR(10) NOT NULL,
-                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
-            );
-        `);
-    console.log("✅ OTP Table Initialized");
-  } catch (err) {
-    console.error("❌ Failed to init OTP table:", err);
-  }
-};
-initOtpTable();
+
 
 // --- POST: Send OTP (Real Email via Nodemailer) ---
 app.post('/api/send-otp', async (req, res) => {
@@ -165,6 +177,15 @@ app.post('/api/send-otp', async (req, res) => {
 
   // Generate 6-digit code
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  // --- MOCK MODE HANDLING ---
+  if (!isDbConnected) {
+    console.log(`⚠️  [OFFLINE] Mock OTP for ${email}: ${otp}`);
+    return res.json({
+      success: true,
+      message: `OFFLINE MODE: Code is ${otp} (Check Console)`
+    });
+  }
 
   try {
     // 1. SAVE TO DATABASE (Upsert)
@@ -228,6 +249,15 @@ app.post('/api/send-otp', async (req, res) => {
 // --- POST: Verify OTP ---
 app.post('/api/verify-otp', async (req, res) => {
   const { email, code } = req.body;
+
+  // --- MOCK MODE HANDLING ---
+  if (!isDbConnected) {
+    if (code && code.length === 6) {
+      console.log(`⚠️  [OFFLINE] Verifying Mock OTP: ${code} for ${email} -> SUCCESS`);
+      return res.json({ success: true, message: "Offline Login Successful!" });
+    }
+    return res.status(400).json({ success: false, message: "Invalid Mock Code" });
+  }
 
   try {
     // 1. Check DB for valid code
@@ -316,6 +346,7 @@ app.post('/api/save-school', async (req, res) => {
     // 2. DETECT CHANGES
     let changes = [];
     let actionType = "Profile Created"; // Default for new rows
+    let existingIern = oldData ? oldData.iern : null;
 
     if (oldData) {
       actionType = "Profile Updated";
@@ -364,18 +395,38 @@ app.post('/api/save-school', async (req, res) => {
       changes: changes // <--- Now includes the specific changes!
     };
 
-    // 4. PERFORM INSERT OR UPDATE
+    // 4. GENERATE IERN IF MISSING
+    let finalIern = existingIern;
+    if (!finalIern) {
+      const year = new Date().getFullYear();
+      const iernResult = await client.query(
+        "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
+        [`${year}-%`]
+      );
+
+      let nextSeq = 1;
+      if (iernResult.rows.length > 0) {
+        const lastIern = iernResult.rows[0].iern;
+        const lastSeq = parseInt(lastIern.split('-')[1]);
+        nextSeq = lastSeq + 1;
+      }
+      finalIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
+    }
+
+    // 5. PERFORM INSERT OR UPDATE
     const query = `
       INSERT INTO school_profiles (
         school_id, school_name, region, province, division, district, 
         municipality, leg_district, barangay, mother_school_id, 
         latitude, longitude, submitted_by, submitted_at, 
         curricular_offering,
-        history_logs
+        history_logs,
+        iern
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, 
         $14,
-        jsonb_build_array($15::jsonb) 
+        jsonb_build_array($15::jsonb),
+        $16
       )
       ON CONFLICT (school_id) 
       DO UPDATE SET 
@@ -393,7 +444,8 @@ app.post('/api/save-school', async (req, res) => {
         curricular_offering = EXCLUDED.curricular_offering,
         submitted_by = EXCLUDED.submitted_by,
         submitted_at = CURRENT_TIMESTAMP,
-        history_logs = school_profiles.history_logs || $15::jsonb;
+        history_logs = school_profiles.history_logs || $15::jsonb,
+        iern = COALESCE(school_profiles.iern, EXCLUDED.iern);
     `;
 
     const values = [
@@ -402,7 +454,8 @@ app.post('/api/save-school', async (req, res) => {
       data.barangay, data.motherSchoolId, data.latitude, data.longitude,
       data.submittedBy,
       data.curricularOffering, // $14
-      JSON.stringify(newLogEntry) // $15
+      JSON.stringify(newLogEntry), // $15
+      finalIern // $16
     ];
 
     await client.query(query, values);
@@ -423,7 +476,7 @@ app.post('/api/save-school', async (req, res) => {
       console.error("Failed to log activity centrally:", logErr);
     }
 
-    res.status(200).json({ message: "Profile saved successfully!", changes: changes });
+    res.status(200).json({ message: "Profile saved successfully!", changes: changes, iern: finalIern });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -921,7 +974,20 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
                 classes_kinder, classes_grade_1, classes_grade_2, classes_grade_3,
                 classes_grade_4, classes_grade_5, classes_grade_6,
                 classes_grade_7, classes_grade_8, classes_grade_9, classes_grade_10,
-                classes_grade_11, classes_grade_12
+                classes_grade_11, classes_grade_12,
+                
+                cnt_less_g1, cnt_within_g1, cnt_above_g1,
+                cnt_less_g2, cnt_within_g2, cnt_above_g2,
+                cnt_less_g3, cnt_within_g3, cnt_above_g3,
+                cnt_less_g4, cnt_within_g4, cnt_above_g4,
+                cnt_less_g5, cnt_within_g5, cnt_above_g5,
+                cnt_less_g6, cnt_within_g6, cnt_above_g6,
+                cnt_less_g7, cnt_within_g7, cnt_above_g7,
+                cnt_less_g8, cnt_within_g8, cnt_above_g8,
+                cnt_less_g9, cnt_within_g9, cnt_above_g9,
+                cnt_less_g10, cnt_within_g10, cnt_above_g10,
+                cnt_less_g11, cnt_within_g11, cnt_above_g11,
+                cnt_less_g12, cnt_within_g12, cnt_above_g12
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -943,7 +1009,20 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
         grade_5: row.classes_grade_5, grade_6: row.classes_grade_6,
         grade_7: row.classes_grade_7, grade_8: row.classes_grade_8,
         grade_9: row.classes_grade_9, grade_10: row.classes_grade_10,
-        grade_11: row.classes_grade_11, grade_12: row.classes_grade_12
+        grade_11: row.classes_grade_11, grade_12: row.classes_grade_12,
+
+        cnt_less_g1: row.cnt_less_g1, cnt_within_g1: row.cnt_within_g1, cnt_above_g1: row.cnt_above_g1,
+        cnt_less_g2: row.cnt_less_g2, cnt_within_g2: row.cnt_within_g2, cnt_above_g2: row.cnt_above_g2,
+        cnt_less_g3: row.cnt_less_g3, cnt_within_g3: row.cnt_within_g3, cnt_above_g3: row.cnt_above_g3,
+        cnt_less_g4: row.cnt_less_g4, cnt_within_g4: row.cnt_within_g4, cnt_above_g4: row.cnt_above_g4,
+        cnt_less_g5: row.cnt_less_g5, cnt_within_g5: row.cnt_within_g5, cnt_above_g5: row.cnt_above_g5,
+        cnt_less_g6: row.cnt_less_g6, cnt_within_g6: row.cnt_within_g6, cnt_above_g6: row.cnt_above_g6,
+        cnt_less_g7: row.cnt_less_g7, cnt_within_g7: row.cnt_within_g7, cnt_above_g7: row.cnt_above_g7,
+        cnt_less_g8: row.cnt_less_g8, cnt_within_g8: row.cnt_within_g8, cnt_above_g8: row.cnt_above_g8,
+        cnt_less_g9: row.cnt_less_g9, cnt_within_g9: row.cnt_within_g9, cnt_above_g9: row.cnt_above_g9,
+        cnt_less_g10: row.cnt_less_g10, cnt_within_g10: row.cnt_within_g10, cnt_above_g10: row.cnt_above_g10,
+        cnt_less_g11: row.cnt_less_g11, cnt_within_g11: row.cnt_within_g11, cnt_above_g11: row.cnt_above_g11,
+        cnt_less_g12: row.cnt_less_g12, cnt_within_g12: row.cnt_within_g12, cnt_above_g12: row.cnt_above_g12
       }
     });
 
@@ -954,17 +1033,32 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
 });
 
 // --- 16. POST: Save Organized Classes (UPDATED) ---
+// --- 16. POST: Save Organized Classes (UPDATED with Class Size Standards) ---
 app.post('/api/save-organized-classes', async (req, res) => {
   const data = req.body;
   try {
-    // We now UPDATE school_profiles instead of inserting into a new table
     const query = `
             UPDATE school_profiles SET
                 classes_kinder = $2, 
                 classes_grade_1 = $3, classes_grade_2 = $4, classes_grade_3 = $5,
                 classes_grade_4 = $6, classes_grade_5 = $7, classes_grade_6 = $8,
                 classes_grade_7 = $9, classes_grade_8 = $10, classes_grade_9 = $11,
-                classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14
+                classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14,
+                
+                cnt_less_g1 = $15, cnt_within_g1 = $16, cnt_above_g1 = $17,
+                cnt_less_g2 = $18, cnt_within_g2 = $19, cnt_above_g2 = $20,
+                cnt_less_g3 = $21, cnt_within_g3 = $22, cnt_above_g3 = $23,
+                cnt_less_g4 = $24, cnt_within_g4 = $25, cnt_above_g4 = $26,
+                cnt_less_g5 = $27, cnt_within_g5 = $28, cnt_above_g5 = $29,
+                cnt_less_g6 = $30, cnt_within_g6 = $31, cnt_above_g6 = $32,
+                cnt_less_g7 = $33, cnt_within_g7 = $34, cnt_above_g7 = $35,
+                cnt_less_g8 = $36, cnt_within_g8 = $37, cnt_above_g8 = $38,
+                cnt_less_g9 = $39, cnt_within_g9 = $40, cnt_above_g9 = $41,
+                cnt_less_g10 = $42, cnt_within_g10 = $43, cnt_above_g10 = $44,
+                cnt_less_g11 = $45, cnt_within_g11 = $46, cnt_above_g11 = $47,
+                cnt_less_g12 = $48, cnt_within_g12 = $49, cnt_above_g12 = $50,
+
+                updated_at = CURRENT_TIMESTAMP
             WHERE school_id = $1
         `;
 
@@ -973,7 +1067,20 @@ app.post('/api/save-organized-classes', async (req, res) => {
       data.kinder,
       data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
       data.g7, data.g8, data.g9, data.g10,
-      data.g11, data.g12
+      data.g11, data.g12,
+
+      data.cntLessG1 || 0, data.cntWithinG1 || 0, data.cntAboveG1 || 0,
+      data.cntLessG2 || 0, data.cntWithinG2 || 0, data.cntAboveG2 || 0,
+      data.cntLessG3 || 0, data.cntWithinG3 || 0, data.cntAboveG3 || 0,
+      data.cntLessG4 || 0, data.cntWithinG4 || 0, data.cntAboveG4 || 0,
+      data.cntLessG5 || 0, data.cntWithinG5 || 0, data.cntAboveG5 || 0,
+      data.cntLessG6 || 0, data.cntWithinG6 || 0, data.cntAboveG6 || 0,
+      data.cntLessG7 || 0, data.cntWithinG7 || 0, data.cntAboveG7 || 0,
+      data.cntLessG8 || 0, data.cntWithinG8 || 0, data.cntAboveG8 || 0,
+      data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
+      data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
+      data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
+      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0
     ]);
 
     res.json({ message: "Classes saved successfully!" });
@@ -992,7 +1099,8 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
                 school_id, school_name, curricular_offering,
                 teach_kinder, teach_g1, teach_g2, teach_g3, teach_g4, teach_g5, teach_g6,
                 teach_g7, teach_g8, teach_g9, teach_g10,
-                teach_g11, teach_g12
+                teach_g11, teach_g12,
+                teach_multi_1_2, teach_multi_3_4, teach_multi_5_6, teach_multi_3plus_flag, teach_multi_3plus_count
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -1011,7 +1119,10 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
         teach_g1: row.teach_g1, teach_g2: row.teach_g2, teach_g3: row.teach_g3,
         teach_g4: row.teach_g4, teach_g5: row.teach_g5, teach_g6: row.teach_g6,
         teach_g7: row.teach_g7, teach_g8: row.teach_g8, teach_g9: row.teach_g9, teach_g10: row.teach_g10,
-        teach_g11: row.teach_g11, teach_g12: row.teach_g12
+        teach_g11: row.teach_g11, teach_g12: row.teach_g12,
+        teach_multi_1_2: row.teach_multi_1_2, teach_multi_3_4: row.teach_multi_3_4, teach_multi_5_6: row.teach_multi_5_6,
+        teach_multi_3plus_flag: row.teach_multi_3plus_flag,
+        teach_multi_3plus_count: row.teach_multi_3plus_count
       }
     });
 
@@ -1039,6 +1150,9 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
                 teach_g8 = $8::INT, teach_g9 = $9::INT, teach_g10 = $10::INT, 
                 teach_g11 = $11::INT, teach_g12 = $12::INT, teach_g5 = $13::INT, 
                 teach_g6 = $14::INT,
+                teach_multi_1_2 = $15::INT, teach_multi_3_4 = $16::INT, teach_multi_5_6 = $17::INT,
+                teach_multi_3plus_flag = $18::BOOLEAN,
+                teach_multi_3plus_count = $19::INT,
                 updated_at = CURRENT_TIMESTAMP
             WHERE TRIM(submitted_by) = TRIM($1)
             RETURNING school_id;
@@ -1050,7 +1164,10 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       d.teach_g3 || 0, d.teach_g4 || 0, d.teach_g7 || 0,
       d.teach_g8 || 0, d.teach_g9 || 0, d.teach_g10 || 0,
       d.teach_g11 || 0, d.teach_g12 || 0, d.teach_g5 || 0,
-      d.teach_g6 || 0
+      d.teach_g6 || 0,
+      d.teach_multi_1_2 || 0, d.teach_multi_3_4 || 0, d.teach_multi_5_6 || 0,
+      d.teach_multi_3plus_flag || false,
+      d.teach_multi_3plus_count || 0
     ];
 
     const result = await pool.query(query, values);
@@ -1149,7 +1266,7 @@ app.post('/api/save-school-resources', async (req, res) => {
                 res_blackboards_good=$6, res_blackboards_defective=$7,
                 res_desktops_instructional=$8, res_desktops_admin=$9, res_laptops_teachers=$10, res_tablets_learners=$11,
                 res_printers_working=$12, res_projectors_working=$13, res_internet_type=$14,
-                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_faucets=$18, res_water_source=$19,
+                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_toilets_common=$40, res_faucets=$18, res_water_source=$19,
                 res_sci_labs=$20, res_com_labs=$21, res_tvl_workshops=$22,
                 
                 res_ownership_type=$23, res_electricity_source=$24, res_buildable_space=$25,
@@ -1176,7 +1293,9 @@ app.post('/api/save-school-resources', async (req, res) => {
       data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
       data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
       data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-      data.seats_grade_11, data.seats_grade_12
+      data.seats_grade_11, data.seats_grade_12,
+      data.schoolId, // $39 (Wait, counting vars...)
+      data.res_toilets_common // $40
     ]);
     if (result.rowCount === 0) {
       console.warn(`[Resources] ID ${data.schoolId} not found.`);
@@ -1200,7 +1319,46 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- 24. POST: Save Teacher Specialization ---
+// --- 24. GET: Physical Facilities Data ---
+app.get('/api/physical-facilities/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, data: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- 25. POST: Save Physical Facilities ---
+app.post('/api/save-physical-facilities', async (req, res) => {
+  const data = req.body;
+  try {
+    const query = `
+            UPDATE school_profiles SET
+                build_classrooms_total=$2, 
+                build_classrooms_new=$3,
+                build_classrooms_good=$4,
+                build_classrooms_repair=$5,
+                build_classrooms_demolition=$6,
+                updated_at=CURRENT_TIMESTAMP
+            WHERE school_id=$1
+        `;
+    await pool.query(query, [
+      data.schoolId,
+      data.build_classrooms_total,
+      data.build_classrooms_new,
+      data.build_classrooms_good,
+      data.build_classrooms_repair,
+      data.build_classrooms_demolition
+    ]);
+    res.json({ message: "Facilities saved!" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 26. POST: Save Teacher Specialization ---
 app.post('/api/save-teacher-specialization', async (req, res) => {
   const d = req.body;
   try {
@@ -1560,6 +1718,125 @@ app.put('/api/notifications/:id/read', async (req, res) => {
   } catch (err) {
     console.error("Mark Read Error:", err);
     res.status(500).json({ error: "Failed to update notification" });
+// --- 24. GET: Fetch Learner Statistics (Enhanced) ---
+app.get('/api/learner-statistics/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    // Dynamically build the SELECT list to include all K-12 flat columns
+    const categories = ['stat_sned', 'stat_disability', 'stat_als', 'stat_muslim', 'stat_ip', 'stat_displaced', 'stat_repetition', 'stat_overage', 'stat_dropout'];
+    const grades = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+
+    let selectFields = [
+      'school_id', 'curricular_offering', 'learner_stats_grids',
+      'stat_sned_es', 'stat_sned_jhs', 'stat_sned_shs', // legacy/subtotal
+      'stat_disability_es', 'stat_disability_jhs', 'stat_disability_shs',
+      'stat_als_es', 'stat_als_jhs', 'stat_als_shs',
+      // 'stat_muslim' cols are covered by the loop below as they follow standard naming now
+      'stat_ip', 'stat_displaced', 'stat_repetition', 'stat_overage', 'stat_dropout_prev_sy', // grand totals
+      'stat_ip_es', 'stat_ip_jhs', 'stat_ip_shs',
+      'stat_displaced_es', 'stat_displaced_jhs', 'stat_displaced_shs',
+      'stat_repetition_es', 'stat_repetition_jhs', 'stat_repetition_shs',
+      'stat_overage_es', 'stat_overage_jhs', 'stat_overage_shs',
+      'stat_dropout_es', 'stat_dropout_jhs', 'stat_dropout_shs'
+    ];
+
+    // Add all K-12 flat columns to fetch list
+    categories.forEach(cat => {
+      grades.forEach(g => {
+        selectFields.push(`${cat}_${g}`);
+      });
+    });
+
+    const query = `SELECT ${selectFields.join(', ')} FROM school_profiles WHERE submitted_by = $1`;
+
+    const result = await pool.query(query, [uid]);
+
+    if (result.rows.length > 0) {
+      res.json({ exists: true, data: result.rows[0] });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error("Fetch Learner Stats Error:", err);
+    res.status(500).json({ error: "Fetch failed" });
+  }
+});
+
+// --- 25. POST: Save Learner Statistics (Dynamic) ---
+app.post('/api/save-learner-statistics', async (req, res) => {
+  const data = req.body;
+  try {
+    const categories = ['stat_sned', 'stat_disability', 'stat_als', 'stat_muslim', 'stat_ip', 'stat_displaced', 'stat_repetition', 'stat_overage', 'stat_dropout'];
+    const grades = ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
+
+    // Base fields to always update
+    const fields = [
+      'submitted_at = CURRENT_TIMESTAMP',
+      'learner_stats_grids = $' + 2, // Keep JSONB as backup/source if needed
+
+      // Single Totals/Legacy
+      'stat_sned_es = $' + 3, 'stat_sned_jhs = $' + 4, 'stat_sned_shs = $' + 5,
+      'stat_disability_es = $' + 6, 'stat_disability_jhs = $' + 7, 'stat_disability_shs = $' + 8,
+      'stat_als_es = $' + 9, 'stat_als_jhs = $' + 10, 'stat_als_shs = $' + 11,
+
+      'stat_ip = $' + 12, 'stat_displaced = $' + 13, 'stat_repetition = $' + 14,
+      'stat_overage = $' + 15, 'stat_dropout_prev_sy = $' + 16,
+
+      // New Subtotals
+      'stat_ip_es = $' + 17, 'stat_ip_jhs = $' + 18, 'stat_ip_shs = $' + 19,
+      'stat_displaced_es = $' + 20, 'stat_displaced_jhs = $' + 21, 'stat_displaced_shs = $' + 22,
+      'stat_repetition_es = $' + 23, 'stat_repetition_jhs = $' + 24, 'stat_repetition_shs = $' + 25,
+      'stat_overage_es = $' + 26, 'stat_overage_jhs = $' + 27, 'stat_overage_shs = $' + 28,
+      'stat_dropout_es = $' + 29, 'stat_dropout_jhs = $' + 30, 'stat_dropout_shs = $' + 31
+    ];
+
+    const values = [
+      data.schoolId, // $1 (WHERE clause)
+      data.learner_stats_grids || {}, // $2
+
+      parseIntOrNull(data.stat_sned_es), parseIntOrNull(data.stat_sned_jhs), parseIntOrNull(data.stat_sned_shs),
+      parseIntOrNull(data.stat_disability_es), parseIntOrNull(data.stat_disability_jhs), parseIntOrNull(data.stat_disability_shs),
+      parseIntOrNull(data.stat_als_es), parseIntOrNull(data.stat_als_jhs), parseIntOrNull(data.stat_als_shs),
+
+      parseIntOrNull(data.stat_ip), parseIntOrNull(data.stat_displaced), parseIntOrNull(data.stat_repetition),
+      parseIntOrNull(data.stat_overage), parseIntOrNull(data.stat_dropout_prev_sy),
+
+      parseIntOrNull(data.stat_ip_es), parseIntOrNull(data.stat_ip_jhs), parseIntOrNull(data.stat_ip_shs),
+      parseIntOrNull(data.stat_displaced_es), parseIntOrNull(data.stat_displaced_jhs), parseIntOrNull(data.stat_displaced_shs),
+      parseIntOrNull(data.stat_repetition_es), parseIntOrNull(data.stat_repetition_jhs), parseIntOrNull(data.stat_repetition_shs),
+      parseIntOrNull(data.stat_overage_es), parseIntOrNull(data.stat_overage_jhs), parseIntOrNull(data.stat_overage_shs),
+      parseIntOrNull(data.stat_dropout_es), parseIntOrNull(data.stat_dropout_jhs), parseIntOrNull(data.stat_dropout_shs)
+    ];
+
+    // Dynamically add the ~100 flat K-12 columns to fields and values
+    let paramIndex = 32; // Next available index
+    categories.forEach(cat => {
+      grades.forEach(g => {
+        fields.push(`${cat}_${g} = $${paramIndex}`);
+        values.push(parseIntOrNull(data[`${cat}_${g}`]));
+        paramIndex++;
+      });
+    });
+
+    const query = `UPDATE school_profiles SET ${fields.join(', ')} WHERE school_id = $1`;
+
+    await pool.query(query, values);
+
+    // Centrally log activity
+    await logActivity(
+      data.uid,
+      data.userName,
+      data.role,
+      'UPDATE',
+      'Learner Statistics',
+      `Updated learner statistics for school ${data.schoolId}`
+    );
+
+    res.json({ success: true, message: "Learner statistics saved successfully!" });
+
+  } catch (err) {
+    console.error("Save Learner Stats Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 

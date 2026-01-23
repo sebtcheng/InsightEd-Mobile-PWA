@@ -393,7 +393,7 @@ const Login = () => {
 
                     {/* FOOTER NOTE */}
                     <div className="text-center mt-6">
-                        <p className="text-slate-200/80 text-xs font-medium">© 2024 InsightEd. Secure & Encrypted.</p>
+                        <p className="text-slate-200/80 text-xs font-medium">© 2026 InsightEd. Secure & Encrypted.</p>
                     </div>
                 </div>
 

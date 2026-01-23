@@ -6,6 +6,8 @@ import { onAuthStateChanged } from "firebase/auth";
 // LoadingScreen import removed 
 import { addToOutbox } from '../db';
 import Papa from 'papaparse'; //
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
 
 const SchoolInformation = () => {
     const navigate = useNavigate();
@@ -28,6 +30,8 @@ const SchoolInformation = () => {
     const [isChecked, setIsChecked] = useState(false);
     const [editAgreement, setEditAgreement] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const [formData, setFormData] = useState({
         lastName: '', firstName: '', middleName: '',
@@ -59,7 +63,7 @@ const SchoolInformation = () => {
         if (cleanPsi.length < 5) return;
 
         setIsSearching(true);
-        Papa.parse("/Oct2025-GMIS-Filled RAW.csv", {
+        Papa.parse("/Oct2025-GMIS-Filled_Minified.csv", {
             download: true,
             header: true,
             skipEmptyLines: true,
@@ -170,7 +174,7 @@ const SchoolInformation = () => {
                     url: '/api/save-school-head',
                     payload: payload
                 });
-                alert("Data saved to Outbox! Sync when online.");
+                setShowOfflineModal(true);
                 setIsLocked(true);
             } finally {
                 setIsSaving(false);
@@ -186,7 +190,7 @@ const SchoolInformation = () => {
             });
 
             if (response.ok) {
-                alert('School Head Information saved successfully!');
+                setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
@@ -194,7 +198,14 @@ const SchoolInformation = () => {
                 alert('Error: ' + err.error);
             }
         } catch (error) {
-            alert("Network Error. Please try again.");
+            await addToOutbox({
+                type: 'SCHOOL_HEAD_INFO',
+                label: 'School Head Info',
+                url: '/api/save-school-head',
+                payload: payload
+            });
+            setShowOfflineModal(true);
+            setIsLocked(true);
         } finally {
             setIsSaving(false);
         }
@@ -356,6 +367,9 @@ const SchoolInformation = () => {
                     </div>
                 </div>
             )}
+
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="School Head Information saved successfully!" />
         </div>
     );
 };

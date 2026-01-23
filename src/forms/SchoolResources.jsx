@@ -6,6 +6,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
 import { addToOutbox } from '../db';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
 
 
 const SchoolResources = () => {
@@ -22,7 +24,10 @@ const SchoolResources = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
+    const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
@@ -32,28 +37,30 @@ const SchoolResources = () => {
 
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
-        res_armchairs_good: 0,
-        res_armchairs_repair: 0,
-        res_teacher_tables_good: 0,
-        res_teacher_tables_repair: 0,
-        res_blackboards_good: 0,
-        res_blackboards_defective: 0,
-        res_desktops_instructional: 0,
-        res_desktops_admin: 0,
-        res_laptops_teachers: 0,
-        res_tablets_learners: 0,
-        res_printers_working: 0,
-        res_projectors_working: 0,
         res_internet_type: '',
         res_toilets_male: 0,
         res_toilets_female: 0,
+        res_toilets_common: 0, // [NEW] Common CR
         res_toilets_pwd: 0,
-        res_faucets: 0,
         res_water_source: '',
         res_tvl_workshops: 0,
         res_ownership_type: '',
         res_electricity_source: '',
         res_buildable_space: '',
+        sha_category: '', // [NEW] SHA Category
+
+        // LABS
+        res_sci_labs: 0, res_com_labs: 0,
+
+        // FUNCTIONAL / NON-FUNCTIONAL
+        res_ecart_func: 0, res_ecart_nonfunc: 0,
+        res_laptop_func: 0, res_laptop_nonfunc: 0,
+        res_tv_func: 0, res_tv_nonfunc: 0,
+        res_printer_func: 0, res_printer_nonfunc: 0,
+        res_desk_func: 0, res_desk_nonfunc: 0,
+        res_armchair_func: 0, res_armchair_nonfunc: 0,
+        res_toilet_func: 0, res_toilet_nonfunc: 0,
+        res_handwash_func: 0, res_handwash_nonfunc: 0,
 
         // SEATS
         seats_kinder: 0, seats_grade_1: 0, seats_grade_2: 0, seats_grade_3: 0,
@@ -182,7 +189,7 @@ const SchoolResources = () => {
             });
 
             if (res.ok) {
-                alert('Success: Database updated!');
+                setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
@@ -202,7 +209,7 @@ const SchoolResources = () => {
             url: '/api/save-school-resources',
             payload: payload
         });
-        alert("Saved to Outbox (Offline Mode)");
+        setShowOfflineModal(true);
         setOriginalData({ ...formData });
         setIsLocked(true);
         setIsSaving(false);
@@ -273,6 +280,48 @@ const SchoolResources = () => {
         );
     };
 
+    const ResourceAuditRow = ({ label, funcName, nonFuncName }) => (
+        <tr className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition-colors">
+            <td className="py-3 px-4 text-xs font-bold text-gray-600 uppercase tracking-wide">{label}</td>
+            <td className="py-2 px-2">
+                <input
+                    type="number"
+                    name={funcName}
+                    value={formData[funcName] || 0}
+                    onChange={handleChange}
+                    disabled={isLocked || viewOnly}
+                    className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-lg py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                    placeholder="0"
+                />
+            </td>
+            <td className="py-2 px-2">
+                <input
+                    type="number"
+                    name={nonFuncName}
+                    value={formData[nonFuncName] || 0}
+                    onChange={handleChange}
+                    disabled={isLocked || viewOnly}
+                    className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-lg py-2 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                    placeholder="0"
+                />
+            </td>
+        </tr>
+    );
+
+    const LabRow = ({ label, name }) => (
+        <div className="flex justify-between items-center p-3 border-b border-gray-50 last:border-0 bg-slate-50/50 rounded-lg">
+            <label className="text-xs font-bold text-gray-600 uppercase tracking-wide">{label}</label>
+            <input
+                type="number"
+                name={name}
+                value={formData[name] || 0}
+                onChange={handleChange}
+                disabled={isLocked || viewOnly}
+                className="w-20 text-center font-bold text-blue-900 bg-white border border-gray-200 rounded-lg py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent"
+            />
+        </div>
+    );
+
     // VISIBILITY Helpers
     const showElem = () => !curricularOffering || curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
     const showJHS = () => !curricularOffering || curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
@@ -281,7 +330,7 @@ const SchoolResources = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-40">
+        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-40">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="relative z-10 flex items-center gap-4">
                     <button onClick={goBack} className="text-white text-2xl">←</button>
@@ -295,12 +344,40 @@ const SchoolResources = () => {
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
 
 
-                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                    <h2 className="text-gray-800 dark:text-slate-200 font-bold mb-4 flex items-center gap-2">💻 ICT Equipment</h2>
-                    <div className="grid gap-3">
-                        <InputField label="Desktop PCs" name="res_desktops_instructional" />
-                        <InputField label="Laptops" name="res_laptops_teachers" />
-                        <InputField label="Printers" name="res_printers_working" />
+
+
+                {/* EQUIPMENT & INVENTORY */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">📦 Equipment & Inventory</h2>
+
+                    {/* Functional / Non-Functional Table */}
+                    <div className="overflow-hidden rounded-xl border border-gray-100 mb-6">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider w-1/2">Item</th>
+                                    <th className="py-3 px-2 text-center text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Functional</th>
+                                    <th className="py-3 px-2 text-center text-[10px] font-bold text-rose-500 uppercase tracking-wider">Non-Functional</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                <ResourceAuditRow label="E-Cart" funcName="res_ecart_func" nonFuncName="res_ecart_nonfunc" />
+                                <ResourceAuditRow label="Laptop" funcName="res_laptop_func" nonFuncName="res_laptop_nonfunc" />
+                                <ResourceAuditRow label="TV / Smart TV" funcName="res_tv_func" nonFuncName="res_tv_nonfunc" />
+                                <ResourceAuditRow label="Printers" funcName="res_printer_func" nonFuncName="res_printer_nonfunc" />
+                                <ResourceAuditRow label="Desks" funcName="res_desk_func" nonFuncName="res_desk_nonfunc" />
+                                <ResourceAuditRow label="Arm Chairs" funcName="res_armchair_func" nonFuncName="res_armchair_nonfunc" />
+                                <ResourceAuditRow label="Toilets" funcName="res_toilet_func" nonFuncName="res_toilet_nonfunc" />
+                                <ResourceAuditRow label="Hand Washing Stn" funcName="res_handwash_func" nonFuncName="res_handwash_nonfunc" />
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Labs Section */}
+                    <div className="space-y-2">
+                        <LabRow label="Science Laboratory" name="res_sci_labs" />
+                        <LabRow label="Computer Laboratory" name="res_com_labs" />
+                        <LabRow label="TVL/TLE Workshop Lab" name="res_tvl_workshops" />
                     </div>
                 </div>
 
@@ -323,9 +400,18 @@ const SchoolResources = () => {
                             options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
                         />
                         <SelectField
-                            label="Is there Buildable Space?"
                             name="res_buildable_space"
                             options={["Yes", "No"]}
+                        />
+                        <SelectField
+                            label="SHA (Special Hardship Allowance) Category"
+                            name="sha_category"
+                            options={[
+                                "NOT INCLUDED",
+                                "HARDSHIP POST",
+                                "PURE MULTIGRADE SCHOOL",
+                                "HARDSHIP POST AND PURE MULTIGRADE SCHOOL"
+                            ]}
                         />
                     </div>
                 </div>
@@ -333,13 +419,6 @@ const SchoolResources = () => {
                 {/* SEAT ANALYSIS */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                     <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🪑 Furniture & Seat Analysis</h2>
-
-                    {/* General Furniture */}
-                    <div className="grid gap-3 mb-6">
-                        <InputField label="Armchairs (Good)" name="res_armchairs_good" />
-                        <InputField label="Armchairs (Repair)" name="res_armchairs_repair" />
-                        <InputField label="Blackboards (Good)" name="res_blackboards_good" />
-                    </div>
 
                     {/* Seat Shortage Table */}
                     <div className="overflow-hidden rounded-xl border border-gray-100">
@@ -384,20 +463,42 @@ const SchoolResources = () => {
                 </div>
 
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-gray-800 font-bold mb-4 flex items-center gap-2">🚰 Comfort Rooms</h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-gray-800 font-bold flex items-center gap-2">🚰 Comfort Rooms</h2>
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => !viewOnly && !isLocked && setCrType('Segmented')}
+                                className={`px-3 py-1 text-[10px] font-bold rounded-md transition ${crType === 'Segmented' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}
+                            >
+                                Male/Female
+                            </button>
+                            <button
+                                onClick={() => !viewOnly && !isLocked && setCrType('Shared')}
+                                className={`px-3 py-1 text-[10px] font-bold rounded-md transition ${crType === 'Shared' ? 'bg-white shadow text-blue-600' : 'text-gray-400'}`}
+                            >
+                                Common/Shared
+                            </button>
+                        </div>
+                    </div>
+
                     <div className="grid gap-3">
-                        <InputField label="Male Toilets" name="res_toilets_male" />
-                        <InputField label="Female Toilets" name="res_toilets_female" />
+                        {crType === 'Segmented' ? (
+                            <>
+                                <InputField label="Male Toilets" name="res_toilets_male" />
+                                <InputField label="Female Toilets" name="res_toilets_female" />
+                            </>
+                        ) : (
+                            <InputField label="Common/Shared Toilets" name="res_toilets_common" />
+                        )}
                         <InputField label="PWD Toilets" name="res_toilets_pwd" />
-                        <InputField label="Faucets" name="res_faucets" />
                     </div>
                 </div>
             </div>
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-2xl">
                 {viewOnly ? (
-                    <button 
-                        onClick={() => navigate('/jurisdiction-schools')} 
+                    <button
+                        onClick={() => navigate('/jurisdiction-schools')}
                         className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
                     >
                         Back to Schools List
@@ -438,6 +539,9 @@ const SchoolResources = () => {
                     </div>
                 </div>
             )}
+
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="School Resources updated successfully!" />
 
 
         </div>

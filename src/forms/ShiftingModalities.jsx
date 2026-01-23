@@ -3,9 +3,47 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-// LoadingScreen import removed
 import { addToOutbox } from '../db';
-import BottomNav from '../modules/BottomNav';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal';
+
+// --- SUB-COMPONENT (Moved Outside) ---
+const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLocked, viewOnly }) => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-gray-100 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
+        <div className="flex items-center">
+            <span className="font-bold text-gray-700 text-sm">{label}</span>
+        </div>
+        <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Shifting Strategy</label>
+            <select
+                value={shifts[`shift_${lvl}`] || ''}
+                onChange={(e) => onShiftChange(e, lvl)}
+                disabled={isLocked || viewOnly}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
+            >
+                <option value="">Select...</option>
+                <option value="Single Shift">Single Shift</option>
+                <option value="Double Shift">Double Shift</option>
+                <option value="Triple Shift">Triple Shift</option>
+            </select>
+        </div>
+        <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Learning Delivery</label>
+            <select
+                value={modes[`mode_${lvl}`] || ''}
+                onChange={(e) => onModeChange(e, lvl)}
+                disabled={isLocked || viewOnly}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
+            >
+                <option value="">Select...</option>
+                <option value="In-Person Classes">In-Person Classes</option>
+                <option value="Blended Learning (3-2)">Blended (3-2)</option>
+                <option value="Blended Learning (4-1)">Blended (4-1)</option>
+                <option value="Full Distance Learning">Full Distance Learning</option>
+            </select>
+        </div>
+    </div>
+);
 
 const ShiftingModalities = () => {
     const navigate = useNavigate();
@@ -22,6 +60,8 @@ const ShiftingModalities = () => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [hasSavedData, setHasSavedData] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -120,8 +160,8 @@ const ShiftingModalities = () => {
     const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
 
     // --- HANDLERS ---
-    const handleShiftChange = (e, lvl) => setShifts({ ...shifts, [`shift_${lvl}`]: e.target.value });
-    const handleModeChange = (e, lvl) => setModes({ ...modes, [`mode_${lvl}`]: e.target.value });
+    const handleShiftChange = (e, lvl) => setShifts(prev => ({ ...prev, [`shift_${lvl}`]: e.target.value }));
+    const handleModeChange = (e, lvl) => setModes(prev => ({ ...prev, [`mode_${lvl}`]: e.target.value }));
     const handleAdmCheck = (e) => setAdms({ ...adms, [e.target.name]: e.target.checked });
     const handleAdmText = (e) => setAdms({ ...adms, adm_others: e.target.value });
 
@@ -164,7 +204,7 @@ const ShiftingModalities = () => {
                     url: '/api/save-learning-modalities',
                     payload: payload
                 });
-                alert("📴 Saved to Outbox! Sync when you are online.");
+                setShowOfflineModal(true);
                 setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
                 setIsLocked(true);
             } catch (e) { alert("Error saving locally."); }
@@ -184,7 +224,7 @@ const ShiftingModalities = () => {
             });
 
             if (res.ok) {
-                alert(hasSavedData ? 'Settings Updated!' : 'Settings Saved!');
+                setShowSuccessModal(true);
                 setOriginalData({ shifts: cleanShifts, modes: cleanModes, adms });
                 setIsLocked(true);
                 setHasSavedData(true);
@@ -196,47 +236,8 @@ const ShiftingModalities = () => {
         }
     };
 
-    const GradeRow = ({ label, lvl }) => (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-gray-100 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
-            <div className="flex items-center">
-                <span className="font-bold text-gray-700 text-sm">{label}</span>
-            </div>
-            <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Shifting Strategy</label>
-                <select
-                    value={shifts[`shift_${lvl}`] || ''}
-                    onChange={(e) => handleShiftChange(e, lvl)}
-                    disabled={isLocked || viewOnly}
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
-                >
-                    <option value="">Select...</option>
-                    <option value="Single Shift">Single Shift</option>
-                    <option value="Double Shift">Double Shift</option>
-                    <option value="Triple Shift">Triple Shift</option>
-                </select>
-            </div>
-            <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Learning Delivery</label>
-                <select
-                    value={modes[`mode_${lvl}`] || ''}
-                    onChange={(e) => handleModeChange(e, lvl)}
-                    disabled={isLocked || viewOnly}
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 disabled:bg-gray-50 dark:disabled:bg-slate-900"
-                >
-                    <option value="">Select...</option>
-                    <option value="In-Person Classes">In-Person Classes</option>
-                    <option value="Blended Learning (3-2)">Blended (3-2)</option>
-                    <option value="Blended Learning (4-1)">Blended (4-1)</option>
-                    <option value="Full Distance Learning">Full Distance Learning</option>
-                </select>
-            </div>
-        </div>
-    );
-
-    // LoadingScreen check removed
-
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
+        <div className="min-h-[100dvh] bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
             <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
@@ -258,31 +259,32 @@ const ShiftingModalities = () => {
                     {showElem() && (
                         <div className="mb-6">
                             <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Elementary</div>
-                            <GradeRow label="Kinder" lvl="kinder" />
-                            <GradeRow label="Grade 1" lvl="g1" />
-                            <GradeRow label="Grade 2" lvl="g2" />
-                            <GradeRow label="Grade 3" lvl="g3" />
-                            <GradeRow label="Grade 4" lvl="g4" />
-                            <GradeRow label="Grade 5" lvl="g5" />
-                            <GradeRow label="Grade 6" lvl="g6" />
+                            {/* Passed props to external GradeRow */}
+                            <GradeRow label="Kinder" lvl="kinder" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 1" lvl="g1" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 2" lvl="g2" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 3" lvl="g3" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 4" lvl="g4" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 5" lvl="g5" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 6" lvl="g6" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                         </div>
                     )}
 
                     {showJHS() && (
                         <div className="mb-6">
                             <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Junior High School</div>
-                            <GradeRow label="Grade 7" lvl="g7" />
-                            <GradeRow label="Grade 8" lvl="g8" />
-                            <GradeRow label="Grade 9" lvl="g9" />
-                            <GradeRow label="Grade 10" lvl="g10" />
+                            <GradeRow label="Grade 7" lvl="g7" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 8" lvl="g8" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 9" lvl="g9" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 10" lvl="g10" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                         </div>
                     )}
 
                     {showSHS() && (
                         <div>
                             <div className="bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-lg text-xs font-bold inline-block mb-4">Senior High School</div>
-                            <GradeRow label="Grade 11" lvl="g11" />
-                            <GradeRow label="Grade 12" lvl="g12" />
+                            <GradeRow label="Grade 11" lvl="g11" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 12" lvl="g12" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
                         </div>
                     )}
                 </div>
@@ -313,8 +315,8 @@ const ShiftingModalities = () => {
 
             <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-10 z-50 flex gap-3 shadow-lg">
                 {viewOnly ? (
-                    <button 
-                        onClick={() => navigate('/jurisdiction-schools')} 
+                    <button
+                        onClick={() => navigate('/jurisdiction-schools')}
                         className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg ring-4 ring-blue-500/20"
                     >
                         Back to Schools List
@@ -334,7 +336,8 @@ const ShiftingModalities = () => {
             {showEditModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">Edit Modalities?</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={handleConfirmEdit} className="flex-1 py-3 bg-amber-500 text-white rounded-xl font-bold">Unlock</button></div></div></div>}
             {showSaveModal && <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-6 backdrop-blur-sm"><div className="bg-white p-6 rounded-2xl w-full max-w-sm"><h3 className="font-bold text-lg">{hasSavedData ? "Confirm Update?" : "Confirm Save?"}</h3><div className="mt-6 flex gap-2"><button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border rounded-xl">Cancel</button><button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold">Confirm</button></div></div></div>}
 
-            {/* <SchoolHeadBottomNav /> removed as per request */}
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message={hasSavedData ? 'Settings Updated!' : 'Settings Saved!'} />
         </div>
     );
 };

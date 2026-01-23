@@ -54,6 +54,7 @@ const Register = () => {
     });
 
     const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+    const [isTestMode, setIsTestMode] = useState(false); // NEW: Test Mode State
 
     // --- OTP STATE ---
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -259,16 +260,16 @@ const Register = () => {
                 // RESTRICT: Numbers only, Max 6 chars
                 const numericValue = value.replace(/\D/g, '').slice(0, 6);
 
-                // Auto-generate email based on School ID
+                // Auto-generate email based on School ID (ONLY IF NOT IN TEST MODE)
                 setFormData({
                     ...formData,
                     schoolId: numericValue,
-                    email: numericValue ? `${numericValue}@deped.gov.ph` : ''
+                    email: (!isTestMode && numericValue) ? `${numericValue}@deped.gov.ph` : formData.email
                 });
                 return;
             }
-            // Prevent manual email editing for School Head
-            if (name === 'email') return;
+            // Prevent manual email editing for School Head (UNLESS IN TEST MODE)
+            if (name === 'email' && !isTestMode) return;
         }
 
         if (name === 'role') {
@@ -417,6 +418,10 @@ const Register = () => {
                                                 inputMode="numeric"
                                             />
                                             <p className="text-xs text-slate-400 mt-1 ml-1">Your email will be auto-generated.</p>
+                                            <label className="flex items-center gap-2 mt-2 ml-1 cursor-pointer">
+                                                <input type="checkbox" checked={isTestMode} onChange={(e) => setIsTestMode(e.target.checked)} className="rounded text-blue-600 focus:ring-blue-500" />
+                                                <span className="text-xs font-bold text-amber-600">Test Mode (Allow Custom Email)</span>
+                                            </label>
                                         </div>
                                     ) : (
                                         <>
@@ -547,9 +552,9 @@ const Register = () => {
                                             placeholder="Email Address"
                                             value={formData.email}
                                             onChange={handleChange}
-                                            className={`w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${formData.role === 'School Head' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
+                                            className={`w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${formData.role === 'School Head' && !isTestMode ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
                                             required
-                                            readOnly={formData.role === 'School Head' || isOtpVerified}
+                                            readOnly={(formData.role === 'School Head' && !isTestMode) || isOtpVerified}
                                         />
                                         {!isOtpVerified && (
                                             <button

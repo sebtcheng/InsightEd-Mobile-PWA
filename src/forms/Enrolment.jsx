@@ -1,10 +1,13 @@
-// src/forms/Enrolment.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-// LoadingScreen import removed 
 import { addToOutbox } from '../db';
+import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
+import { TbSchool } from 'react-icons/tb';
+import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import SuccessModal from '../components/SuccessModal'; // NEW // NEW
 
 const Enrolment = () => {
     const navigate = useNavigate();
@@ -23,12 +26,15 @@ const Enrolment = () => {
 
     // School Identity & Settings
     const [schoolId, setSchoolId] = useState('');
-    const [curricularOffering, setCurricularOffering] = useState(''); // 👈 Auto-set now
+    const [curricularOffering, setCurricularOffering] = useState('');
 
     // Modals
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false); // NEW // NEW
     const [editAgreement, setEditAgreement] = useState(false);
+    const [isOffline, setIsOffline] = useState(!navigator.onLine); // NEW: Offline State
 
     // BASIC GRADES (Kinder - G10)
     const [basicGrades, setBasicGrades] = useState({
@@ -44,6 +50,18 @@ const Enrolment = () => {
         ict11: 0, ict12: 0, he11: 0, he12: 0,
         ia11: 0, ia12: 0, afa11: 0, afa12: 0,
         arts11: 0, arts12: 0, sports11: 0, sports12: 0
+    });
+
+
+
+    // ARAL ENROLLEES (Grades 1-6)
+    const [aralData, setAralData] = useState({
+        aral_math_g1: 0, aral_read_g1: 0, aral_sci_g1: 0,
+        aral_math_g2: 0, aral_read_g2: 0, aral_sci_g2: 0,
+        aral_math_g3: 0, aral_read_g3: 0, aral_sci_g3: 0,
+        aral_math_g4: 0, aral_read_g4: 0, aral_sci_g4: 0,
+        aral_math_g5: 0, aral_read_g5: 0, aral_sci_g5: 0,
+        aral_math_g6: 0, aral_read_g6: 0, aral_sci_g6: 0
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -73,34 +91,41 @@ const Enrolment = () => {
     const getSHSTotal = () => getG11Total() + getG12Total();
     const getGrandTotal = () => getESTotal() + getJHSTotal() + getSHSTotal();
 
-    // --- VISIBILITY LOGIC (Automatic) ---
-    const showElem = () => curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
-    const showJHS = () => curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
-    const showSHS = () => curricularOffering.includes("Senior") || curricularOffering.includes("K-12");
+    // --- VISIBILITY LOGIC ---
+    const showElem = () => curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10") || !curricularOffering;
+    const showJHS = () => curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10") || !curricularOffering;
+    const showSHS = () => curricularOffering.includes("Senior") || curricularOffering.includes("K-12") || !curricularOffering;
+
+    // --- NETWORK LISTENER ---
+    useEffect(() => {
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // --- INITIALIZATION ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // 1. OFFLINE RECOVERY: Check LocalStorage first
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
 
                 if (storedSchoolId) setSchoolId(storedSchoolId);
-                // 👈 Set Offering automatically from storage
                 if (storedOffering) setCurricularOffering(storedOffering);
 
                 try {
-                    // 2. MONITOR VIEW or NORMAL FLOW
-                    const fetchUrl = viewOnly && monitorSchoolId 
+                    const fetchUrl = viewOnly && monitorSchoolId
                         ? `/api/monitoring/school-detail/${monitorSchoolId}`
                         : `/api/school-by-user/${user.uid}`;
 
                     const response = await fetch(fetchUrl);
                     if (response.ok) {
                         const result = await response.json();
-                        
-                        // Result is flat for monitoring detail, {data} for regular fetch
                         const data = (viewOnly && monitorSchoolId) ? result : result.data;
 
                         if (data) {
@@ -113,7 +138,6 @@ const Enrolment = () => {
                                 localStorage.setItem('schoolOffering', data.curricular_offering || '');
                             }
 
-                            // Load Grades
                             setBasicGrades({
                                 gradeKinder: data.grade_kinder || 0,
                                 grade1: data.grade_1 || 0, grade2: data.grade_2 || 0,
@@ -123,7 +147,6 @@ const Enrolment = () => {
                                 grade9: data.grade_9 || 0, grade10: data.grade_10 || 0
                             });
 
-                            // Load Strands
                             setShsStrands({
                                 abm11: data.abm_11 || 0, abm12: data.abm_12 || 0,
                                 stem11: data.stem_11 || 0, stem12: data.stem_12 || 0,
@@ -137,11 +160,23 @@ const Enrolment = () => {
                                 sports11: data.sports_11 || 0, sports12: data.sports_12 || 0
                             });
 
+
+
+                            setAralData({
+                                aral_math_g1: data.aral_math_g1 || 0, aral_read_g1: data.aral_read_g1 || 0, aral_sci_g1: data.aral_sci_g1 || 0,
+                                aral_math_g2: data.aral_math_g2 || 0, aral_read_g2: data.aral_read_g2 || 0, aral_sci_g2: data.aral_sci_g2 || 0,
+                                aral_math_g3: data.aral_math_g3 || 0, aral_read_g3: data.aral_read_g3 || 0, aral_sci_g3: data.aral_sci_g3 || 0,
+                                aral_math_g4: data.aral_math_g4 || 0, aral_read_g4: data.aral_read_g4 || 0, aral_sci_g4: data.aral_sci_g4 || 0,
+                                aral_math_g5: data.aral_math_g5 || 0, aral_read_g5: data.aral_read_g5 || 0, aral_sci_g5: data.aral_sci_g5 || 0,
+                                aral_math_g6: data.aral_math_g6 || 0, aral_read_g6: data.aral_read_g6 || 0, aral_sci_g6: data.aral_sci_g6 || 0
+                            });
+
                             if (data.grade_1 || data.grade_7 || data.stem_11) {
                                 setIsLocked(true);
                                 setOriginalData({
                                     basic: { ...basicGrades },
-                                    strands: { ...shsStrands }
+                                    strands: { ...shsStrands },
+                                    aral: { ...aralData }
                                 });
                             }
                         } else if (!viewOnly && !storedSchoolId) {
@@ -166,10 +201,12 @@ const Enrolment = () => {
     const handleBasicChange = (e) => setBasicGrades({ ...basicGrades, [e.target.name]: parseInt(e.target.value) || 0 });
     const handleStrandChange = (e) => setShsStrands({ ...shsStrands, [e.target.name]: parseInt(e.target.value) || 0 });
 
+    const handleAralChange = (e) => setAralData({ ...aralData, [e.target.name]: parseInt(e.target.value) || 0 });
+
     const handleUpdateClick = () => { setEditAgreement(false); setShowEditModal(true); };
 
     const handleConfirmEdit = () => {
-        setOriginalData({ basic: { ...basicGrades }, strands: { ...shsStrands } });
+        setOriginalData({ basic: { ...basicGrades }, strands: { ...shsStrands }, aral: { ...aralData } });
         setIsLocked(false);
         setShowEditModal(false);
     };
@@ -178,11 +215,12 @@ const Enrolment = () => {
         if (originalData) {
             setBasicGrades(originalData.basic);
             setShsStrands(originalData.strands);
+
+            setAralData(originalData.aral);
         }
         setIsLocked(true);
     };
 
-    // --- SAVE LOGIC ---
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
@@ -194,26 +232,21 @@ const Enrolment = () => {
             return;
         }
 
-        const finalESTotal = showElem() ? getESTotal() : 0;
-        const finalJHSTotal = showJHS() ? getJHSTotal() : 0;
-        const finalSHSTotal = showSHS() ? getSHSTotal() : 0;
+        const finalESTotal = getESTotal();
+        const finalJHSTotal = getJHSTotal();
+        const finalSHSTotal = getSHSTotal();
         const finalGrandTotal = finalESTotal + finalJHSTotal + finalSHSTotal;
-
-        const cleanBasic = { ...basicGrades };
-        if (!showElem()) ["gradeKinder", "grade1", "grade2", "grade3", "grade4", "grade5", "grade6"].forEach(k => cleanBasic[k] = 0);
-        if (!showJHS()) ["grade7", "grade8", "grade9", "grade10"].forEach(k => cleanBasic[k] = 0);
-
-        const cleanStrands = { ...shsStrands };
-        if (!showSHS()) Object.keys(cleanStrands).forEach(k => cleanStrands[k] = 0);
 
         const payload = {
             schoolId,
             submittedBy: user.uid,
-            curricularOffering, // 👈 Included but not editable
-            ...cleanBasic,
-            ...cleanStrands,
-            grade11: showSHS() ? getG11Total() : 0,
-            grade12: showSHS() ? getG12Total() : 0,
+            curricularOffering,
+            ...basicGrades,
+            ...shsStrands,
+
+            ...aralData,
+            grade11: getG11Total(),
+            grade12: getG12Total(),
             esTotal: finalESTotal,
             jhsTotal: finalJHSTotal,
             shsTotal: finalSHSTotal,
@@ -228,13 +261,15 @@ const Enrolment = () => {
                     url: '/api/save-enrolment',
                     payload: payload
                 });
-                alert("📴 Saved to Outbox!");
-                setBasicGrades(cleanBasic);
-                setShsStrands(cleanStrands);
+                setShowOfflineModal(true); // USE MODAL
                 setLastUpdated(new Date().toISOString());
                 setIsLocked(true);
-            } catch (e) { alert("Failed to save offline."); }
-            finally { setIsSaving(false); }
+            } catch (e) {
+                console.error(e);
+                alert("Offline save failed.");
+            } finally {
+                setIsSaving(false);
+            }
             return;
         }
 
@@ -243,201 +278,357 @@ const Enrolment = () => {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if (response.ok) {
-                alert('Saved successfully!');
-                setBasicGrades(cleanBasic);
-                setShsStrands(cleanStrands);
+                setShowSuccessModal(true); // USE MODAL
                 setLastUpdated(new Date().toISOString());
                 setIsLocked(true);
             } else {
                 const err = await response.json();
                 alert('Error: ' + err.message);
             }
-        } catch (error) { alert("Network Error."); }
-        finally { setIsSaving(false); }
+        } catch (error) {
+            // Offline fallback
+            await addToOutbox({
+                type: 'ENROLMENT',
+                label: 'Enrolment Data',
+                url: '/api/save-enrolment',
+                payload: payload
+            });
+            alert("📴 Saved to Outbox!");
+            setIsLocked(true);
+        } finally { setIsSaving(false); }
     };
 
-    // LoadingScreen check removed
-
-    const Input = ({ label, name, val, onChange }) => (
-        <div className="w-full">
-            {label && <label className="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase mb-1">{label}</label>}
-            <input
-                type="number" min="0" name={name} value={val} onChange={onChange} disabled={isLocked}
-                className={`w-full px-3 py-2 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-[#004A99] dark:focus:ring-blue-500 transition-all 
-                ${isLocked ? 'bg-gray-100 dark:bg-slate-900 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-700 text-gray-800 dark:text-slate-200'}`}
-            />
+    if (loading) return (
+        <div className="min-h-screen grid place-items-center bg-slate-50">
+            <div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
+        <div className="min-h-screen bg-slate-50 pb-32 font-sans">
+            {/* --- PREMIUM BLUE HEADER --- */}
+            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-            {/* HEADER */}
-            <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
                 <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiArrowLeft size={24} />
+                    </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Enrollment Data</h1>
-                        <p className="text-blue-200 text-xs mt-1">
-                            {lastUpdated ? `Last Updated: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage learner counts'}
-                        </p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Enrollment</h1>
+                            {curricularOffering && (
+                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                    {curricularOffering}
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-blue-100 text-xs font-medium mt-1">Official Enrollment Counts</p>
                     </div>
                 </div>
             </div>
 
-            {/* CONTENT */}
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto">
+            <div className="px-5 -mt-10 relative z-20 space-y-5">
 
-                {/* 🆔 INFO BADGES */}
-                <div className="flex gap-2 mx-4 mb-0">
-                    <div className="bg-blue-800 text-blue-100 text-[10px] font-bold px-3 py-1.5 rounded-t-lg border-b border-blue-700 flex-1 text-center">
-                        ID: <span className="text-white ml-1">{schoolId || "..."}</span>
+                {/* OFFLINE BANNER */}
+                {isOffline && (
+                    <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 rounded shadow-md relative z-30" role="alert">
+                        <p className="font-bold">You are offline</p>
+                        <p className="text-sm">Changes will be saved to Outbox and synced when online.</p>
                     </div>
-                    {/* 📊 AUTO-DETECTED TYPE */}
-                    <div className="bg-amber-500 text-amber-50 text-[10px] font-bold px-3 py-1.5 rounded-t-lg border-b border-amber-600 flex-[2] text-center">
-                        TYPE: <span className="text-white ml-1 uppercase">{curricularOffering || "NOT SET"}</span>
-                    </div>
-                </div>
+                )}
 
-                <div className={`bg-white dark:bg-slate-800 p-6 md:p-8 rounded-2xl shadow-lg border transition-all ${!isLocked ? 'border-blue-400 dark:border-blue-500 ring-4 ring-blue-50 dark:ring-blue-900/20' : 'border-gray-100 dark:border-slate-700'}`}>
-
-                    {!curricularOffering && (
-                        <div className="p-6 text-center text-gray-400 dark:text-slate-500 italic">
-                            ⚠️ Please set "Curricular Offering" in School Profile first.
-                        </div>
-                    )}
-
-                    {/* 2. ELEMENTARY SECTION */}
-                    {showElem() && (
-                        <div className="mb-8 p-5 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-slate-700">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700 dark:text-slate-300">Elementary School</h3>
-                                <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 shadow-sm">Total: {getESTotal()}</span>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <Input label="Kinder" name="gradeKinder" val={basicGrades.gradeKinder} onChange={handleBasicChange} />
-                                <Input label="Grade 1" name="grade1" val={basicGrades.grade1} onChange={handleBasicChange} />
-                                <Input label="Grade 2" name="grade2" val={basicGrades.grade2} onChange={handleBasicChange} />
-                                <Input label="Grade 3" name="grade3" val={basicGrades.grade3} onChange={handleBasicChange} />
-                                <Input label="Grade 4" name="grade4" val={basicGrades.grade4} onChange={handleBasicChange} />
-                                <Input label="Grade 5" name="grade5" val={basicGrades.grade5} onChange={handleBasicChange} />
-                                <Input label="Grade 6" name="grade6" val={basicGrades.grade6} onChange={handleBasicChange} />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 3. JHS SECTION */}
-                    {showJHS() && (
-                        <div className="mb-8 p-5 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-slate-700">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700 dark:text-slate-300">Junior High School</h3>
-                                <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 shadow-sm">Total: {getJHSTotal()}</span>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <Input label="Grade 7" name="grade7" val={basicGrades.grade7} onChange={handleBasicChange} />
-                                <Input label="Grade 8" name="grade8" val={basicGrades.grade8} onChange={handleBasicChange} />
-                                <Input label="Grade 9" name="grade9" val={basicGrades.grade9} onChange={handleBasicChange} />
-                                <Input label="Grade 10" name="grade10" val={basicGrades.grade10} onChange={handleBasicChange} />
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 4. SHS SECTION */}
-                    {showSHS() && (
-                        <div className="mb-8 p-5 bg-gray-50 dark:bg-slate-900/50 rounded-2xl border border-gray-100 dark:border-slate-700">
-                            <div className="flex justify-between items-center mb-4">
-                                <div>
-                                    <h3 className="font-bold text-gray-700 dark:text-slate-300">Senior High School</h3>
-                                    <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">Please encode per strand.</p>
+                {/* --- ELEMENTARY CARD --- */}
+                {showElem() && (
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl">
+                                    <TbSchool />
                                 </div>
-                                <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-slate-700 text-xs font-bold text-blue-600 dark:text-blue-400 shadow-sm">Total: {getSHSTotal()}</span>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800">Elementary</h2>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Kinder to Grade 6</p>
+                                </div>
                             </div>
-
-                            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-slate-700">
-                                <table className="w-full text-sm text-left">
-                                    <thead className="text-[10px] text-gray-500 dark:text-slate-400 uppercase bg-gray-100 dark:bg-slate-900 font-bold tracking-wider">
-                                        <tr><th className="px-4 py-3">Track / Strand</th><th className="px-2 py-3 w-24">Grade 11</th><th className="px-2 py-3 w-24">Grade 12</th></tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-slate-700 bg-white dark:bg-slate-800">
-                                        {/* ACADEMIC */}
-                                        <tr><td className="px-4 py-2 font-bold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/50" colSpan="3">Academic Track</td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">ABM</td><td className="p-2"><Input name="abm11" val={shsStrands.abm11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="abm12" val={shsStrands.abm12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">STEM</td><td className="p-2"><Input name="stem11" val={shsStrands.stem11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="stem12" val={shsStrands.stem12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">HUMSS</td><td className="p-2"><Input name="humss11" val={shsStrands.humss11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="humss12" val={shsStrands.humss12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">GAS</td><td className="p-2"><Input name="gas11" val={shsStrands.gas11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="gas12" val={shsStrands.gas12} onChange={handleStrandChange} /></td></tr>
-
-                                        {/* TVL */}
-                                        <tr><td className="px-4 py-2 font-bold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/50" colSpan="3">TVL Track</td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">ICT</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Prog, CSS, Animation</div></td><td className="p-2"><Input name="ict11" val={shsStrands.ict11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="ict12" val={shsStrands.ict12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">Home Economics</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Beauty, Cookery, etc.</div></td><td className="p-2"><Input name="he11" val={shsStrands.he11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="he12" val={shsStrands.he12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">Industrial Arts</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Auto, SMAW, EIM</div></td><td className="p-2"><Input name="ia11" val={shsStrands.ia11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="ia12" val={shsStrands.ia12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2"><div className="font-medium text-gray-600 dark:text-slate-400">Agri-Fishery</div><div className="text-[10px] text-gray-400 dark:text-slate-500">Agri, Fishing</div></td><td className="p-2"><Input name="afa11" val={shsStrands.afa11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="afa12" val={shsStrands.afa12} onChange={handleStrandChange} /></td></tr>
-
-                                        {/* OTHERS */}
-                                        <tr><td className="px-4 py-2 font-bold text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-slate-900/50" colSpan="3">Other Tracks</td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">Arts & Design</td><td className="p-2"><Input name="arts11" val={shsStrands.arts11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="arts12" val={shsStrands.arts12} onChange={handleStrandChange} /></td></tr>
-                                        <tr><td className="px-4 py-2 font-medium text-gray-600 dark:text-slate-400">Sports</td><td className="p-2"><Input name="sports11" val={shsStrands.sports11} onChange={handleStrandChange} /></td><td className="p-2"><Input name="sports12" val={shsStrands.sports12} onChange={handleStrandChange} /></td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                            <span className="px-3 py-1 rounded-lg bg-orange-50 border border-orange-100 text-orange-600 text-xs font-black">
+                                {getESTotal()}
+                            </span>
                         </div>
-                    )}
-
-                    {/* GRAND TOTAL */}
-                    <div className="bg-[#004A99] text-white p-6 rounded-2xl flex justify-between items-center mt-6 shadow-md">
-                        <div>
-                            <span className="font-bold uppercase tracking-widest text-xs opacity-70">Total Enrolment</span>
-                            <h2 className="text-3xl font-extrabold">{getGrandTotal()}</h2>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                            {[
+                                { l: 'Kinder', k: 'gradeKinder' }, { l: 'Grade 1', k: 'grade1' }, { l: 'Grade 2', k: 'grade2' },
+                                { l: 'Grade 3', k: 'grade3' }, { l: 'Grade 4', k: 'grade4' }, { l: 'Grade 5', k: 'grade5' },
+                                { l: 'Grade 6', k: 'grade6' }
+                            ].map((item) => (
+                                <div key={item.k} className="text-center group">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-orange-500 transition-colors">{item.l}</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        name={item.k}
+                                        value={basicGrades[item.k]}
+                                        onChange={handleBasicChange}
+                                        disabled={isLocked}
+                                        onFocus={e => e.target.select()}
+                                        className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm transition-all hover:border-orange-200"
+                                    />
+                                </div>
+                            ))}
                         </div>
-                        <div className="text-4xl opacity-20">📊</div>
                     </div>
+                )}
 
+                {/* --- JHS CARD --- */}
+                {showJHS() && (
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
+                                    <FiGrid />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800">Junior High School</h2>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Grade 7 to Grade 10</p>
+                                </div>
+                            </div>
+                            <span className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 text-xs font-black">
+                                {getJHSTotal()}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {[
+                                { l: 'Grade 7', k: 'grade7' }, { l: 'Grade 8', k: 'grade8' },
+                                { l: 'Grade 9', k: 'grade9' }, { l: 'Grade 10', k: 'grade10' }
+                            ].map((item) => (
+                                <div key={item.k} className="text-center group">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors">{item.l}</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        name={item.k}
+                                        value={basicGrades[item.k]}
+                                        onChange={handleBasicChange}
+                                        disabled={isLocked}
+                                        onFocus={e => e.target.select()}
+                                        className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all hover:border-blue-200"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- SHS CARD --- */}
+                {showSHS() && (
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
+                                    <FiLayers />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-800">Senior High School</h2>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Strands & Tracks</p>
+                                </div>
+                            </div>
+                            <span className="px-3 py-1 rounded-lg bg-purple-50 border border-purple-100 text-purple-600 text-xs font-black">
+                                {getSHSTotal()}
+                            </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-left border-b border-slate-100">
+                                    <tr>
+                                        <th className="pb-3 pl-2">Track / Strand</th>
+                                        <th className="pb-3 text-center w-20">G11</th>
+                                        <th className="pb-3 text-center w-20">G12</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {/* helper row */}
+                                    {[
+                                        { label: 'ABM', k11: 'abm11', k12: 'abm12' },
+                                        { label: 'STEM', k11: 'stem11', k12: 'stem12' },
+                                        { label: 'HUMSS', k11: 'humss11', k12: 'humss12' },
+                                        { label: 'GAS', k11: 'gas11', k12: 'gas12' },
+                                        { label: 'TVL - ICT', k11: 'ict11', k12: 'ict12' },
+                                        { label: 'TVL - HE', k11: 'he11', k12: 'he12' },
+                                        { label: 'TVL - IA', k11: 'ia11', k12: 'ia12' },
+                                        { label: 'TVL - Agri', k11: 'afa11', k12: 'afa12' },
+                                        { label: 'Arts & Design', k11: 'arts11', k12: 'arts12' },
+                                        { label: 'Sports', k11: 'sports11', k12: 'sports12' }
+                                    ].map((row) => (
+                                        <tr key={row.label} className="group hover:bg-slate-50/50 transition-colors">
+                                            <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.label}</td>
+                                            <td className="p-1">
+                                                <input
+                                                    type="number"
+                                                    name={row.k11}
+                                                    value={shsStrands[row.k11]}
+                                                    onChange={handleStrandChange}
+                                                    disabled={isLocked}
+                                                    onFocus={e => e.target.select()}
+                                                    className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-xs transition-all hover:border-purple-200"
+                                                />
+                                            </td>
+                                            <td className="p-1">
+                                                <input
+                                                    type="number"
+                                                    name={row.k12}
+                                                    value={shsStrands[row.k12]}
+                                                    onChange={handleStrandChange}
+                                                    disabled={isLocked}
+                                                    onFocus={e => e.target.select()}
+                                                    className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-xs transition-all hover:border-purple-200"
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+
+
+                {/* --- PROSPECTIVE ARAL ENROLLEES (Grades 1-6) --- */}
+                {showElem() && (
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl">
+                                📖
+                            </div>
+                            <div>
+                                <h2 className="text-base font-bold text-slate-800">Prospective ARAL Enrollees</h2>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Academic Recovery & Acceleration (Grades 1-6)</p>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-100">
+                                    <tr>
+                                        <th className="pb-3 text-left pl-2">Grade Level</th>
+                                        <th className="pb-3 text-indigo-600">Math</th>
+                                        <th className="pb-3 text-pink-600">Reading</th>
+                                        <th className="pb-3 text-teal-600">Science</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {[1, 2, 3, 4, 5, 6].map(g => (
+                                        <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
+                                            <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
+                                            <td className="p-1">
+                                                <input
+                                                    type="number" min="0"
+                                                    name={`aral_math_g${g}`}
+                                                    value={aralData[`aral_math_g${g}`]}
+                                                    onChange={handleAralChange}
+                                                    disabled={isLocked}
+                                                    onFocus={e => e.target.select()}
+                                                    className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-xs transition-all hover:border-indigo-200"
+                                                />
+                                            </td>
+                                            <td className="p-1">
+                                                <input
+                                                    type="number" min="0"
+                                                    name={`aral_read_g${g}`}
+                                                    value={aralData[`aral_read_g${g}`]}
+                                                    onChange={handleAralChange}
+                                                    disabled={isLocked}
+                                                    onFocus={e => e.target.select()}
+                                                    className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-pink-500 outline-none text-xs transition-all hover:border-pink-200"
+                                                />
+                                            </td>
+                                            <td className="p-1">
+                                                <input
+                                                    type="number" min="0"
+                                                    name={`aral_sci_g${g}`}
+                                                    value={aralData[`aral_sci_g${g}`]}
+                                                    onChange={handleAralChange}
+                                                    disabled={isLocked}
+                                                    onFocus={e => e.target.select()}
+                                                    className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-xs transition-all hover:border-teal-200"
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* GRAND TOTAL */}
+                <div className="bg-[#004A99] p-6 rounded-3xl flex justify-between items-center shadow-lg shadow-blue-900/10 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
+                    <div className="relative z-10">
+                        <span className="font-bold uppercase tracking-widest text-[10px] text-blue-200 block mb-1">Total Enrollment</span>
+                        <h2 className="text-4xl font-black text-white">{getGrandTotal()}</h2>
+                    </div>
+                    <div className="text-4xl text-white/20">📊</div>
                 </div>
+
             </div>
 
             {/* --- FLOATING ACTION BAR --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                {viewOnly ? (
-                    <button
-                        onClick={() => navigate('/jurisdiction-schools')}
-                        className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
-                    >
-                        ← Back to Schools List
-                    </button>
-                ) : isLocked ? (
-                    <button
-                        onClick={handleUpdateClick}
-                        className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 active:scale-[0.98] transition flex items-center justify-center gap-2"
-                    >
-                        <span>✏️</span> Update Enrolment
-                    </button>
-                ) : (
-                    <>
-                        <button onClick={handleCancelEdit} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 font-bold py-4 rounded-xl hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2">
-                            {isSaving ? "Saving..." : "Save Changes"}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
+                <div className="max-w-4xl mx-auto flex gap-3">
+                    {viewOnly ? (
+                        <button
+                            onClick={() => navigate('/jurisdiction-schools')}
+                            className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
+                        >
+                            ← Back to Schools List
                         </button>
-                    </>
-                )}
+                    ) : isLocked ? (
+                        <button
+                            onClick={handleUpdateClick}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                        >
+                            <span>✏️</span> UNLOCK EDIT
+                        </button>
+                    ) : (
+                        <>
+                            <button onClick={handleCancelEdit} className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => setShowSaveModal(true)}
+                                disabled={isSaving}
+                                className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                            >
+                                {isSaving ? 'Saving...' : <><FiSave /> Save Enrollment</>}
+                            </button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* --- MODALS --- */}
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} />
+
             {showEditModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
-                        <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/20 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">⚠️</span></div>
-                        <h3 className="font-bold text-lg text-gray-900 dark:text-slate-200">Edit Enrolment?</h3>
-                        <p className="text-sm text-gray-500 dark:text-slate-400 mt-2 mb-4">To change the school type (e.g. add Senior High), please update your School Profile.</p>
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
+                            <FiAlertCircle />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">Edit Enrollment?</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6">You are about to modify official enrollment records. Please confirm to proceed.</p>
 
-                        <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700/50 cursor-pointer mb-6 border border-transparent hover:border-gray-200 dark:hover:border-slate-700 transition">
+                        <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
                             <input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" />
-                            <span className="text-xs font-bold text-gray-700 dark:text-slate-400 select-none">I understand and wish to proceed.</span>
+                            <span className="text-xs font-bold text-slate-600 select-none">I understand and wish to proceed.</span>
                         </label>
 
                         <div className="flex gap-2">
-                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button>
-                            <button onClick={handleConfirmEdit} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed'}`}>Proceed</button>
+                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                            <button onClick={handleConfirmEdit} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-200 cursor-not-allowed'}`}>Proceed</button>
                         </div>
                     </div>
                 </div>
@@ -445,18 +636,20 @@ const Enrolment = () => {
 
             {showSaveModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm">
-                        <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mb-4"><span className="text-2xl">💾</span></div>
-                        <h3 className="font-bold text-lg text-gray-900 dark:text-slate-200">Confirm Submission</h3>
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
+                            <FiCheckCircle />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800">Confirm Submission</h3>
 
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30 my-4 flex justify-between items-center">
-                            <span className="text-sm font-bold text-blue-800 dark:text-blue-300">Grand Total:</span>
-                            <span className="text-xl font-extrabold text-blue-900 dark:text-blue-100">{getGrandTotal()}</span>
+                        <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 my-4 flex justify-between items-center">
+                            <span className="text-sm font-bold text-blue-800">Grand Total:</span>
+                            <span className="text-xl font-black text-blue-900">{getGrandTotal()}</span>
                         </div>
 
                         <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border dark:border-slate-700 rounded-xl font-bold text-gray-600 dark:text-slate-400">Cancel</button>
-                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#CC0000] text-white rounded-xl font-bold shadow-lg hover:bg-[#A30000]">Submit</button>
+                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800">Submit</button>
                         </div>
                     </div>
                 </div>

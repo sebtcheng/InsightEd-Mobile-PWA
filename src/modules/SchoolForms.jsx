@@ -10,7 +10,7 @@ import {
     FiCheckCircle, FiAlertCircle, FiFilter, FiChevronRight,
     FiUser, FiUsers, FiLayers, FiBox
 } from "react-icons/fi";
-import { TbSchool, TbReportAnalytics } from "react-icons/tb";
+import { TbSchool, TbReportAnalytics, TbActivity } from "react-icons/tb";
 
 const SchoolForms = () => {
     const navigate = useNavigate();
@@ -58,6 +58,14 @@ const SchoolForms = () => {
             icon: FiLayers
         },
         {
+            id: 'stats',
+            category: 'Learners',
+            name: "Learner Statistics",
+            description: "Special programs & demographics.",
+            route: "/learner-statistics",
+            icon: TbActivity
+        },
+        {
             id: 'infra',
             category: 'Learners',
             name: "Shifting & Modality",
@@ -90,6 +98,14 @@ const SchoolForms = () => {
             description: "Equipment & facilities inventory.",
             route: "/school-resources",
             icon: FiBox
+        },
+        {
+            id: 'facilities',
+            category: 'Assets',
+            name: "Physical Facilities",
+            description: "Classroom inventory & status.",
+            route: "/physical-facilities",
+            icon: FiLayers
         },
     ];
 
@@ -147,10 +163,14 @@ const SchoolForms = () => {
                 return ((schoolProfile.spec_math_major > 0) || (schoolProfile.spec_english_major > 0)) ? 'completed' : 'pending';
             case 'resources':
                 return ((schoolProfile.res_armchairs_good > 0) || (schoolProfile.res_toilets_male > 0)) ? 'completed' : 'pending';
+            case 'facilities':
+                return (schoolProfile.build_classrooms_total > 0) ? 'completed' : 'pending';
             case 'infra':
                 const hasShift = schoolProfile.shift_kinder || schoolProfile.shift_g1;
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl;
                 return (hasShift || hasAdm) ? 'completed' : 'pending';
+            case 'stats':
+                return (schoolProfile.stat_sned_es > 0 || schoolProfile.stat_muslim_k > 0 || schoolProfile.stat_ip > 0) ? 'completed' : 'pending';
             default:
                 return 'pending';
         }

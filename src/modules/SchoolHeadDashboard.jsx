@@ -293,7 +293,10 @@ const SchoolHeadDashboard = () => {
                                 className="w-full rounded-2xl"
                             >
                                 <SwiperSlide>
-                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border-l-4 border-[#FDB913] min-h-[140px] flex flex-col justify-center relative overflow-hidden">
+                                    <div
+                                        onClick={() => navigate('/school-forms')}
+                                        className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border-l-4 border-[#FDB913] min-h-[140px] flex flex-col justify-center relative overflow-hidden cursor-pointer active:scale-[0.98] transition-all hover:shadow-md"
+                                    >
                                         <div className="absolute right-[-10px] top-[-10px] opacity-5 dark:opacity-10">
                                             <TbSchool size={100} className="dark:text-white" />
                                         </div>
@@ -301,7 +304,7 @@ const SchoolHeadDashboard = () => {
                                             Welcome, Principal!
                                         </h3>
                                         <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed max-w-[85%] z-10">
-                                            Ensure all school forms are up to date before the division deadline. Sync your data when online.
+                                            Ensure all school forms are up to date before the division deadline. Tap here to view forms.
                                         </p>
                                     </div>
                                 </SwiperSlide>
@@ -320,7 +323,7 @@ const SchoolHeadDashboard = () => {
                                     <button
                                         key={index}
                                         onClick={() => navigate(item.route)}
-                                        className="flex flex-col items-center gap-2 group"
+                                        className="flex flex-col items-center gap-2 group relative z-20 cursor-pointer"
                                     >
                                         <div className={`w-14 h-14 rounded-2xl ${item.color} dark:bg-slate-800 dark:text-blue-400 flex items-center justify-center shadow-sm group-active:scale-95 transition-all border border-transparent dark:border-slate-700 group-hover:border-slate-200 dark:group-hover:border-slate-600`}>
                                             <item.icon size={24} />

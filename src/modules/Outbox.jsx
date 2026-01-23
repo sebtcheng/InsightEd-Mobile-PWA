@@ -163,6 +163,7 @@ const Outbox = () => {
                                 `}>
                                     {item.type === 'SCHOOL_PROFILE' && '🏫'}
                                     {item.type === 'ENROLMENT' && '📊'}
+                                    {item.type === 'LEARNER_STATISTICS' && '📉'}
                                     {item.type === 'TEACHING_PERSONNEL' && '👩‍🏫'}
                                     {item.type === 'ORGANIZED_CLASSES' && '🗂️'}
                                     {item.type === 'SHIFTING_MODALITIES' && '🔄'}

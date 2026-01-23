@@ -45,6 +45,7 @@ const UserProfile = () => {
     // --- STATE MANAGEMENT ---
     const [userData, setUserData] = useState(null);
     const [schoolId, setSchoolId] = useState(null);
+    const [iern, setIern] = useState(null);
     const [homeRoute, setHomeRoute] = useState('/');
 
     // UI State
@@ -96,6 +97,7 @@ const UserProfile = () => {
                     const result = await response.json();
                     if (result.exists) {
                         setSchoolId(result.data.school_id);
+                        setIern(result.data.iern);
                     }
                 } catch (error) {
                     // console.error("Failed to fetch school ID:", error);
@@ -221,6 +223,12 @@ const UserProfile = () => {
                         <span className="text-gray-500 dark:text-gray-300 font-medium">School ID</span>
                         <span className={`font-bold ${schoolId ? 'text-[#004A99] dark:text-blue-300' : 'text-gray-400'}`}>
                             {schoolId || "Not Assigned"}
+                        </span>
+                    </div>
+                    <div className="flex justify-between mb-2 text-sm last:mb-0">
+                        <span className="text-gray-500 dark:text-gray-300 font-medium">IERN</span>
+                        <span className={`font-bold ${iern ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400'}`}>
+                            {iern || "Not Generated"}
                         </span>
                     </div>
                 </div>
@@ -407,7 +415,14 @@ const UserProfile = () => {
                     <h3 className="m-0 text-base font-bold text-gray-800 dark:text-white">
                         {userData ? `${userData.firstName} ${userData.lastName}` : "Loading..."}
                     </h3>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{userData?.role || "User"}</span>
+                    <div className="flex flex-col">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{userData?.role || "User"}</span>
+                        {iern && (
+                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-tighter mt-0.5">
+                                IERN: {iern}
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
 
