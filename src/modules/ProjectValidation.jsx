@@ -201,7 +201,15 @@ const ProjectValidation = () => {
                     <div className="relative z-10">
                         <div className="flex items-center gap-3 text-white mb-2">
                             <button
-                                onClick={() => selectedProject ? setSelectedProject(null) : navigate(-1)}
+                                onClick={() => {
+                                    if (selectedProject) {
+                                        setSelectedProject(null);
+                                    } else if (monitorSchoolId) {
+                                        navigate('/jurisdiction-schools');
+                                    } else {
+                                        navigate(-1);
+                                    }
+                                }}
                                 className="p-2 -ml-2 hover:bg-white/10 rounded-full transition-colors"
                             >
                                 <TbArrowLeft size={24} />

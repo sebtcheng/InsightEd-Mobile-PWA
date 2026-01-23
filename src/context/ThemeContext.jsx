@@ -17,55 +17,67 @@ export const ThemeProvider = ({ children }) => {
     // loading state to prevent flash of wrong theme
     const [loading, setLoading] = useState(true);
 
-    // 1. Listen for Auth Changes & Sync with Firestore
+    // 1. Listen for Auth Changes & Sync with Firestore (READ ONLY usually)
     useEffect(() => {
+        let authListenerHasFired = false;
+
+        // SAFETY TIMEOUT: Force app to load if Auth hangs (e.g. Blocked)
+        const safetyTimeout = setTimeout(() => {
+             if (!authListenerHasFired) {
+                 console.warn("Auth Listener Timed Out (Likely Blocked). Forcing App Load.");
+                 setLoading(false);
+             }
+        }, 2000);
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            authListenerHasFired = true;
+            clearTimeout(safetyTimeout); // Clear safety if auth works
+
             if (user) {
                 // User Logged In: Fetch preference from Firestore
                 try {
                     const docRef = doc(db, "users", user.uid);
-                    const docSnap = await getDoc(docRef);
                     
-                    // Get the current localStorage value (most recent user action)
-                    const localTheme = localStorage.getItem('theme');
+                    // Race Firestore against a fast 3s timeout for theme (theme isn't critical)
+                    const docSnap = await Promise.race([
+                        getDoc(docRef),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Theme Sync Timeout")), 3000))
+                    ]);
                     
                     if (docSnap.exists() && docSnap.data().theme) {
+                        // Trust DB if it has a value
                         const firestoreTheme = docSnap.data().theme;
-                        
-                        // If localStorage has a theme set, prioritize it (user's most recent toggle)
-                        // Only use Firestore theme if localStorage doesn't have a preference yet
-                        if (localTheme === null || localTheme === undefined) {
-                            setIsDarkMode(firestoreTheme === 'dark');
-                        } else {
-                            // Use localStorage (most recent action) and sync to Firestore
-                            const localIsDark = localTheme === 'dark';
-                            setIsDarkMode(localIsDark);
-                            
-                            // If localStorage differs from Firestore, update Firestore
-                            if ((localIsDark ? 'dark' : 'light') !== firestoreTheme) {
-                                setDoc(docRef, { theme: localTheme }, { merge: true })
-                                    .catch(e => console.error("Error syncing theme to DB:", e));
-                            }
-                        }
-                    } else if (localTheme) {
-                        // No Firestore theme, use localStorage
-                        setIsDarkMode(localTheme === 'dark');
+                        setIsDarkMode(firestoreTheme === 'dark');
+                    } else {
+                        // No DB value? Sync local preference UP to DB once.
+                        const currentLocal = localStorage.getItem('theme') || 'light';
+                        await setDoc(docRef, { theme: currentLocal }, { merge: true }).catch(err => {
+                            // If blocked, just ignore.
+                            console.warn("Could not sync initial theme to DB (likely blocked):", err.code || err);
+                        });
                     }
                 } catch (error) {
-                    console.error("Failed to sync theme:", error);
+                    // Handle "Blocked by Client" or Timeout gracefully
+                    console.warn("Theme sync skipped (blocked/timeout). Using local preference.", error);
+                    // Ensure we stick to local storage if DB fails
+                    const localTheme = localStorage.getItem('theme') === 'dark';
+                    setIsDarkMode(localTheme);
                 }
             } else {
-                // User Logged Out: Revert to local preference or default (Light)
+                // User Logged Out: Revert to local preference
                 const localTheme = localStorage.getItem('theme') === 'dark';
                 setIsDarkMode(localTheme);
             }
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            clearTimeout(safetyTimeout);
+        };
     }, []);
 
-    // 2. Apply Theme to HTML & Update Persistence
+    // 2. Apply Theme to HTML (Local Only)
     useEffect(() => {
         const root = window.document.documentElement;
         if (isDarkMode) {
@@ -75,21 +87,23 @@ export const ThemeProvider = ({ children }) => {
             root.classList.remove('dark');
             localStorage.setItem('theme', 'light');
         }
-
-        // If user is logged in, sync to Firestore
-        const user = auth.currentUser;
-        if (user) {
-            const docRef = doc(db, "users", user.uid);
-            // Use setDoc with merge to avoid overwriting other fields if document exists
-            // We use catch to handle cases where user doc might not exist yet (rare in this flow but possible)
-            setDoc(docRef, { theme: isDarkMode ? 'dark' : 'light' }, { merge: true })
-                .catch(e => console.error("Error saving theme to DB:", e));
-        }
-
     }, [isDarkMode]);
 
-    const toggleTheme = () => {
-        setIsDarkMode(prev => !prev);
+    // 3. User Explicitly Toggles Theme (Write to DB)
+    const toggleTheme = async () => {
+        const newMode = !isDarkMode;
+        setIsDarkMode(newMode);
+        
+        // Persist to Firestore if logged in
+        const user = auth.currentUser;
+        if (user) {
+            try {
+                const docRef = doc(db, "users", user.uid);
+                await setDoc(docRef, { theme: newMode ? 'dark' : 'light' }, { merge: true });
+            } catch (error) {
+                 console.warn("Failed to save theme preference (likely blocked):", error);
+            }
+        }
     };
 
     return (

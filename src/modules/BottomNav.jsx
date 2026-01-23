@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Icons 
@@ -44,12 +45,17 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
             { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
             { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+        'Central Office': [
+             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
+             { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
+             { label: 'Settings', path: '/profile', icon: FiSettings },
         ]
     };
 
     const currentNavItems = navConfigs[userRole] || navConfigs['Engineer'];
 
-    return (
+    return createPortal(
         <div style={styles.wrapper}>
             <div style={styles.navContainer}>
                 {currentNavItems.map((item) => {
@@ -69,6 +75,7 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
                             />
                             <span style={{
                                 ...styles.label,
+                                ...styles.label,
                                 color: isActive ? '#004A99' : '#B0B0B0'
                             }}>
                                 {item.label}
@@ -77,7 +84,8 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
                     );
                 })}
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

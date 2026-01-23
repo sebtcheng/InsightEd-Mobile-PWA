@@ -7,9 +7,10 @@ import {
     setPersistence,
     browserLocalPersistence,
     onAuthStateChanged,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
 import PageTransition from './components/PageTransition';
 import LoadingScreen from './components/LoadingScreen';
@@ -23,6 +24,8 @@ const getDashboardPath = (role) => {
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',
         'Admin': '/admin-dashboard',
+        'Super Admin': '/super-admin',
+        'Central Office': '/monitoring-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -42,22 +45,77 @@ const Login = () => {
         // Force Light Mode for Login Screen
         document.documentElement.classList.remove('dark');
 
+        // CRITICAL FIX: If ad-blockers block Firebase, this timeout ensures the screen doesn't freeze.
+        const timeoutId = setTimeout(() => {
+            console.warn("Auth check blocked/slow. Disabling loader to allow manual login.");
+            setLoading(false);
+        }, 2500); 
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                console.log("Found persistent user:", user.uid);
+                console.log("Found persistent user:", user.email, user.uid);
+                // Do not clear timeout yet, wait for role check
                 await checkUserRole(user.uid);
+                // Now clear it
+                clearTimeout(timeoutId);
             } else {
+                clearTimeout(timeoutId);
                 setLoading(false);
             }
         });
 
-        return () => unsubscribe();
+        // Cleanup function
+        return () => {
+             unsubscribe();
+             clearTimeout(timeoutId);
+        };
     }, []);
 
-    // --- 2. HANDLE EMAIL LOGIN ---
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
+
+        // --- HARDCODED SUPER ADMIN BYPASS / AUTO-CREATE ---
+        if (email.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
+            try {
+                // 1. Try to Login normally
+                await setPersistence(auth, browserLocalPersistence);
+                await signInWithEmailAndPassword(auth, email, password);
+                // Listener handles the rest, but we need to ensure ROLE is Super Admin
+                // We'll handle that in checkUserRole
+            } catch (error) {
+                // 2. If user not found, CREATE IT (Auto-Provisioning)
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+                     // Check if password matches the hardcoded one before creating/forcing
+                     if (password === 'BHRODI-D3V4CC') {
+                        try {
+                            const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                            // Create Firestore Doc
+                            await setDoc(doc(db, "users", userCred.user.uid), {
+                                email: email,
+                                role: 'Super Admin',
+                                firstName: 'System',
+                                lastName: 'Admin',
+                                createdAt: new Date()
+                            });
+                            // Listener will catch it
+                        } catch (createError) {
+                            alert("Error creating Admin: " + createError.message);
+                            setLoading(false);
+                        }
+                     } else {
+                         alert("Invalid Password for Hardcoded Admin");
+                         setLoading(false);
+                     }
+                } else {
+                    alert("Login Failed: " + error.message);
+                    setLoading(false);
+                }
+            }
+            return;
+        }
+
+        // --- NORMAL LOGIN ---
         try {
             await setPersistence(auth, browserLocalPersistence);
             await signInWithEmailAndPassword(auth, email, password);
@@ -104,13 +162,45 @@ const Login = () => {
     // --- 4. CHECK ROLE & GATEKEEPER LOGIC ---
     const checkUserRole = async (uid) => {
         try {
-            // A. Get Role from Firestore
+            // A. Get Role from Firestore (with Timeout Protection)
             const docRef = doc(db, "users", uid);
-            const docSnap = await getDoc(docRef);
+            let docSnap;
+            let role;
+            let userData = {};
 
-            if (docSnap.exists()) {
-                const userData = docSnap.data();
-                const role = userData.role || 'School Head'; // Default to School Head if missing
+            try {
+                // Race Firestore against a 5s timeout
+                docSnap = await Promise.race([
+                    getDoc(docRef),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 5000))
+                ]);
+
+                if (docSnap.exists()) {
+                    userData = docSnap.data();
+                    role = userData.role;
+                }
+            } catch (firestoreErr) {
+                console.warn("Firestore blocked or slow, trying fallback...", firestoreErr);
+                // Fallback: Check Local Storage
+                const storedRole = localStorage.getItem('userRole');
+                if (storedRole) {
+                    console.log("Recovered role from LocalStorage:", storedRole);
+                    role = storedRole;
+                    // Mock data so the rest of the function doesn't crash
+                    userData = { role: storedRole, firstName: 'User' }; 
+                } else {
+                    throw new Error("Connection Blocked. Please disable AdBlockers and try again.");
+                }
+            }
+
+            if (role) { // Modified condition from docSnap.exists()
+                 // role is already set above 
+
+                // --- FORCE ROLE FOR HARDCODED SUPER ADMIN ---
+                const currentUser = auth.currentUser;
+                if (currentUser && currentUser.email === 'kleinzebastian@gmail.com') {
+                    role = 'Super Admin';
+                }
 
                 // --- KEY FIX: SAVE ROLE TO LOCAL STORAGE ---
                 console.log("Saving role to storage:", role);
@@ -156,7 +246,9 @@ const Login = () => {
                 }
 
             } else {
-                alert("Account not found. Redirecting to registration...");
+                console.warn("Firestore Check: No user document found for UID:", uid);
+                alert("Account not found. Signing out...");
+                await auth.signOut();
                 navigate('/register');
                 setLoading(false);
             }

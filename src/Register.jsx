@@ -11,6 +11,7 @@ import PageTransition from './components/PageTransition';
 
 // 1. IMPORT YOUR OPTIMIZED JSON FILE
 import locationData from './locations.json';
+import Papa from 'papaparse';
 
 const getDashboardPath = (role) => {
     const roleMap = {
@@ -18,6 +19,10 @@ const getDashboardPath = (role) => {
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
+        'Central Office': '/monitoring-dashboard',
+        'Regional Office': '/monitoring-dashboard',
+        'School Division Office': '/monitoring-dashboard',
+        'Super User': '/super-admin', // Super User
     };
     return roleMap[role] || '/';
 };
@@ -25,6 +30,7 @@ const getDashboardPath = (role) => {
 const Register = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [focusedInput, setFocusedInput] = useState(null);
 
     // Form Data State
@@ -34,11 +40,17 @@ const Register = () => {
         schoolId: '', // New Field
         email: '',
         password: '',
+        confirmPassword: '', // Added missing field
         role: 'Engineer', // Default
+        bureau: '', // Central Office Only
         region: '',
         province: '',
         city: '',
+        province: '',
+        city: '',
         barangay: '',
+        office: '', // Regional Office Only
+        position: '', // Regional Office Only
     });
 
     const [showDuplicateModal, setShowDuplicateModal] = useState(false);
@@ -66,16 +78,36 @@ const Register = () => {
         return () => clearInterval(interval);
     }, [timer]);
 
+    // --- LOAD SCHOOL DATA FOR SDO ---
+    const [schoolData, setSchoolData] = useState([]);
+    useEffect(() => {
+        Papa.parse('/schools.csv', {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if(results.data && results.data.length > 0) {
+                     setSchoolData(results.data);
+                }
+            }
+        });
+    }, []);
+
     // --- OTP HANDLERS ---
     const handleSendOtp = async () => {
+        setIsSubmitting(true); // Set submitting state
         if (!formData.email) {
             alert("Please enter your email first.");
+            setIsSubmitting(false);
             return;
         }
-        if (formData.role === 'School Head' && !formData.schoolId) {
-            alert("Please enter a valid School ID first.");
+        if (formData.password !== formData.confirmPassword) {
+            alert("Passwords do not match!");
+            setIsSubmitting(false);
             return;
         }
+
+
 
         setOtpLoading(true);
         try {
@@ -99,6 +131,7 @@ const Register = () => {
             alert("Network error sending OTP");
         } finally {
             setOtpLoading(false);
+            setIsSubmitting(false); // Reset submitting state
         }
     };
 
@@ -246,7 +279,8 @@ const Register = () => {
                 schoolId: '',
                 email: '',
                 firstName: '',
-                lastName: ''
+                lastName: '',
+                secretKey: '', // Reset secret key when role changes
             });
             return;
         }
@@ -298,6 +332,10 @@ const Register = () => {
             province: formData.province || "",
             city: formData.city || "",
             barangay: formData.barangay || "",
+            barangay: formData.barangay || "",
+            bureau: formData.bureau || "",
+            office: formData.office || "",
+            position: formData.position || "",
             authProvider: isGoogle ? "google" : "email",
             createdAt: new Date()
         }, { merge: true });
@@ -343,10 +381,13 @@ const Register = () => {
                                     >
                                         <option value="Engineer">Engineer</option>
                                         <option value="School Head">School Head</option>
-                                        <option value="Human Resource">Human Resource</option>
+                                        <option value="Admin">Admin</option>
+                                        {/* <option value="Central Office">Central Office</option> */}
+                                        {/* <option value="Super User">Super User</option> */}
                                         <option value="Regional Office">Regional Office</option>
                                         <option value="School Division Office">School Division Office</option>
-                                        <option value="Admin">Admin</option>
+                                        {/* <option value="Admin">Admin</option> */}
+
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
                                         <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
@@ -354,20 +395,9 @@ const Register = () => {
                                 </div>
                             </div>
 
-                            {/* CONDITIONAL: DIVISION NAME */}
-                            {formData.role === 'School Division Office' && (
-                                <div className="bg-white/50 rounded-2xl p-4 border border-slate-100 animate-in fade-in slide-in-from-top-2">
-                                    <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Division Details</label>
-                                    <input
-                                        name="division"
-                                        placeholder="Enter Division (e.g. Cebu City)"
-                                        value={formData.division || ''}
-                                        onChange={handleChange}
-                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder-slate-400"
-                                        required
-                                    />
-                                </div>
-                            )}
+
+
+                            {/* CONDITIONAL: DIVISION NAME (REMOVED - NOW CASCADING) */}
 
                             {/* SECTION 1: PERSONAL / DETAILS */}
                             <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
@@ -394,42 +424,115 @@ const Register = () => {
                                             <input name="lastName" value={formData.lastName} placeholder="Last Name" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
                                         </>
                                     )}
+                                    
+                                    {/* CENTRAL OFFICE SPECIFIC FIELDS */}
+                                    {formData.role === 'Central Office' && (
+                                        <>
+                                            <input 
+                                                name="bureau" 
+                                                value={formData.bureau} 
+                                                placeholder="Bureau (e.g. BLD, BCD)" 
+                                                onChange={handleChange} 
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+                                                required 
+                                            />
+                                            <input 
+                                                name="division" 
+                                                value={formData.division} 
+                                                placeholder="Division / Unit" 
+                                                onChange={handleChange} 
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+                                                required 
+                                            />
+                                        </>
+                                    )}
+
+                                    {/* REGIONAL OFFICE & SDO SPECIFIC FIELDS */}
+                                    {['Regional Office', 'School Division Office'].includes(formData.role) && (
+                                        <>
+                                            <input 
+                                                name="office" 
+                                                value={formData.office} 
+                                                placeholder="Office (Do not abbreviate)" 
+                                                onChange={handleChange} 
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+                                                required 
+                                            />
+                                            <input 
+                                                name="position" 
+                                                value={formData.position} 
+                                                placeholder="Position (Do not abbreviate)" 
+                                                onChange={handleChange} 
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" 
+                                                required 
+                                            />
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* SECTION 2: LOCATION */}
-                            <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
-                                <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">2. Location Assignment</label>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required>
-                                        <option value="">Select Region</option>
-                                        {Object.keys(locationData).sort().map((reg) => (
-                                            <option key={reg} value={reg}>{reg}</option>
-                                        ))}
-                                    </select>
+                            {/* SECTION 2: LOCATION - HIDDEN FOR CENTRAL OFFICE */}
+                            {formData.role !== 'Central Office' && (
+                                <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
+                                    <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">2. Location Assignment</label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <select name="region" onChange={handleRegionChange} value={formData.region} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required>
+                                            <option value="">Select Region</option>
+                                            {Object.keys(locationData).sort().map((reg) => (
+                                                <option key={reg} value={reg}>{reg}</option>
+                                            ))}
+                                        </select>
 
-                                    <select name="province" onChange={handleProvinceChange} value={formData.province} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.region} required>
-                                        <option value="">Select Province</option>
-                                        {provinceOptions.map((prov) => (
-                                            <option key={prov} value={prov}>{prov}</option>
-                                        ))}
-                                    </select>
+                                        {/* SDO DIVISION DROPDOWN */}
+                                        {formData.role === 'School Division Office' && (
+                                            <select 
+                                                name="division" 
+                                                onChange={handleChange} 
+                                                value={formData.division} 
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" 
+                                                disabled={!formData.region} 
+                                                required
+                                            >
+                                                <option value="">Select Division</option>
+                                                {[...new Set(schoolData
+                                                    .filter(s => s.region === formData.region)
+                                                    .map(s => s.division))]
+                                                    .sort()
+                                                    .map(div => (
+                                                        <option key={div} value={div}>{div}</option>
+                                                    ))
+                                                }
+                                            </select>
+                                        )}
 
-                                    <select name="city" onChange={handleCityChange} value={formData.city} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.province} required>
-                                        <option value="">Select City/Mun</option>
-                                        {cityOptions.map((city) => (
-                                            <option key={city} value={city}>{city}</option>
-                                        ))}
-                                    </select>
+                                        {/* HIDE FOR REGIONAL OFFICE AND SDO */}
+                                        {!['Regional Office', 'School Division Office'].includes(formData.role) && (
+                                            <>
+                                                <select name="province" onChange={handleProvinceChange} value={formData.province} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.region} required>
+                                                    <option value="">Select Province</option>
+                                                    {provinceOptions.map((prov) => (
+                                                        <option key={prov} value={prov}>{prov}</option>
+                                                    ))}
+                                                </select>
 
-                                    <select name="barangay" onChange={handleChange} value={formData.barangay} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.city} required>
-                                        <option value="">Select Barangay</option>
-                                        {barangayOptions.map((brgy) => (
-                                            <option key={brgy} value={brgy}>{brgy}</option>
-                                        ))}
-                                    </select>
+                                                <select name="city" onChange={handleCityChange} value={formData.city} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.province} required>
+                                                    <option value="">Select City/Mun</option>
+                                                    {cityOptions.map((city) => (
+                                                        <option key={city} value={city}>{city}</option>
+                                                    ))}
+                                                </select>
+
+                                                <select name="barangay" onChange={handleChange} value={formData.barangay} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50" disabled={!formData.city} required>
+                                                    <option value="">Select Barangay</option>
+                                                    {barangayOptions.map((brgy) => (
+                                                        <option key={brgy} value={brgy}>{brgy}</option>
+                                                    ))}
+                                                </select>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* SECTION 3: CREDENTIALS */}
                             <div className="bg-white/50 rounded-2xl p-4 border border-slate-100">
@@ -507,6 +610,7 @@ const Register = () => {
                                 </div>
 
                                 <input name="password" type="password" placeholder="Create Password" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" required />
+                                <input name="confirmPassword" type="password" placeholder="Confirm Password" onChange={handleChange} className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all mt-3" required />
                             </div>
 
                             <button

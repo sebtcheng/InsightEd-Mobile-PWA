@@ -6,7 +6,7 @@ import { LuClipboardList, LuCalendar, LuDollarSign, LuActivity } from "react-ico
 import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
 import { auth, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, query, collection, where, getDocs } from "firebase/firestore";
 import { addEngineerToOutbox } from "../db";
 import { compressImage } from "../utils/imageCompression";
 
@@ -22,12 +22,7 @@ const ProjectStatus = {
 // --- HELPERS ---
 const formatAllocation = (value) => {
   const num = Number(value) || 0;
-  if (num >= 1000000) {
-    return `₱${(num / 1000000).toFixed(1)}M`;
-  } else if (num >= 1000) {
-    return `₱${(num / 1000).toFixed(1)}k`;
-  }
-  return `₱${num.toLocaleString()}`;
+  return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const formatDateShort = (dateString) => {
@@ -490,37 +485,71 @@ const EngineerProjects = () => {
     const fetchUserDataAndProjects = async () => {
       const user = auth.currentUser;
       if (user) {
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setUserName(docSnap.data().firstName);
-        }
-
+        // 1. Get User Name
         try {
-          setIsLoading(true);
-          const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
-          if (!response.ok) throw new Error("Failed to fetch projects");
-          const data = await response.json();
-
-          const mappedData = data.map((item) => ({
-            id: item.id,
-            projectName: item.projectName,
-            schoolName: item.schoolName,
-            schoolId: item.schoolId,
-            status: item.status,
-            accomplishmentPercentage: item.accomplishmentPercentage,
-            projectAllocation: item.projectAllocation,
-            targetCompletionDate: item.targetCompletionDate,
-            statusAsOfDate: item.statusAsOfDate,
-            otherRemarks: item.otherRemarks,
-            contractorName: item.contractorName,
-          }));
-          setProjects(mappedData);
-        } catch (err) {
-          console.error("Error loading projects:", err);
-        } finally {
-          setIsLoading(false);
+          const docRef = doc(db, "users", user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setUserName(docSnap.data().firstName);
+          }
+        } catch (e) {
+          console.error("Error fetching user profile:", e);
         }
+
+      try {
+        setIsLoading(true);
+        const userRole = localStorage.getItem('userRole');
+
+        if (userRole === 'Super Admin') {
+             // SUPER ADMIN: Firestore Query (ALL)
+             const q = query(collection(db, 'projects'));
+             const querySnapshot = await getDocs(q);
+             const mappedData = querySnapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data()
+             }));
+             
+             setProjects(mappedData.map(item => ({
+                id: item.id,
+                projectName: item.projectName || "Untitled",
+                schoolName: item.schoolName || "Unknown School",
+                schoolId: item.schoolId,
+                status: item.status,
+                accomplishmentPercentage: item.accomplishmentPercentage,
+                projectAllocation: item.projectAllocation,
+                targetCompletionDate: item.targetCompletionDate,
+                statusAsOfDate: item.statusAsOfDate,
+                otherRemarks: item.otherRemarks,
+                contractorName: item.contractorName,
+                uid: item.uid
+             })));
+
+        } else {
+            // ENGINEER: API Fetch
+            const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
+            if (!response.ok) throw new Error("Failed to fetch projects");
+            const data = await response.json();
+            
+            setProjects(data.map(item => ({
+                id: item.id,
+                projectName: item.projectName,
+                schoolName: item.schoolName,
+                schoolId: item.schoolId,
+                status: item.status,
+                accomplishmentPercentage: item.accomplishmentPercentage,
+                projectAllocation: item.projectAllocation,
+                targetCompletionDate: item.targetCompletionDate,
+                statusAsOfDate: item.statusAsOfDate,
+                otherRemarks: item.otherRemarks,
+                contractorName: item.contractorName,
+            })));
+        }
+
+      } catch (err) {
+        console.error("Error loading projects:", err);
+      } finally {
+        setIsLoading(false);
+      }
       }
     };
     fetchUserDataAndProjects();

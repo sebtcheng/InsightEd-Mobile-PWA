@@ -58,6 +58,8 @@ const SchoolProfile = () => {
     const goBack = () => {
         if (isDummy) {
             navigate(-1);
+        } else if (viewOnly) {
+            navigate('/jurisdiction-schools');
         } else {
             navigate('/school-forms');
         }
@@ -643,10 +645,10 @@ const SchoolProfile = () => {
                             <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
                                 <button
                                     type="button"
-                                    onClick={() => navigate(-1)}
+                                    onClick={() => navigate('/jurisdiction-schools')}
                                     className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
                                 >
-                                    ← Back
+                                    ← Back to School List
                                 </button>
                             </div>
                         )}

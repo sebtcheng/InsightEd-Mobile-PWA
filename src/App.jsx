@@ -20,6 +20,8 @@ import Activity from './modules/Activity';
 import ProjectGallery from './modules/ProjectGallery';
 import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
+import SuperAdminDashboard from './modules/SuperAdminDashboard';
+
 
 // Forms
 import SchoolForms from './modules/SchoolForms';
@@ -61,6 +63,8 @@ const AnimatedRoutes = () => {
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
         <Route path="/engineer-projects" element={<EngineerProjects />} />
+        <Route path="/super-admin" element={<SuperAdminDashboard />} />
+
         <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />

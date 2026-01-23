@@ -1,6 +1,6 @@
 // src/modules/SchoolHeadDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Autoplay } from "swiper/modules";
 import "swiper/css";
@@ -17,6 +17,7 @@ import { onAuthStateChanged } from "firebase/auth";
 
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
+import NotificationCenter from '../components/NotificationCenter';
 
 const SchoolHeadDashboard = () => {
     const navigate = useNavigate();
@@ -106,20 +107,34 @@ const SchoolHeadDashboard = () => {
         }));
     }, [schoolProfile]);
 
+    const [searchParams] = useSearchParams(); // Get query params
+    const impersonatedUid = searchParams.get('uid');
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 try {
                     const userDoc = await getDoc(doc(db, "users", user.uid));
-                    if (userDoc.exists()) setUserName(userDoc.data().firstName);
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        setUserName(userData.firstName);
 
-                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
-                    const profileJson = await profileRes.json();
-                    if (profileJson.exists) setSchoolProfile(profileJson.data);
+                        let targetUid = user.uid;
+                        // Impersonation Logic
+                        if (userData.role === 'Super User' && impersonatedUid) {
+                             targetUid = impersonatedUid;
+                             setUserName(`Super User (Viewing: ${targetUid.slice(0,5)}...)`); // Optional: indicate view mode
+                        }
 
-                    const headRes = await fetch(`/api/school-head/${user.uid}`);
-                    const headJson = await headRes.json();
-                    if (headJson.exists) setHeadProfile(headJson.data);
+                        const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
+                        const profileJson = await profileRes.json();
+                        if (profileJson.exists) setSchoolProfile(profileJson.data);
+
+                        const headRes = await fetch(`/api/school-head/${targetUid}`);
+                        const headJson = await headRes.json();
+                        if (headJson.exists) setHeadProfile(headJson.data);
+                    }
+
                 } catch (error) {
                     console.error("Dashboard Load Error:", error);
                 }
@@ -130,7 +145,7 @@ const SchoolHeadDashboard = () => {
             }
         });
         return () => unsubscribe();
-    }, []);
+    }, [impersonatedUid]); // Re-run if query param changes
 
     const { completedForms, totalForms } = stats;
     const progress = totalForms > 0 ? Math.round((completedForms / totalForms) * 100) : 0;
@@ -142,6 +157,16 @@ const SchoolHeadDashboard = () => {
 
                     {/* --- HEADER SECTION --- */}
                     <div className="relative bg-[#004A99] pt-14 pb-20 px-6 rounded-b-[3rem] shadow-2xl z-0 overflow-hidden">
+                        {impersonatedUid && (
+                             <div className="absolute top-6 right-6 z-50">
+                                <button 
+                                    onClick={() => navigate('/super-admin')}
+                                    className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white transition"
+                                >
+                                    ← Back to Hub
+                                </button>
+                            </div>
+                        )}
                         {/* Background Decorative Circles */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl"></div>
                         <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/10 rounded-full translate-y-1/2 -translate-x-1/4 blur-2xl"></div>
@@ -161,9 +186,12 @@ const SchoolHeadDashboard = () => {
                                     {schoolProfile ? schoolProfile.school_name : 'School Principal'}
                                 </p>
                             </div>
-                            <button onClick={() => navigate('/leaderboard')} className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-lg hover:bg-white/20 transition-all active:scale-95 group">
-                                <TbTrophy size={20} className="text-yellow-300 group-hover:scale-110 transition-transform" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <NotificationCenter />
+                                <button onClick={() => navigate('/leaderboard')} className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-lg hover:bg-white/20 transition-all active:scale-95 group">
+                                    <TbTrophy size={20} className="text-yellow-300 group-hover:scale-110 transition-transform" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Search Bar */}
@@ -306,14 +334,14 @@ const SchoolHeadDashboard = () => {
                         </div>
 
                         {/* 4. Recent Activity Timeline */}
-                        <div className="pb-4">
+                        {/* <div className="pb-4">
                             <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider mb-4 px-1">Recent History</h3>
                             <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 p-5">
                                 {schoolProfile?.history_logs && schoolProfile.history_logs.length > 0 ? (
                                     <div className="relative border-l-2 border-slate-100 dark:border-slate-700 ml-2 space-y-6 my-2">
                                         {[...schoolProfile.history_logs].reverse().slice(0, 5).map((log, idx) => (
                                             <div key={idx} className="relative pl-6">
-                                                {/* Timeline Dot */}
+                                                
                                                 <div className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white dark:bg-slate-800 border-4 border-blue-500"></div>
 
                                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start">
@@ -335,7 +363,7 @@ const SchoolHeadDashboard = () => {
                                     </div>
                                 )}
                             </div>
-                        </div>
+                        </div> */}
 
                     </div>
 

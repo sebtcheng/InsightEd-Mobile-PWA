@@ -14,7 +14,8 @@ const app = express();
 // --- MIDDLEWARE ---
 app.use(cors({
   origin: [
-    'http://localhost:5173',           // Vite Local
+    'http://localhost:5173',           // Vite Local Default
+    'http://localhost:5174',           // Vite Local Alternate
     'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
     'https://insight-ed-frontend.vercel.app'
   ],
@@ -30,11 +31,32 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-pool.connect((err, client, release) => {
+pool.connect(async (err, client, release) => {
   if (err) {
     console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
   } else {
     console.log('✅ Connected to Neon Database successfully!');
+
+    // --- INIT NOTIFICATIONS TABLE ---
+    try {
+      await client.query(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                recipient_uid TEXT NOT NULL,
+                sender_uid TEXT,
+                sender_name TEXT,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                type TEXT DEFAULT 'alert',
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+      console.log('✅ Notifications Table Initialized');
+    } catch (tableErr) {
+      console.error('❌ Failed to init notifications table:', tableErr.message);
+    }
+
     release();
   }
 });
@@ -1225,14 +1247,6 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
   try {
-    let whereClause = `WHERE TRIM(region) = TRIM($1)`;
-    let params = [region];
-
-    if (division) {
-      whereClause += ` AND TRIM(division) = TRIM($2)`;
-      params.push(division);
-    }
-
     const statsQuery = `
       SELECT 
         COUNT(*) as total_schools,
@@ -1243,10 +1257,25 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
         COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
         COUNT(CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 END) as specialization,
-        COUNT(CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN 1 END) as resources
+        COUNT(CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN 1 END) as resources,
+        SUM(CASE WHEN (
+           (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+        ) = 7 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
-      ${whereClause}
+      WHERE TRIM(region) = TRIM($1)
     `;
+    let params = [region];
+
+    if (division) {
+      statsQuery += ` AND TRIM(division) = TRIM($2)`;
+      params.push(division);
+    }
 
     const result = await pool.query(statsQuery, params);
     res.json(result.rows[0]);
@@ -1261,33 +1290,35 @@ app.get('/api/monitoring/schools', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
-      SELECT 
-        school_id, school_name, region, division, district,
-        (CASE WHEN school_name IS NOT NULL THEN true ELSE false END) as profile_status,
-        (CASE WHEN head_last_name IS NOT NULL THEN true ELSE false END) as head_status,
-        (CASE WHEN total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
-        (CASE WHEN classes_kinder IS NOT NULL THEN true ELSE false END) as classes_status,
-        (CASE WHEN shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
-        (CASE WHEN teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-        (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-        (CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN true ELSE false END) as resources_status
-      FROM school_profiles
-      WHERE TRIM(region) = TRIM($1)
-    `;
+    SELECT
+    sp.school_name,
+      sp.school_id,
+      sp.total_enrollment,
+      (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
+  (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
+    (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+      (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
+        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+          (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+            (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
+              (CASE WHEN sp.res_armchairs_good > 0 OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+                sp.submitted_by
+      FROM school_profiles sp
+      WHERE TRIM(sp.region) = TRIM($1)
+  `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(division) = TRIM($2) `;
+      query += ` AND TRIM(sp.division) = TRIM($2)`;
       params.push(division);
     }
 
-    query += ` ORDER BY school_name ASC `;
-
+    query += ` ORDER BY school_name ASC`;
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error("Jurisdiction Schools Error:", err);
-    res.status(500).json({ error: "Failed to fetch schools" });
+    res.status(500).json({ error: "Failed to fetch schools", details: err.message });
   }
 });
 
@@ -1296,18 +1327,18 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
-      SELECT 
-        COUNT(*) as total_projects,
-        AVG(accomplishment_percentage)::NUMERIC(10,2) as avg_progress,
-        COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed_count,
-        COUNT(CASE WHEN status = 'Ongoing' THEN 1 END) as ongoing_count
+SELECT
+COUNT(*) as total_projects,
+  AVG(accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
+    COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed_count,
+    COUNT(CASE WHEN status = 'Ongoing' THEN 1 END) as ongoing_count
       FROM engineer_form
       WHERE TRIM(region) = TRIM($1)
-    `;
+  `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(division) = TRIM($2) `;
+      query += ` AND TRIM(division) = TRIM($2)`;
       params.push(division);
     }
 
@@ -1324,21 +1355,21 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
-      SELECT 
-        project_id as id, project_name as "projectName", school_id as "schoolId", school_name as "schoolName", 
-        accomplishment_percentage as "accomplishmentPercentage", status, 
-        validation_status as "validation_status", status_as_of as "statusAsOfDate"
+SELECT
+project_id as id, project_name as "projectName", school_id as "schoolId", school_name as "schoolName",
+  accomplishment_percentage as "accomplishmentPercentage", status,
+  validation_status as "validation_status", status_as_of as "statusAsOfDate"
       FROM engineer_form
       WHERE TRIM(region) = TRIM($1)
-    `;
+  `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(division) = TRIM($2) `;
+      query += ` AND TRIM(division) = TRIM($2)`;
       params.push(division);
     }
 
-    query += ` ORDER BY created_at DESC `;
+    query += ` ORDER BY created_at DESC`;
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -1365,8 +1396,8 @@ app.get('/api/monitoring/school-projects/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const query = `
-      SELECT * FROM engineer_form WHERE school_id = $1 ORDER BY created_at DESC
-    `;
+SELECT * FROM engineer_form WHERE school_id = $1 ORDER BY created_at DESC
+  `;
     const result = await pool.query(query, [schoolId]);
     res.json(result.rows);
   } catch (err) {
@@ -1390,25 +1421,25 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 
     const query = `
-            SELECT 
-                school_id, school_name, division, region,
-                
-                -- Calculate Completion Percentage (Simple Weighting)
-                (
-                    (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + -- Basic Profile
-                    (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) +    -- Enrollment
-                    (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + -- School Head
-                    (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + -- Resources (Basic Check)
-                    (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + -- Classes
-                    (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + -- Personnel
-                    (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END) -- Specialization
+SELECT
+school_id, school_name, division, region,
+
+  --Calculate Completion Percentage(Simple Weighting)
+    (
+      (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + --Basic Profile
+        (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + --Enrollment
+          (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + --School Head
+            (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + --Resources(Basic Check)
+              (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Classes
+                (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
+                  (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END) --Specialization
                 ) * 100.0 / 7.0 as completion_rate,
 
-                updated_at
+  updated_at
             FROM school_profiles
             ${whereClause}
             ORDER BY completion_rate DESC, updated_at DESC
-        `;
+  `;
 
     const result = await pool.query(query, params);
 
@@ -1435,16 +1466,123 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
+// --- 30b. GET: Aggregated Regional Stats (For Central Office) ---
+app.get('/api/monitoring/regions', async (req, res) => {
+  try {
+    const query = `
+      WITH school_stats AS (
+        SELECT 
+          region,
+          COUNT(*) as total_schools,
+          COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as with_enrollment,
+          COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as with_head
+        FROM school_profiles
+        GROUP BY region
+      ),
+      project_stats AS (
+        SELECT 
+          region,
+          COUNT(*) as total_projects,
+          AVG(accomplishment_percentage) as avg_accomplishment
+        FROM engineer_form
+        GROUP BY region
+      )
+      SELECT 
+        s.region,
+        COALESCE(s.total_schools, 0) as total_schools,
+        COALESCE(s.with_enrollment, 0) as with_enrollment,
+        COALESCE(s.with_head, 0) as with_head,
+        COALESCE(p.total_projects, 0) as total_projects,
+        COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment
+      FROM school_stats s
+      FULL OUTER JOIN project_stats p ON s.region = p.region
+      WHERE s.region IS NOT NULL OR p.region IS NOT NULL
+      ORDER BY s.region ASC;
+    `;
+
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Regional Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch regional stats" });
+  }
+});
+
+// ==================================================================
+//                    NOTIFICATION ROUTES
+// ==================================================================
+
+// --- 31. POST: Send Notification ---
+app.post('/api/notifications/send', async (req, res) => {
+  const { recipientUid, senderUid, senderName, title, message, type } = req.body;
+  try {
+    const query = `
+            INSERT INTO notifications(recipient_uid, sender_uid, sender_name, title, message, type)
+VALUES($1, $2, $3, $4, $5, $6)
+RETURNING *;
+`;
+    const result = await pool.query(query, [recipientUid, senderUid, senderName, title, message, type || 'alert']);
+
+    // Log it
+    await logActivity(senderUid, senderName, 'System', 'ALERT', `User: ${recipientUid} `, `Sent alert: ${title} `);
+
+    res.json({ success: true, notification: result.rows[0] });
+  } catch (err) {
+    console.error("Send Notification Error:", err);
+    res.status(500).json({ error: "Failed to send notification" });
+  }
+});
+
+// --- 32. GET: Get Notifications for User ---
+app.get('/api/notifications/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const query = `
+SELECT * FROM notifications 
+            WHERE recipient_uid = $1 
+            ORDER BY created_at DESC 
+            LIMIT 50;
+`;
+    const result = await pool.query(query, [uid]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Notifications Error:", err);
+    res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+});
+
+// --- 33. PUT: Mark Notification as Read ---
+app.put('/api/notifications/:id/read', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('UPDATE notifications SET is_read = TRUE WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Mark Read Error:", err);
+    res.status(500).json({ error: "Failed to update notification" });
+  }
+});
+
 // ==================================================================
 //                        SERVER STARTUP
 // ==================================================================
 
 // 1. FOR LOCAL DEVELOPMENT (runs when you type 'node api/index.js')
 import { fileURLToPath } from 'url';
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+import path from 'path';
+
+// Robust path comparison for Windows
+const currentFile = fileURLToPath(import.meta.url);
+const executedFile = process.argv[1];
+
+console.log("Startup Check:");
+console.log("  Executed:", executedFile);
+console.log("  Current: ", currentFile);
+
+if (executedFile && path.resolve(executedFile) === path.resolve(currentFile)) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
-    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT}`);
+    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
     console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
     console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
   });

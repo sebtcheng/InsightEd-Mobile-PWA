@@ -1,17 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiSearch, FiChevronRight, FiMapPin, FiBarChart2, FiHardDrive, FiFileText, FiTrendingUp, FiCheckCircle, FiClock } from 'react-icons/fi';
+import { FiSearch, FiChevronRight, FiMapPin, FiBarChart2, FiHardDrive, FiFileText, FiTrendingUp, FiCheckCircle, FiClock, FiBell } from 'react-icons/fi';
 
 const SchoolJurisdictionList = () => {
     const navigate = useNavigate();
+    // NEW: Use Search Params for CO Drill-down
+    const [searchParams] = useSearchParams(); 
+    
     const [userData, setUserData] = useState(null);
     const [schools, setSchools] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+
+    // Determine effective filters
+    const filterRegion = searchParams.get('region');
+    const filterDivision = searchParams.get('division');
 
     useEffect(() => {
         const fetchSchools = async () => {
@@ -26,13 +33,20 @@ const SchoolJurisdictionList = () => {
                 setUserData(data);
 
                 try {
+                    // Logic: Use URL params if present (CO drill-down), otherwise use User Data (RO/SDO)
+                    const regionToUse = filterRegion || data.region;
+                    const divisionToUse = filterDivision || data.division;
+
                     const params = new URLSearchParams({
-                        region: data.region,
-                        ...(data.division && { division: data.division })
+                        region: regionToUse,
+                        ...(divisionToUse && { division: divisionToUse })
                     });
 
-                    const res = await fetch(`/api/monitoring/schools?${params.toString()}`);
-                    if (res.ok) setSchools(await res.json());
+                    // If we have a region (either from URL or User), fetch schools
+                    if (regionToUse) {
+                        const res = await fetch(`/api/monitoring/schools?${params.toString()}`);
+                        if (res.ok) setSchools(await res.json());
+                    }
                 } catch (err) {
                     console.error("Fetch Schools Error:", err);
                 }
@@ -41,12 +55,75 @@ const SchoolJurisdictionList = () => {
         };
 
         fetchSchools();
-    }, []);
+    }, [filterRegion, filterDivision]);
 
     const filteredSchools = schools.filter(s => 
         s.school_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
         s.school_id?.includes(searchQuery)
     );
+
+    const handleAlert = async (school) => {
+        // Identify missing forms
+        const missing = [];
+        if (!school.profile_status) missing.push("School Profile");
+        if (!school.head_status) missing.push("School Head Info");
+        if (!school.enrollment_status) missing.push("Enrolment");
+        
+        if (missing.length === 0) {
+             // If these basic ones are done, check others or just say generic update needed
+             if (!school.classes_status) missing.push("Organized Classes");
+             if (!school.personnel_status) missing.push("Personnel");
+        }
+
+        if (missing.length === 0) return alert("This school seems to have completed the core forms!");
+
+        const message = `Action Required: Please complete the following forms: ${missing.join(', ')}.`;
+
+        const confirmSend = window.confirm(`Send alert to ${school.school_name}?\n\nMessage: "${message}"`);
+        if (!confirmSend) return;
+
+        // We need the recipient UID. 
+        // Current /api/monitoring/schools might not return submitted_by UID.
+        // We will TRY to use 'submitted_by' if we add it to the backend or use a separate lookup.
+        // FOR NOW: Let's assume we need to Fetch user by school_id or similar.
+        // Actually, the implementation plan said: "Update endpoint to join with users".
+        // Use the school.school_id to find the user? Or relying on 'submitted_by' in the school object?
+        // Let's check the backend query in api/index.js for /api/monitoring/schools...
+        // It selects * from school_profiles if I recall? No, it selects specific columns.
+        // I should have updated the backend GET schools to include 'submitted_by' (the user UID).
+        
+        // AUTO-FIX: I will update this frontend to use `school.submitted_by` assuming I update the backend to return it.
+        // If 'submitted_by' is missing, we can't send.
+        
+        if (!school.submitted_by) {
+            alert("Cannot alert: No registered user found for this school (submitted_by is missing).");
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/notifications/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    recipientUid: school.submitted_by,
+                    senderUid: auth.currentUser.uid,
+                    senderName: `${userData.firstName} (${userData.role})`,
+                    title: "Incomplete Forms Alert",
+                    message: message,
+                    type: "alert"
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert("Alert sent successfully!");
+            } else {
+                alert("Failed to send alert.");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error sending alert.");
+        }
+    };
 
     const StatusBadge = ({ active, label }) => (
         <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
@@ -65,12 +142,18 @@ const SchoolJurisdictionList = () => {
             <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 font-sans">
                 {/* Header */}
                 <div className="bg-[#004A99] p-6 pt-12 rounded-b-[2rem] shadow-lg text-white mb-6">
-                    <button onClick={() => navigate(-1)} className="mb-4 flex items-center gap-2 text-sm text-blue-100 hover:text-white">← Back</button>
+
                     <div className="flex justify-between items-end">
                         <div>
                             <h1 className="text-2xl font-black tracking-tight">Schools List</h1>
                             <p className="text-blue-200/70 text-xs mt-0.5">
-                                {userData?.role === 'Regional Office' ? `Regional Monitoring: Region ${userData?.region}` : `Division Monitoring: ${userData?.division}`}
+                                {userData?.role === 'Central Office' ? (
+                                    // CO View
+                                    `Monitoring: ${filterDivision ? `${filterDivision}` : (filterRegion ? `${filterRegion}` : 'All Regions')}`
+                                ) : (
+                                    // RO/SDO View
+                                    userData?.role === 'Regional Office' ? `Regional Monitoring: Region ${userData?.region}` : `Division Monitoring: ${userData?.division}`
+                                )}
                             </p>
                         </div>
                         <div className="text-right">
@@ -192,6 +275,18 @@ const SchoolJurisdictionList = () => {
                                         >
                                             <FiHardDrive /> Infrastructure Monitoring
                                         </button>
+                                        
+                                        {/* ALERT BUTTON - Only show if something is missing */}
+                                        {/* DISABLED PER USER REQUEST
+                                        {(!school.profile_status || !school.enrollment_status || !school.head_status) && (
+                                            <button 
+                                                onClick={() => handleAlert(school)}
+                                                className="col-span-4 mt-1 flex items-center justify-center gap-2 py-3 bg-white border-2 border-red-100 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-colors"
+                                            >
+                                                <FiBell /> Send Alert Notification
+                                            </button>
+                                        )}
+                                        */}
                                     </div>
                                 </div>
                             </div>
