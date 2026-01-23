@@ -24,6 +24,7 @@ const OrganizedClasses = () => {
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
+    const isDummy = location.state?.isDummy || false;
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -63,7 +64,13 @@ const OrganizedClasses = () => {
     });
     const [originalData, setOriginalData] = useState(null);
 
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate(-1);
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- FETCH DATA ---
     useEffect(() => {

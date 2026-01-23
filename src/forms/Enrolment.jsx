@@ -18,54 +18,16 @@ const Enrolment = () => {
 
     const queryParams = new URLSearchParams(window.location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
-    const monitorSchoolId = queryParams.get('schoolId');
+    const location = useLocation();
+    const isDummy = location.state?.isDummy || false;
 
-    // UI States
-    const [isLocked, setIsLocked] = useState(false);
-    const [lastUpdated, setLastUpdated] = useState(null);
-
-    // School Identity & Settings
-    const [schoolId, setSchoolId] = useState('');
-    const [curricularOffering, setCurricularOffering] = useState('');
-
-    // Modals
-    const [showSaveModal, setShowSaveModal] = useState(false);
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [showOfflineModal, setShowOfflineModal] = useState(false);
-    const [showSuccessModal, setShowSuccessModal] = useState(false); // NEW // NEW
-    const [editAgreement, setEditAgreement] = useState(false);
-    const [isOffline, setIsOffline] = useState(!navigator.onLine); // NEW: Offline State
-
-    // BASIC GRADES (Kinder - G10)
-    const [basicGrades, setBasicGrades] = useState({
-        gradeKinder: 0, grade1: 0, grade2: 0, grade3: 0,
-        grade4: 0, grade5: 0, grade6: 0,
-        grade7: 0, grade8: 0, grade9: 0, grade10: 0
-    });
-
-    // SHS STRANDS (G11 - G12)
-    const [shsStrands, setShsStrands] = useState({
-        abm11: 0, abm12: 0, stem11: 0, stem12: 0,
-        humss11: 0, humss12: 0, gas11: 0, gas12: 0,
-        ict11: 0, ict12: 0, he11: 0, he12: 0,
-        ia11: 0, ia12: 0, afa11: 0, afa12: 0,
-        arts11: 0, arts12: 0, sports11: 0, sports12: 0
-    });
-
-
-
-    // ARAL ENROLLEES (Grades 1-6)
-    const [aralData, setAralData] = useState({
-        aral_math_g1: 0, aral_read_g1: 0, aral_sci_g1: 0,
-        aral_math_g2: 0, aral_read_g2: 0, aral_sci_g2: 0,
-        aral_math_g3: 0, aral_read_g3: 0, aral_sci_g3: 0,
-        aral_math_g4: 0, aral_read_g4: 0, aral_sci_g4: 0,
-        aral_math_g5: 0, aral_read_g5: 0, aral_sci_g5: 0,
-        aral_math_g6: 0, aral_read_g6: 0, aral_sci_g6: 0
-    });
-
-    const [originalData, setOriginalData] = useState(null);
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate(-1);
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- CALCULATIONS ---
     const getG11Total = () => {

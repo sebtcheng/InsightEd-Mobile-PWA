@@ -3,10 +3,28 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { TbChevronLeft, TbSchool, TbUsers, TbBooks, TbActivity, TbHammer, TbClipboardList, TbBuildingSkyscraper, TbReportAnalytics, TbMapSearch } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck } from "react-icons/lu";
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import BottomNav from './BottomNav';
 
 const DummyDashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const [userData, setUserData] = React.useState(null);
+
+    React.useEffect(() => {
+        const fetchUser = async () => {
+            const user = auth.currentUser;
+            if (user) {
+                const docRef = doc(db, "users", user.uid);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    setUserData(docSnap.data());
+                }
+            }
+        };
+        fetchUser();
+    }, []);
     
     // Default to 'school' if no type is passed
     const formType = location.state?.type || 'school'; 
@@ -17,7 +35,7 @@ const DummyDashboard = () => {
         { name: "Enrollment per Grade Level", route: "/enrolment", icon: TbUsers, color: "bg-orange-100 text-orange-600" },
         { name: "Organized Classes", route: "/organized-classes", icon: LuLayoutDashboard, color: "bg-purple-100 text-purple-600" },
         { name: "Teaching Personnel", route: "/teaching-personnel", icon: TbUsers, color: "bg-pink-100 text-pink-600" },
-        { name: "Shifting & Modality", route: "/shifting-modality", icon: TbActivity, color: "bg-amber-100 text-amber-600" },
+        { name: "Shifting & Modality", route: "/shifting-modalities", icon: TbActivity, color: "bg-amber-100 text-amber-600" },
         { name: "School Resources", route: "/school-resources", icon: TbBooks, color: "bg-emerald-100 text-emerald-600" },
         { name: "Teacher Specialization", route: "/teacher-specialization", icon: TbUsers, color: "bg-cyan-100 text-cyan-600" },
     ];
@@ -40,19 +58,12 @@ const DummyDashboard = () => {
 
     return (
         <PageTransition>
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-10">
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24">
                 {/* Header */}
                 <div className="bg-[#004A99] pt-14 pb-12 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-8 opacity-10">
                         <ICON size={120} className="text-white" />
                     </div>
-
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="absolute top-6 left-6 p-2 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all"
-                    >
-                        <TbChevronLeft size={24} />
-                    </button>
 
                     <h1 className="text-2xl font-bold text-white mb-2 mt-4 relative z-10">{TITLE}</h1>
                     <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20">
@@ -99,6 +110,8 @@ const DummyDashboard = () => {
                         ))}
                     </div>
                 </div>
+
+                <BottomNav userRole={userData?.role} />
             </div>
         </PageTransition>
     );

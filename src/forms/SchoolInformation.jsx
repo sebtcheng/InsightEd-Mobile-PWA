@@ -55,7 +55,13 @@ const SchoolInformation = () => {
         "Public School District Supervisor"
     ];
 
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate(-1);
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- 1. CSV LOOKUP LOGIC ---
     // This function matches PSI_CD from Oct2025-GMIS-Filled RAW.csv

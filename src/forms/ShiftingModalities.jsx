@@ -87,8 +87,15 @@ const ShiftingModalities = () => {
         adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false, adm_others: ''
     });
 
+    const isDummy = location.state?.isDummy || false;
     const [originalData, setOriginalData] = useState(null);
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate(-1);
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- FETCH DATA (With Offline Offering Recovery) ---
     useEffect(() => {

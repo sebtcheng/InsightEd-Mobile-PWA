@@ -68,9 +68,16 @@ const TeachingPersonnel = () => {
         teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
         teach_exp_40_45: 0,
     });
+    const isDummy = location.state?.isDummy || false;
     const [originalData, setOriginalData] = useState(null);
 
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate(-1);
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- FETCH DATA ---
     useEffect(() => {

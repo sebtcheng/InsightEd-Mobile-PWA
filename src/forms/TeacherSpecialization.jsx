@@ -83,9 +83,16 @@ const TeacherSpecialization = () => {
 
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState(getInitialFields());
+    const isDummy = location.state?.isDummy || false;
     const [originalData, setOriginalData] = useState(null);
 
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate(-1);
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
