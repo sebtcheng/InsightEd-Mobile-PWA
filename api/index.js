@@ -2,6 +2,8 @@ import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -55,7 +57,7 @@ const initOtpTable = async () => {
   }
 };
 
-pool.connect((err, client, release) => {
+pool.connect(async (err, client, release) => {
   if (err) {
     console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
@@ -1718,6 +1720,8 @@ app.put('/api/notifications/:id/read', async (req, res) => {
   } catch (err) {
     console.error("Mark Read Error:", err);
     res.status(500).json({ error: "Failed to update notification" });
+  }
+});
 // --- 24. GET: Fetch Learner Statistics (Enhanced) ---
 app.get('/api/learner-statistics/:uid', async (req, res) => {
   const { uid } = req.params;
@@ -1845,8 +1849,7 @@ app.post('/api/save-learner-statistics', async (req, res) => {
 // ==================================================================
 
 // 1. FOR LOCAL DEVELOPMENT (runs when you type 'node api/index.js')
-import { fileURLToPath } from 'url';
-import path from 'path';
+
 
 // Robust path comparison for Windows
 const currentFile = fileURLToPath(import.meta.url);
