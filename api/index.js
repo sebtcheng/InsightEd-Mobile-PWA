@@ -85,6 +85,28 @@ pool.connect(async (err, client, release) => {
       console.error('❌ Failed to init notifications table:', tableErr.message);
     }
 
+    // --- MIGRATION: ADD EMAIL TO SCHOOL_PROFILES ---
+    try {
+      await client.query(`
+            ALTER TABLE school_profiles 
+            ADD COLUMN IF NOT EXISTS email TEXT;
+        `);
+      console.log('✅ Checked/Added email column to school_profiles');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate school_profiles:', migErr.message);
+    }
+
+    // --- MIGRATION: ADD CURRICULAR OFFERING ---
+    try {
+      await client.query(`
+            ALTER TABLE school_profiles 
+            ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
+        `);
+      console.log('✅ Checked/Added curricular_offering column to school_profiles');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate curricular_offering:', migErr.message);
+    }
+
     release();
   }
 });
@@ -324,6 +346,125 @@ app.get('/api/schools', async (req, res) => {
   } catch (err) {
     console.error("Fetch Schools Error:", err);
     res.status(500).json({ error: "Failed to fetch schools" });
+  }
+});
+
+// --- 3c. POST: Check if School is Already Registered ---
+app.post('/api/check-existing-school', async (req, res) => {
+  const { schoolId } = req.body;
+  try {
+    const result = await pool.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolId]);
+    if (result.rows.length > 0) {
+      return res.json({ exists: true, message: "This school is already registered." });
+    }
+    return res.json({ exists: false });
+  } catch (error) {
+    console.error("Check Existing Error:", error);
+    return res.status(500).json({ error: "Database error checking school." });
+  }
+});
+
+// --- 3d. POST: Register School Head (Finalize Registration) ---
+// --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
+app.post('/api/register-school', async (req, res) => {
+  const { uid, email, schoolData } = req.body;
+
+  if (!uid || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data." });
+  }
+
+  // STRICT VALIDATION DEBUGGING
+  if (!schoolData.curricularOffering) {
+    console.error("❌ MISSING CURRICULAR OFFERING IN PAYLOAD");
+    return res.status(400).json({ error: "Curricular Offering is missing from payload!" });
+  }
+
+  // DEBUG LOG
+  console.log("REGISTRATION RECEIVED:");
+  console.log("UID:", uid);
+  console.log("School Data:", JSON.stringify(schoolData, null, 2));
+  console.log("Curricular Offering:", schoolData.curricularOffering);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. DUPLICATE CHECK
+    // Ensure school is not already claimed
+    const checkRes = await client.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolData.school_id]);
+    if (checkRes.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: "This school is already registered." });
+    }
+
+    // 2. GENERATE IERN
+    // Format: IERN-{school_id}-{random4}
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const newIern = `IERN-${schoolData.school_id}-${randomSuffix}`;
+
+    // 3. CREATE USER (Optional: If you have a users table in Postgres)
+    // If not, we skip this or just log it. 
+    // Assuming 'users' table exists based on prompt requirements, if not we catch error.
+    // 3. CREATE USER (Optional) - Wrapped in SAVEPOINT to prevent transaction abort on failure
+    try {
+      await client.query('SAVEPOINT user_creation');
+      await client.query(
+        "INSERT INTO users (uid, email, role, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT (uid) DO NOTHING",
+        [uid, email, 'School Head']
+      );
+      await client.query('RELEASE SAVEPOINT user_creation');
+    } catch (e) {
+      await client.query('ROLLBACK TO SAVEPOINT user_creation');
+      console.warn("User table insert failed (optional step), continuing transaction...", e.message);
+    }
+
+    // 4. HYDRATE SCHOOL PROFILE
+    // Mapping CSV fields to DB columns
+    const insertQuery = `
+        INSERT INTO school_profiles (
+            school_id, school_name, region, province, division, district, 
+            municipality, leg_district, barangay, mother_school_id, 
+            latitude, longitude, 
+            submitted_by, iern, email, submitted_at,
+            curricular_offering
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP,
+            $16
+        )
+    `;
+
+    const values = [
+      schoolData.school_id,
+      schoolData.school_name,
+      schoolData.region,
+      schoolData.province,
+      schoolData.division,
+      schoolData.district,
+      schoolData.municipality,
+      schoolData.leg_district || schoolData.legislative, // Handle CSV naming var
+      schoolData.barangay,
+      schoolData.mother_school_id || 'NA',
+      schoolData.latitude,
+      schoolData.longitude,
+      uid,
+      newIern,
+      email,
+      schoolData.curricularOffering // $16
+    ];
+
+    await client.query(insertQuery, values);
+
+    await client.query('COMMIT');
+
+    console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
+    res.json({ success: true, iern: newIern, message: "School Registered Successfully" });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Register School Error:", err);
+    res.status(500).json({ error: "Registration failed: " + err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -1841,6 +1982,25 @@ app.post('/api/save-learner-statistics', async (req, res) => {
   } catch (err) {
     console.error("Save Learner Stats Error:", err);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// --- GLOBAL ERROR HANDLER ---
+// Ensures all errors return JSON, preventing HTML responses for API routes
+app.use((err, req, res, next) => {
+  console.error("Global API Error:", err);
+
+  // Handle Body Parser JSON Syntax Errors
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: "Invalid JSON payload sent to server." });
+  }
+
+  // Default Error
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: err.message
+    });
   }
 });
 

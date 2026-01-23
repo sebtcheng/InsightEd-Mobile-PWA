@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -42,7 +42,9 @@ function DraggableMarker({ position, setPosition, onLocationSelect, disabled }) 
             eventHandlers={disabled ? {} : eventHandlers}
             position={position}
             ref={markerRef}
-        />
+        >
+            <Popup>School Location</Popup>
+        </Marker>
     );
 }
 
@@ -77,7 +79,7 @@ function RecenterAutomatically({ position }) {
     return null;
 }
 
-const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = false }) => {
+const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = false, userLocation = null }) => {
     // Initial position state
     const [position, setPosition] = useState(PHILIPPINES_CENTER);
 
@@ -108,13 +110,31 @@ const LocationPickerMap = ({ latitude, longitude, onLocationSelect, disabled = f
                 {/* Auto Zoom */}
                 <RecenterAutomatically position={position} />
 
-                {/* Marker */}
+                {/* School Marker */}
                 <DraggableMarker
                     position={position}
                     setPosition={setPosition}
                     onLocationSelect={onLocationSelect}
                     disabled={disabled}
                 />
+
+                {/* User Location Marker & Geofence Visual (Read-Only) */}
+                {userLocation && (
+                    <>
+                        <Marker position={[userLocation.lat, userLocation.lng]} opacity={0.7}>
+                            <Popup>You are Here</Popup>
+                        </Marker>
+                        {/* Draw a line connecting them? Optional. For now just circle around user or school? 
+                            The requirement is "copy the map". Register had school geofence. 
+                            Let's add the 200m circle around the SCHOOL to show the zone.
+                        */}
+                        <Circle
+                            center={position}
+                            radius={200} // standard geofence
+                            pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }}
+                        />
+                    </>
+                )}
             </MapContainer>
 
             {disabled && (
