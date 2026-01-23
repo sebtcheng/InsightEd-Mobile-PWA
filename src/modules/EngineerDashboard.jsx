@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from 'react-router-dom';
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Pagination, Autoplay } from "swiper/modules";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -8,6 +9,7 @@ import "swiper/css/pagination";
 // Components
 import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
+import CalendarWidget from "../components/CalendarWidget";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 
@@ -23,17 +25,12 @@ const ProjectStatus = {
 // --- HELPERS ---
 const formatAllocation = (value) => {
   const num = Number(value) || 0;
-  if (num >= 1000000) {
-    return `₱${(num / 1000000).toFixed(1)}M`;
-  } else if (num >= 1000) {
-    return `₱${(num / 1000).toFixed(1)}k`;
-  }
-  return `₱${num.toLocaleString()}`;
+  return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 // --- SUB-COMPONENTS ---
 
-const DashboardStats = ({ projects }) => {
+const StatsOverview = ({ projects }) => {
   const now = new Date();
 
   const isProjectDelayed = (p) => {
@@ -57,19 +54,7 @@ const DashboardStats = ({ projects }) => {
     ),
   };
 
-  const data = [
-    { name: "Completed", value: stats.completed, color: "#10B981" },
-    { name: "Ongoing", value: stats.ongoing, color: "#3B82F6" }, 
-    { name: "Delayed", value: stats.delayed, color: "#EF4444" },
-    {
-      name: "Others",
-      value: stats.total - (stats.completed + stats.ongoing + stats.delayed),
-      color: "#94A3B8",
-    },
-  ].filter((d) => d.value > 0);
-
   return (
-    <div className="mb-6 space-y-3">
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
@@ -113,7 +98,39 @@ const DashboardStats = ({ projects }) => {
           </div>
         </div>
       </div>
+  );
+};
 
+const StatsChart = ({ projects }) => {
+    const now = new Date();
+    const isProjectDelayed = (p) => {
+        if (p.status === ProjectStatus.Completed) return false;
+        if (!p.targetCompletionDate) return false;
+        const target = new Date(p.targetCompletionDate);
+        return now > target && p.accomplishmentPercentage < 100;
+    };
+
+    const stats = {
+        total: projects.length,
+        completed: projects.filter((p) => p.status === ProjectStatus.Completed).length,
+        delayed: projects.filter((p) => isProjectDelayed(p)).length,
+        ongoing: projects.filter((p) => 
+          p.status === ProjectStatus.Ongoing && !isProjectDelayed(p)
+        ).length,
+    };
+
+    const data = [
+        { name: "Completed", value: stats.completed, color: "#10B981" },
+        { name: "Ongoing", value: stats.ongoing, color: "#3B82F6" }, 
+        { name: "Delayed", value: stats.delayed, color: "#EF4444" },
+        {
+          name: "Others",
+          value: stats.total - (stats.completed + stats.ongoing + stats.delayed),
+          color: "#94A3B8",
+        },
+    ].filter((d) => d.value > 0);
+
+    return (
       <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
         <div className="flex flex-col justify-center ml-2">
           <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
@@ -154,19 +171,20 @@ const DashboardStats = ({ projects }) => {
           </ResponsiveContainer>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+}
 
 // --- MAIN DASHBOARD COMPONENT ---
 
 const EngineerDashboard = () => {
   const [userName, setUserName] = useState("Engineer");
+  const [userRole, setUserRole] = useState("");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]); 
   const [isLoading, setIsLoading] = useState(true);
 
   const API_BASE = "";
+  const navigate = useNavigate(); // Needs to be imported if not already, checking imports... it's not imported in EngineerDashboard.jsx yet.
 
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
@@ -174,15 +192,23 @@ const EngineerDashboard = () => {
       if (user) {
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
+        let currentRole = "";
         if (docSnap.exists()) {
-          setUserName(docSnap.data().firstName);
+          const userData = docSnap.data();
+          setUserName(userData.firstName);
+          currentRole = userData.role;
+          setUserRole(userData.role);
         }
 
         try {
-          setIsLoading(true);
-          const response = await fetch(
-            `${API_BASE}/api/projects?engineer_id=${user.uid}`
-          );
+            setIsLoading(true);
+            let url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
+            
+            if (currentRole === 'Super User') {
+                 url = `${API_BASE}/api/projects`; // Fetch all
+            }
+
+            const response = await fetch(url);
           if (!response.ok) throw new Error("Failed to fetch projects");
           const data = await response.json();
 
@@ -231,15 +257,25 @@ const EngineerDashboard = () => {
                 Overview of {projects.length} active projects.
               </p>
             </div>
-            <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
-              👷‍♂️
+            <div className="flex flex-col items-end gap-2">
+                 {userRole === 'Super User' && (
+                    <button 
+                        onClick={() => navigate('/super-admin')}
+                        className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white mb-2 transition"
+                    >
+                        ← Back to Hub
+                    </button>
+                )}
+                <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
+                 👷‍♂️
+                </div>
             </div>
           </div>
         </div>
 
         {/* --- MAIN CONTENT CONTAINER --- */}
         <div className="px-5 -mt-16 relative z-10 space-y-6">
-          <DashboardStats projects={projects} />
+          <StatsOverview projects={projects} />
 
           <div className="w-full">
             <Swiper
@@ -308,8 +344,12 @@ const EngineerDashboard = () => {
             </Swiper>
           </div>
 
-          {/* --- RECENT ACTIVITIES section --- */}
-          <div className="w-full mb-6">
+          <StatsChart projects={projects} />
+          
+          <CalendarWidget projects={projects} />
+
+{/* --- RECENT ACTIVITIES section --- */}
+          {/* <div className="w-full mb-6">
                <h3 className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider mb-3 ml-1">Recent Activities</h3>
                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                    {isLoading ? (
@@ -352,7 +392,7 @@ const EngineerDashboard = () => {
                        </div>
                    )}
                </div>
-          </div>
+          </div> */}
         </div>
         <BottomNav userRole="Engineer" />
       </div>

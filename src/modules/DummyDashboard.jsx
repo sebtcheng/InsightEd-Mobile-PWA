@@ -1,13 +1,17 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
-import { TbChevronLeft, TbSchool, TbUsers, TbBooks, TbActivity } from "react-icons/tb";
+import { TbChevronLeft, TbSchool, TbUsers, TbBooks, TbActivity, TbHammer, TbClipboardList, TbBuildingSkyscraper, TbReportAnalytics, TbMapSearch } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck } from "react-icons/lu";
 
 const DummyDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Default to 'school' if no type is passed
+    const formType = location.state?.type || 'school'; 
 
-    const DUMMY_FORMS = [
+    const SCHOOL_FORMS = [
         { name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600" },
         { name: "School Information (Head)", route: "/school-information", icon: TbSchool, color: "bg-indigo-100 text-indigo-600" },
         { name: "Enrollment per Grade Level", route: "/enrolment", icon: TbUsers, color: "bg-orange-100 text-orange-600" },
@@ -17,6 +21,17 @@ const DummyDashboard = () => {
         { name: "School Resources", route: "/school-resources", icon: TbBooks, color: "bg-emerald-100 text-emerald-600" },
         { name: "Teacher Specialization", route: "/teacher-specialization", icon: TbUsers, color: "bg-cyan-100 text-cyan-600" },
     ];
+
+    const ENGINEER_FORMS = [
+        { name: "New Project Entry", route: "/new-project", icon: TbBuildingSkyscraper, color: "bg-blue-100 text-blue-600" },
+    ];
+
+    const FORMS_TO_DISPLAY = formType === 'engineer' ? ENGINEER_FORMS : SCHOOL_FORMS;
+    const TITLE = formType === 'engineer' ? 'Sample Engineer Forms' : 'Sample School Forms';
+    const DESCRIPTION = formType === 'engineer' 
+        ? 'Select a form below to view exactly what Engineers see when submitting their reports.'
+        : 'Select a form below to view exactly what School Heads see when submitting their data.';
+    const ICON = formType === 'engineer' ? TbHammer : TbSchool;
 
     const handleNavigate = (route) => {
         // Navigate with 'isDummy: true' state
@@ -29,7 +44,7 @@ const DummyDashboard = () => {
                 {/* Header */}
                 <div className="bg-[#004A99] pt-14 pb-12 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-8 opacity-10">
-                        <TbSchool size={120} className="text-white" />
+                        <ICON size={120} className="text-white" />
                     </div>
 
                     <button
@@ -39,14 +54,14 @@ const DummyDashboard = () => {
                         <TbChevronLeft size={24} />
                     </button>
 
-                    <h1 className="text-2xl font-bold text-white mb-2 mt-4 relative z-10">Sample School Forms</h1>
+                    <h1 className="text-2xl font-bold text-white mb-2 mt-4 relative z-10">{TITLE}</h1>
                     <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20">
                         <p className="text-white text-xs font-bold uppercase tracking-wider">
                             Read-Only Preview
                         </p>
                     </div>
                     <p className="text-blue-100 text-sm mt-4 max-w-xs relative z-10 opactiy-90">
-                        Select a form below to view exactly what School Heads see when submitting their data.
+                        {DESCRIPTION}
                     </p>
                 </div>
 
@@ -64,7 +79,7 @@ const DummyDashboard = () => {
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
-                        {DUMMY_FORMS.map((item, idx) => (
+                        {FORMS_TO_DISPLAY.map((item, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => handleNavigate(item.route)}

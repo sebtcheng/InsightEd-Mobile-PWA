@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse'; 
 import { auth } from '../firebase'; 
@@ -17,6 +17,9 @@ const SectionHeader = ({ title, icon }) => (
 
 const NewProjects = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const isDummy = location.state?.isDummy || false;
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     // --- NEW STATE FOR FAB AND IMAGES ---
@@ -42,6 +45,29 @@ const NewProjects = () => {
             }
         });
     }, []);
+
+    // --- PRE-FILL DUMMY DATA ---
+    useEffect(() => {
+        if (isDummy) {
+            setFormData({
+                region: 'Region I',
+                division: 'Ilocos Norte',
+                schoolName: 'Sample School Elementary',
+                projectName: 'Construction of 2 Storey 4 Classroom', 
+                schoolId: '100001',
+                status: 'Ongoing',
+                accomplishmentPercentage: 45, 
+                statusAsOfDate: '2023-10-15',
+                targetCompletionDate: '2024-03-30',
+                actualCompletionDate: '',
+                noticeToProceed: '2023-08-01',
+                contractorName: 'XYZ Construction Corp.',
+                projectAllocation: '12,500,000', 
+                batchOfFunds: 'Batch 2',
+                otherRemarks: 'On schedule. Foundation complete. This is a sample entry.'
+            });
+        }
+    }, [isDummy]);
 
     const [formData, setFormData] = useState({
         // Basic Info
@@ -126,6 +152,20 @@ const NewProjects = () => {
             value = value.replace(/\D/g, ''); 
             if (value.length > 6) value = value.slice(0, 6);
         }
+        // Auto-comma for Project Allocation
+        if (name === 'projectAllocation') {
+             // 1. Remove non-numeric (keep decimals if needed, but usually just integers for allocation)
+             // Let's assume integers for simplicity as per common request, or handle '.'
+             const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+             if (!raw) {
+                 value = '';
+             } else {
+                 // Prevent multiple decimals
+                 const parts = raw.split('.');
+                 parts[0] = Number(parts[0]).toLocaleString('en-US');
+                 value = parts.join('.');
+             }
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
@@ -143,6 +183,13 @@ const NewProjects = () => {
     // --- 4. FIXED SUBMIT LOGIC (BUNDLES IMAGES) ---
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        if (isDummy) {
+            alert("PREVIEW MODE: This project entry will NOT be saved.");
+            navigate(-1);
+            return;
+        }
+
         setIsSubmitting(true);
 
         // 1. PRE-PROCESS IMAGES (Compress and convert to Base64 strings immediately)
@@ -166,6 +213,7 @@ const NewProjects = () => {
             method: 'POST',
             body: { 
                 ...formData, 
+                projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0), // Strip commas
                 uid: auth.currentUser?.uid,
                 modifiedBy: auth.currentUser?.displayName || 'Engineer',
                 images: imagePayload // <--- Images are now bundled HERE
@@ -225,6 +273,16 @@ const NewProjects = () => {
                     </div>
                 </div>
 
+                {isDummy && (
+                    <div className="mx-6 -mt-6 mb-6 bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center gap-3 shadow-lg relative z-20">
+                        <div className="p-2 bg-amber-100 rounded-lg text-amber-600 text-xl">👁️</div>
+                        <div>
+                            <h3 className="font-bold text-amber-900 text-sm">Preview Mode</h3>
+                            <p className="text-xs text-amber-700">Data entered here will NOT be saved.</p>
+                        </div>
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="px-6 -mt-10">
                     <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
 
@@ -233,7 +291,7 @@ const NewProjects = () => {
                             {/* 1. PROJECT NAME */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
-                                <input name="projectName" value={formData.projectName} onChange={handleChange} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input name="projectName" value={formData.projectName} onChange={handleChange} required readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
 
                             {/* 2. SCHOOL ID + VALIDATE BUTTON */}
@@ -248,15 +306,16 @@ const NewProjects = () => {
                                             value={formData.schoolId} 
                                             onChange={handleChange} 
                                             required 
+                                            readOnly={isDummy}
                                             maxLength="6" 
                                             placeholder="e.g. 100001" 
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 font-mono" 
+                                            className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 font-mono ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} 
                                         />
                                     </div>
                                     <button 
                                         type="button"
                                         onClick={handleValidateSchoolId}
-                                        disabled={schoolData.length === 0}
+                                        disabled={schoolData.length === 0 || isDummy}
                                         className="px-4 py-2 bg-blue-100 text-blue-700 font-bold text-xs uppercase rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Validate
@@ -295,7 +354,7 @@ const NewProjects = () => {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Initial Status</label>
-                                <select name="status" value={formData.status} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500">
+                                <select name="status" value={formData.status} onChange={handleChange} disabled={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}>
                                     <option value="Not Yet Started">Not Yet Started</option>
                                     <option value="Under Procurement">Under Procurement</option>
                                     <option value="Ongoing">Ongoing</option>
@@ -306,16 +365,18 @@ const NewProjects = () => {
                             <div>
                                 <div className="flex justify-between items-center mb-1">
                                     <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
-                                    <div className="flex gap-1">
-                                        <button type="button" onClick={() => setFormData(prev => ({...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5)}))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
-                                        <button type="button" onClick={() => setFormData(prev => ({...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10)}))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
-                                    </div>
+                                    {!isDummy && (
+                                        <div className="flex gap-1">
+                                            <button type="button" onClick={() => setFormData(prev => ({...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5)}))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
+                                            <button type="button" onClick={() => setFormData(prev => ({...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10)}))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
+                                        </div>
+                                    )}
                                 </div>
-                                <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status As Of Date</label>
-                                <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                         </div>
 
@@ -323,31 +384,33 @@ const NewProjects = () => {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
-                                <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion Date</label>
-                                <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion Date</label>
-                                <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
-                            </div>
+                            {formData.status === 'Completed' && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion Date</label>
+                                    <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                </div>
+                            )}
                         </div>
 
                         <SectionHeader title="Funds and Contractor" icon="💰" />
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Allocation (PHP)</label>
-                                <input type="number" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} placeholder="e.g. 15000000" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input type="text" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} readOnly={isDummy} placeholder="e.g. 15,000,000" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch of Funds</label>
-                                <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} placeholder="e.g. Batch 1" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} readOnly={isDummy} placeholder="e.g. Batch 1" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contractor Name</label>
-                                <input name="contractorName" value={formData.contractorName} onChange={handleChange} placeholder="e.g. ABC Builders" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                                <input name="contractorName" value={formData.contractorName} onChange={handleChange} readOnly={isDummy} placeholder="e.g. ABC Builders" className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                         </div>
 
@@ -358,8 +421,9 @@ const NewProjects = () => {
                                 rows="3" 
                                 value={formData.otherRemarks} 
                                 onChange={handleChange} 
+                                readOnly={isDummy}
                                 placeholder="Any specific issues or notes..." 
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" 
+                                className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} 
                             />
                         </div>
 
@@ -373,39 +437,46 @@ const NewProjects = () => {
                         {/* --- ATTACH PHOTOS SECTION --- */}
                         <div className="mt-4 pt-4 border-t border-slate-100">
                              <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Attach Site Photos</label>
-                             <div className="grid grid-cols-2 gap-3">
-                                <button 
-                                    type="button"
-                                    onClick={() => triggerFilePicker('camera')} 
-                                    className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
-                                >
-                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">📸</div>
-                                    <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">Take Photo</span>
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={() => triggerFilePicker('gallery')} 
-                                    className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
-                                >
-                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">🖼️</div>
-                                    <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">From Gallery</span>
-                                </button>
-                             </div>
+                             {!isDummy && (
+                                 <div className="grid grid-cols-2 gap-3">
+                                    <button 
+                                        type="button"
+                                        onClick={() => triggerFilePicker('camera')} 
+                                        className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
+                                    >
+                                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">📸</div>
+                                        <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">Take Photo</span>
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        onClick={() => triggerFilePicker('gallery')} 
+                                        className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
+                                    >
+                                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">🖼️</div>
+                                        <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">From Gallery</span>
+                                    </button>
+                                 </div>
+                             )}
+                             {isDummy && (
+                                <p className="text-xs text-slate-400 italic text-center py-4">Photo uploading disabled in preview mode.</p>
+                             )}
                         </div>
 
                     </div>
 
                     <div className="pt-4 flex gap-3 sticky bottom-0 bg-white pb-2 border-t border-slate-50">
                         <button type="button" onClick={() => navigate(-1)} className="flex-1 py-3 text-slate-600 font-bold text-sm bg-slate-100 rounded-xl hover:bg-slate-200 transition">
-                            Cancel
+                            {isDummy ? 'Back' : 'Cancel'}
                         </button>
-                        <button 
-                            type="submit" 
-                            disabled={isSubmitting} 
-                            className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition disabled:opacity-50"
-                        >
-                            {isSubmitting ? 'Saving...' : 'Create Project'}
-                        </button>
+                        {!isDummy && (
+                            <button 
+                                type="submit" 
+                                disabled={isSubmitting} 
+                                className="flex-1 py-3 text-white font-bold text-sm bg-[#004A99] rounded-xl shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition disabled:opacity-50"
+                            >
+                                {isSubmitting ? 'Saving...' : 'Create Project'}
+                            </button>
+                        )}
                     </div>
                 </form>
 
