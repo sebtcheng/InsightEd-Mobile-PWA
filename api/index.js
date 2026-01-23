@@ -63,6 +63,7 @@ pool.connect(async (err, client, release) => {
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   } else {
+    isDbConnected = true;
     console.log('✅ Connected to Neon Database successfully!');
 
     // --- INIT NOTIFICATIONS TABLE ---
@@ -83,6 +84,28 @@ pool.connect(async (err, client, release) => {
       console.log('✅ Notifications Table Initialized');
     } catch (tableErr) {
       console.error('❌ Failed to init notifications table:', tableErr.message);
+    }
+
+    // --- MIGRATION: ADD EMAIL TO SCHOOL_PROFILES ---
+    try {
+      await client.query(`
+            ALTER TABLE school_profiles 
+            ADD COLUMN IF NOT EXISTS email TEXT;
+        `);
+      console.log('✅ Checked/Added email column to school_profiles');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate school_profiles:', migErr.message);
+    }
+
+    // --- MIGRATION: ADD CURRICULAR OFFERING ---
+    try {
+      await client.query(`
+            ALTER TABLE school_profiles 
+            ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
+        `);
+      console.log('✅ Checked/Added curricular_offering column to school_profiles');
+    } catch (migErr) {
+      console.error('❌ Failed to migrate curricular_offering:', migErr.message);
     }
 
     release();
@@ -324,6 +347,112 @@ app.get('/api/schools', async (req, res) => {
   } catch (err) {
     console.error("Fetch Schools Error:", err);
     res.status(500).json({ error: "Failed to fetch schools" });
+  }
+});
+
+// --- 3c. POST: Check if School is Already Registered ---
+app.post('/api/check-existing-school', async (req, res) => {
+  const { schoolId } = req.body;
+  try {
+    const result = await pool.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolId]);
+    if (result.rows.length > 0) {
+      return res.json({ exists: true, message: "This school is already registered." });
+    }
+    return res.json({ exists: false });
+  } catch (error) {
+    console.error("Check Existing Error:", error);
+    return res.status(500).json({ error: "Database error checking school." });
+  }
+});
+
+// --- 3d. POST: Register School Head (Finalize Registration) ---
+// --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
+// api/index.js
+
+// --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
+app.post('/api/register-school', async (req, res) => {
+  const { uid, email, schoolData } = req.body;
+
+  if (!uid || !schoolData || !schoolData.school_id) {
+    return res.status(400).json({ error: "Missing required registration data." });
+  }
+
+  // DEBUG LOG
+  console.log("✅ REGISTRATION DATA:", {
+    uid,
+    school: schoolData.school_name
+  });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. DUPLICATE CHECK
+    const checkRes = await client.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolData.school_id]);
+    if (checkRes.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: "This school is already registered." });
+    }
+
+    // 2. GENERATE IERN
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const newIern = `IERN-${schoolData.school_id}-${randomSuffix}`;
+
+    // 3. CREATE USER (Optional)
+    try {
+      await client.query('SAVEPOINT user_creation');
+      await client.query(
+        "INSERT INTO users (uid, email, role, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT (uid) DO NOTHING",
+        [uid, email, 'School Head']
+      );
+      await client.query('RELEASE SAVEPOINT user_creation');
+    } catch (e) {
+      await client.query('ROLLBACK TO SAVEPOINT user_creation');
+      console.warn("User table insert failed, continuing...", e.message);
+    }
+
+    // 4. HYDRATE SCHOOL PROFILE
+    const insertQuery = `
+        INSERT INTO school_profiles (
+            school_id, school_name, region, province, division, district, 
+            municipality, leg_district, barangay, mother_school_id, 
+            latitude, longitude, 
+            submitted_by, iern, email, submitted_at
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP
+        )
+    `;
+
+    const values = [
+      schoolData.school_id,
+      schoolData.school_name,
+      schoolData.region,
+      schoolData.province,
+      schoolData.division,
+      schoolData.district,
+      schoolData.municipality,
+      schoolData.leg_district || schoolData.legislative,
+      schoolData.barangay,
+      schoolData.mother_school_id || 'NA',
+      schoolData.latitude,
+      schoolData.longitude,
+      uid,
+      newIern,
+      email
+    ];
+
+    await client.query(insertQuery, values);
+    await client.query('COMMIT');
+
+    console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
+    res.json({ success: true, iern: newIern, message: "School Registered Successfully" });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Register School Error:", err);
+    res.status(500).json({ error: "Registration failed: " + err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -1722,7 +1851,6 @@ app.put('/api/notifications/:id/read', async (req, res) => {
     res.status(500).json({ error: "Failed to update notification" });
   }
 });
-
 // --- 24. GET: Fetch Learner Statistics (Enhanced) ---
 app.get('/api/learner-statistics/:uid', async (req, res) => {
   const { uid } = req.params;
@@ -1845,11 +1973,31 @@ app.post('/api/save-learner-statistics', async (req, res) => {
   }
 });
 
+// --- GLOBAL ERROR HANDLER ---
+// Ensures all errors return JSON, preventing HTML responses for API routes
+app.use((err, req, res, next) => {
+  console.error("Global API Error:", err);
+
+  // Handle Body Parser JSON Syntax Errors
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: "Invalid JSON payload sent to server." });
+  }
+
+  // Default Error
+  if (!res.headersSent) {
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: err.message
+    });
+  }
+});
+
 // ==================================================================
 //                        SERVER STARTUP
 // ==================================================================
 
 // 1. FOR LOCAL DEVELOPMENT (runs when you type 'node api/index.js')
+
 
 // Robust path comparison for Windows
 const currentFile = fileURLToPath(import.meta.url);
@@ -1859,12 +2007,31 @@ console.log("Startup Check:");
 console.log("  Executed:", executedFile);
 console.log("  Current: ", currentFile);
 
+// --- 1. GLOBAL ERROR HANDLERS TO PREVENT SILENT CRASHES ---
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION:', reason);
+});
+
+// ... existing code ...
+
 if (executedFile && path.resolve(executedFile) === path.resolve(currentFile)) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
     console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
     console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+  });
+
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+    } else {
+      console.error("❌ Server Error:", e);
+    }
   });
 }
 

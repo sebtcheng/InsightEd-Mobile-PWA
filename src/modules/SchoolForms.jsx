@@ -11,6 +11,7 @@ import {
     FiUser, FiUsers, FiLayers, FiBox
 } from "react-icons/fi";
 import { TbSchool, TbReportAnalytics, TbActivity } from "react-icons/tb";
+import { FiChevronDown } from "react-icons/fi";
 
 const SchoolForms = () => {
     const navigate = useNavigate();
@@ -20,6 +21,8 @@ const SchoolForms = () => {
     const [filter, setFilter] = useState('all'); // 'all', 'pending', 'completed'
     const [schoolProfile, setSchoolProfile] = useState(null);
     const [headProfile, setHeadProfile] = useState(null);
+    const [curricularOffering, setCurricularOffering] = useState('');
+    const [isSavingOffering, setIsSavingOffering] = useState(false);
 
     // --- 1. DATA CONTENT (Categorized) ---
     const formsData = [
@@ -117,7 +120,13 @@ const SchoolForms = () => {
                     const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
                     if (!profileRes.ok) throw new Error("Network response was not ok");
                     const profileJson = await profileRes.json();
-                    if (profileJson.exists) setSchoolProfile(profileJson.data);
+                    if (profileJson.exists) {
+                        setSchoolProfile(profileJson.data);
+                        setCurricularOffering(profileJson.data.curricular_offering || '');
+                        // Cache for offline usage
+                        localStorage.setItem('fullSchoolProfile', JSON.stringify(profileJson.data));
+                        localStorage.setItem('schoolOffering', profileJson.data.curricular_offering || '');
+                    }
 
                     const headRes = await fetch(`/api/school-head/${user.uid}`);
                     if (!headRes.ok) throw new Error("Network response was not ok");
@@ -126,10 +135,16 @@ const SchoolForms = () => {
                 } catch (error) {
                     console.warn("⚠️ Offline/Network Error. Loading from cache...");
                     const cachedProfile = localStorage.getItem('fullSchoolProfile');
+                    const cachedOffering = localStorage.getItem('schoolOffering');
+
                     if (cachedProfile) {
                         try {
                             const parsedProfile = JSON.parse(cachedProfile);
                             setSchoolProfile(parsedProfile);
+                            if (cachedOffering) setCurricularOffering(cachedOffering);
+                            // Fallback if not separately saved
+                            else if (parsedProfile.curricular_offering) setCurricularOffering(parsedProfile.curricular_offering);
+
                             console.log("✅ School profile loaded from cache.");
                         } catch (e) {
                             console.error("Failed to parse cached profile", e);
@@ -200,6 +215,54 @@ const SchoolForms = () => {
             categorizedForms: grouped
         };
     }, [schoolProfile, headProfile, filter]);
+
+    // --- 5. HANDLE OFFERING CHANGE ---
+    const handleOfferingChange = async (e) => {
+        const newValue = e.target.value;
+        setCurricularOffering(newValue);
+        localStorage.setItem('schoolOffering', newValue); // Immediate local update
+
+        if (!schoolProfile) return;
+
+        setIsSavingOffering(true);
+        try {
+            // Map snake_case DB profile to camelCase payload expected by save-school
+            const payload = {
+                schoolId: schoolProfile.school_id,
+                schoolName: schoolProfile.school_name,
+                region: schoolProfile.region,
+                province: schoolProfile.province,
+                division: schoolProfile.division,
+                district: schoolProfile.district,
+                municipality: schoolProfile.municipality,
+                legDistrict: schoolProfile.leg_district,
+                barangay: schoolProfile.barangay,
+                motherSchoolId: schoolProfile.mother_school_id,
+                latitude: schoolProfile.latitude,
+                longitude: schoolProfile.longitude,
+                submittedBy: schoolProfile.submitted_by, // Or auth.currentUser.uid
+                curricularOffering: newValue
+            };
+
+            const res = await fetch('/api/save-school', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                console.log("✅ Curricular offering updated via API");
+                // Update local profile state to reflect change
+                setSchoolProfile(prev => ({ ...prev, curricular_offering: newValue }));
+            } else {
+                console.warn("⚠️ Failed to update offering on server");
+            }
+        } catch (error) {
+            console.error("Error auto-saving offering:", error);
+        } finally {
+            setIsSavingOffering(false);
+        }
+    };
 
     // --- COMPONENTS ---
 
@@ -339,6 +402,35 @@ const SchoolForms = () => {
                         </svg>
                         <span className="absolute text-[10px] font-bold text-white">{progress}%</span>
                     </div>
+
+                </div>
+
+                {/* Curricular Offering Selection */}
+                <div className="mt-6 bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 flex items-center justify-between">
+                    <div className="flex items-center gap-3 w-full">
+                        <div className="p-2 bg-white/20 rounded-lg shrink-0">
+                            <TbSchool className="text-white text-lg" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[10px] text-blue-200 uppercase tracking-wider font-semibold">Curricular Offering</p>
+                            <div className="relative">
+                                <select
+                                    value={curricularOffering}
+                                    onChange={handleOfferingChange}
+                                    disabled={isSavingOffering}
+                                    className="w-full bg-transparent text-white font-bold text-sm focus:outline-none cursor-pointer appearance-none truncate pr-6"                                >
+                                    <option value="" className="text-slate-800">Select Offering...</option>
+                                    <option value="Purely Elementary" className="text-slate-800">Purely Elementary</option>
+                                    <option value="Elementary School and Junior High School (K-10)" className="text-slate-800">Elementary School and Junior High School (K-10)</option>
+                                    <option value="All Offering (K-12)" className="text-slate-800">All Offering (K-12)</option>
+                                    <option value="Junior and Senior High" className="text-slate-800">Junior and Senior High</option>
+                                    <option value="Purely Junior High School" className="text-slate-800">Purely Junior High School</option>
+                                    <option value="Purely Senior High School" className="text-slate-800">Purely Senior High School</option>
+                                </select>
+                                <FiChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -378,7 +470,7 @@ const SchoolForms = () => {
             </div>
 
             <BottomNav userRole="School Head" />
-        </div>
+        </div >
     );
 };
 

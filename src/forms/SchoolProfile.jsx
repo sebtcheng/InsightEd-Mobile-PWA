@@ -43,6 +43,7 @@ const SchoolProfile = () => {
     const [isOffline, setIsOffline] = useState(!navigator.onLine);
     const [isLocked, setIsLocked] = useState(false); // New State
     const [schoolNameWarning, setSchoolNameWarning] = useState(""); // Validation Warning
+    const [currentUserLocation, setCurrentUserLocation] = useState(null); // NEW: User's real-time location
 
     // Dropdowns
     const [provinceOptions, setProvinceOptions] = useState([]);
@@ -154,6 +155,16 @@ const SchoolProfile = () => {
         const handleOffline = () => setIsOffline(true);
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
+
+        // Fetch User Location silently on mount
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => setCurrentUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                (err) => console.warn("User location fetch failed", err),
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
+
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
@@ -667,29 +678,7 @@ const SchoolProfile = () => {
                                     </div>
                                 </div>
 
-                                {/* 2. CLASSIFICATION */}
-                                <div className={sectionClass}>
-                                    <h2 className="text-gray-800 font-bold text-lg flex items-center gap-2"><span className="text-xl">📊</span> Classification</h2>
-                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mb-4">
-                                        <p className="text-xs text-blue-800 italic">This setting determines which fields appear in other Forms.</p>
-                                    </div>
-                                    <div>
-                                        <label className={labelClass}>Curricular Offering</label>
-                                        {isOffline ? (
-                                            <input type="text" value={formData.curricularOffering} className={inputClass} disabled />
-                                        ) : (
-                                            <select name="curricularOffering" value={formData.curricularOffering} onChange={handleChange} className={inputClass} required disabled={isDummy}>
-                                                <option value="">-- Select Offering --</option>
-                                                <option>Purely Elementary</option>
-                                                <option>Elementary School and Junior High School (K-10)</option>
-                                                <option>All Offering (K-12)</option>
-                                                <option>Junior and Senior High</option>
-                                                <option>Purely Junior High School</option>
-                                                <option>Purely Senior High School</option>
-                                            </select>
-                                        )}
-                                    </div>
-                                </div>
+
 
                                 {/* 3. LOCATION */}
                                 <div className={sectionClass}>
@@ -724,6 +713,7 @@ const SchoolProfile = () => {
                                             longitude={formData.longitude}
                                             onLocationSelect={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }))}
                                             disabled={isDummy || viewOnly || isLocked || isOffline}
+                                            userLocation={currentUserLocation}
                                         />
                                     </div>
 
