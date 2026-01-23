@@ -63,6 +63,7 @@ pool.connect(async (err, client, release) => {
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   } else {
+    isDbConnected = true;
     console.log('✅ Connected to Neon Database successfully!');
 
     // --- INIT NOTIFICATIONS TABLE ---
@@ -366,6 +367,9 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School Head (Finalize Registration) ---
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
+// api/index.js
+
+// --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
   const { uid, email, schoolData } = req.body;
 
@@ -373,24 +377,17 @@ app.post('/api/register-school', async (req, res) => {
     return res.status(400).json({ error: "Missing required registration data." });
   }
 
-  // STRICT VALIDATION DEBUGGING
-  if (!schoolData.curricularOffering) {
-    console.error("❌ MISSING CURRICULAR OFFERING IN PAYLOAD");
-    return res.status(400).json({ error: "Curricular Offering is missing from payload!" });
-  }
-
   // DEBUG LOG
-  console.log("REGISTRATION RECEIVED:");
-  console.log("UID:", uid);
-  console.log("School Data:", JSON.stringify(schoolData, null, 2));
-  console.log("Curricular Offering:", schoolData.curricularOffering);
+  console.log("✅ REGISTRATION DATA:", {
+    uid,
+    school: schoolData.school_name
+  });
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     // 1. DUPLICATE CHECK
-    // Ensure school is not already claimed
     const checkRes = await client.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolData.school_id]);
     if (checkRes.rows.length > 0) {
       await client.query('ROLLBACK');
@@ -398,14 +395,10 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     // 2. GENERATE IERN
-    // Format: IERN-{school_id}-{random4}
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const newIern = `IERN-${schoolData.school_id}-${randomSuffix}`;
 
-    // 3. CREATE USER (Optional: If you have a users table in Postgres)
-    // If not, we skip this or just log it. 
-    // Assuming 'users' table exists based on prompt requirements, if not we catch error.
-    // 3. CREATE USER (Optional) - Wrapped in SAVEPOINT to prevent transaction abort on failure
+    // 3. CREATE USER (Optional)
     try {
       await client.query('SAVEPOINT user_creation');
       await client.query(
@@ -415,21 +408,18 @@ app.post('/api/register-school', async (req, res) => {
       await client.query('RELEASE SAVEPOINT user_creation');
     } catch (e) {
       await client.query('ROLLBACK TO SAVEPOINT user_creation');
-      console.warn("User table insert failed (optional step), continuing transaction...", e.message);
+      console.warn("User table insert failed, continuing...", e.message);
     }
 
     // 4. HYDRATE SCHOOL PROFILE
-    // Mapping CSV fields to DB columns
     const insertQuery = `
         INSERT INTO school_profiles (
             school_id, school_name, region, province, division, district, 
             municipality, leg_district, barangay, mother_school_id, 
             latitude, longitude, 
-            submitted_by, iern, email, submitted_at,
-            curricular_offering
+            submitted_by, iern, email, submitted_at
         ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP,
-            $16
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP
         )
     `;
 
@@ -441,19 +431,17 @@ app.post('/api/register-school', async (req, res) => {
       schoolData.division,
       schoolData.district,
       schoolData.municipality,
-      schoolData.leg_district || schoolData.legislative, // Handle CSV naming var
+      schoolData.leg_district || schoolData.legislative,
       schoolData.barangay,
       schoolData.mother_school_id || 'NA',
       schoolData.latitude,
       schoolData.longitude,
       uid,
       newIern,
-      email,
-      schoolData.curricularOffering // $16
+      email
     ];
 
     await client.query(insertQuery, values);
-
     await client.query('COMMIT');
 
     console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
@@ -2019,12 +2007,31 @@ console.log("Startup Check:");
 console.log("  Executed:", executedFile);
 console.log("  Current: ", currentFile);
 
+// --- 1. GLOBAL ERROR HANDLERS TO PREVENT SILENT CRASHES ---
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION:', reason);
+});
+
+// ... existing code ...
+
 if (executedFile && path.resolve(executedFile) === path.resolve(currentFile)) {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
     console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
     console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+  });
+
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+    } else {
+      console.error("❌ Server Error:", e);
+    }
   });
 }
 

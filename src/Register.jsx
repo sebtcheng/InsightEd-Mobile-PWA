@@ -25,6 +25,8 @@ L.Marker.prototype.options.icon = DefaultIcon;
 // --- CONSTANTS ---
 const CSV_PATH = '/schools.csv';
 
+import locationData from './locations.json';
+
 const getDashboardPath = (role) => {
     const roleMap = {
         'Engineer': '/engineer-dashboard',
@@ -62,6 +64,19 @@ const Register = () => {
         barangay: ''
     });
 
+    // --- OTP STATE ---
+    const [otp, setOtp] = useState(['', '', '', '', '', '']);
+    const [isOtpSent, setIsOtpSent] = useState(false);
+    const [isOtpVerified, setIsOtpVerified] = useState(false);
+    const [otpLoading, setOtpLoading] = useState(false);
+    const [timer, setTimer] = useState(0);
+    const [canResend, setCanResend] = useState(true);
+
+    // --- LOCATION DROPDOWN STATE (Generic Roles) ---
+    const [provinceOptions, setProvinceOptions] = useState([]);
+    const [cityOptions, setCityOptions] = useState([]);
+    const [barangayOptions, setBarangayOptions] = useState([]);
+
     // --- SCHOOL HEAD SPECIFIC STATE ---
     const [csvData, setCsvData] = useState([]);
     const [isCsvLoaded, setIsCsvLoaded] = useState(false);
@@ -72,11 +87,22 @@ const Register = () => {
     const [selectedDistrict, setSelectedDistrict] = useState('');
     const [selectedMunicipality, setSelectedMunicipality] = useState('');
     const [selectedSchool, setSelectedSchool] = useState(null);
-    const [curricularOffering, setCurricularOffering] = useState('');
 
     // Map Marker Ref
     const markerRef = useRef(null);
 
+    // --- OTP TIMER EFFECT ---
+    useEffect(() => {
+        let interval;
+        if (timer > 0) {
+            interval = setInterval(() => {
+                setTimer((prev) => prev - 1);
+            }, 1000);
+        } else {
+            setCanResend(true);
+        }
+        return () => clearInterval(interval);
+    }, [timer]);
 
     // --- 1. LOAD CSV DATA ---
     useEffect(() => {
@@ -134,10 +160,15 @@ const Register = () => {
     };
 
     const handleRoleChange = (e) => {
-        setFormData({ ...formData, role: e.target.value });
+        setFormData({
+            ...formData,
+            role: e.target.value,
+            // Reset location fields on role change
+            region: '', division: '', province: '', city: '', barangay: '', office: '', position: ''
+        });
         // Reset school selection if moving away
         setSelectedSchool(null);
-        setCurricularOffering('');
+        // Reset OTP state on role change? Maybe keep it if email is same.
     };
 
     const handleSchoolSelect = (e) => {
@@ -157,6 +188,132 @@ const Register = () => {
                 ...prev,
                 email: `${school.school_id}@deped.gov.ph`
             }));
+            // NOTE: For School Head, we might NOT be able to verify this email if it doesn't exist yet.
+            // But user requested OTP for ALL roles. 
+            // If the email is real, they can verify. If not, they are stuck.
+        }
+    };
+
+    // --- OTP HANDLERS ---
+    const handleSendOtp = async () => {
+        if (!formData.email) {
+            alert("Please enter your email first.");
+            return;
+        }
+        if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
+            alert("Passwords do not match!");
+            return;
+        }
+
+        setOtpLoading(true);
+        try {
+            const res = await fetch('/api/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setIsOtpSent(true);
+                setCanResend(false);
+                setTimer(30);
+                alert(data.message); // Show actual message from server (might contain fallback info)
+            } else {
+                alert(data.message || "Failed to send OTP");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Network error sending OTP");
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async () => {
+        const code = otp.join("");
+        if (code.length < 6) return;
+
+        setOtpLoading(true);
+        try {
+            const res = await fetch('/api/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: formData.email, code })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setIsOtpVerified(true);
+                alert("Verified successfully!");
+            } else {
+                alert(data.message || "Invalid Code");
+                setIsOtpVerified(false);
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
+    const handleOtpChange = (element, index) => {
+        if (isNaN(element.value)) return;
+        const newOtp = [...otp];
+        newOtp[index] = element.value;
+        setOtp(newOtp);
+
+        // Auto-focus next input
+        if (element.nextSibling && element.value) {
+            element.nextSibling.focus();
+        }
+    };
+
+    // --- LOCATION HANDLERS (Generic Roles) ---
+    const handleRegionChange = (e) => {
+        const region = e.target.value;
+        setFormData({
+            ...formData,
+            region,
+            province: '', city: '', barangay: '', division: ''
+        });
+
+        if (region && locationData[region]) {
+            setProvinceOptions(Object.keys(locationData[region]).sort());
+        } else {
+            setProvinceOptions([]);
+        }
+        setCityOptions([]);
+        setBarangayOptions([]);
+    };
+
+    const handleProvinceChange = (e) => {
+        const province = e.target.value;
+        setFormData({
+            ...formData,
+            province,
+            city: '', barangay: ''
+        });
+
+        if (province && formData.region) {
+            setCityOptions(Object.keys(locationData[formData.region][province]).sort());
+        } else {
+            setCityOptions([]);
+        }
+        setBarangayOptions([]);
+    };
+
+    const handleCityChange = (e) => {
+        const city = e.target.value;
+        setFormData({
+            ...formData,
+            city,
+            barangay: ''
+        });
+
+        if (city && formData.province && formData.region) {
+            const brgys = locationData[formData.region][formData.province][city];
+            setBarangayOptions(brgys.sort());
+        } else {
+            setBarangayOptions([]);
         }
     };
 
@@ -214,22 +371,27 @@ const Register = () => {
             // STEP C: Role-Specific Persistence
             if (formData.role === 'School Head') {
                 // CALL NEW ONE-SHOT ENDPOINT
+                // CALL NEW ONE-SHOT ENDPOINT
                 console.log("SENDING REGISTRATION DATA:", {
-                    ...selectedSchool,
-                    curricularOffering
+                    ...selectedSchool
                 });
 
                 // selectedSchool now contains the updated latitude/longitude from the map drag
+                // Explicitly construct payload to avoid shadowing
+                const finalSchoolData = {
+                    ...selectedSchool
+                    // curricularOffering removed by user request
+                };
+
+                console.log("SENDING FINAL REGISTRATION DATA:", finalSchoolData);
+
                 const regRes = await fetch('/api/register-school', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         uid: user.uid,
                         email: formData.email,
-                        schoolData: {
-                            ...selectedSchool,
-                            curricularOffering // Pass this new field
-                        }
+                        schoolData: finalSchoolData
                     })
                 });
 
@@ -408,27 +570,7 @@ const Register = () => {
 
 
 
-                                    {/* OFFERING SELECTION */}
-                                    <div className="bg-white p-5 rounded-2xl border-l-4 border-l-purple-500 shadow-sm border border-slate-100">
-                                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                            <span className="bg-purple-100 text-purple-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">2</span>
-                                            Curricular Offering
-                                        </h3>
-                                        <select
-                                            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                                            value={curricularOffering}
-                                            onChange={(e) => setCurricularOffering(e.target.value)}
-                                            required
-                                        >
-                                            <option value="">Select Offering...</option>
-                                            <option value="Purely Elementary">Purely Elementary</option>
-                                            <option value="Elementary School and Junior High School (K-10)">Elementary School and Junior High School (K-10)</option>
-                                            <option value="All Offering (K-12)">All Offering (K-12)</option>
-                                            <option value="Junior and Senior High">Junior and Senior High</option>
-                                            <option value="Purely Junior High School">Purely Junior High School</option>
-                                            <option value="Purely Senior High School">Purely Senior High School</option>
-                                        </select>
-                                    </div>
+
 
                                     {/* AUTO-GENERATED CREDENTIALS */}
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 opacity-80">
@@ -495,22 +637,198 @@ const Register = () => {
                             ) : (
                                 /* === GENERIC / OTHER ROLE FLOW === */
                                 <div className="space-y-4 animate-in fade-in">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <input name="firstName" placeholder="First Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
-                                        <input name="lastName" placeholder="Last Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
-                                    </div>
-                                    <input name="email" type="email" placeholder="Email Address" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                        <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">1</span>
+                                        Personal & Assignment
+                                    </h3>
 
-                                    {/* Simple Region Field for Non-Heads */}
-                                    {['Regional Office', 'School Division Office'].includes(formData.role) && (
-                                        <input name="office" placeholder="Office Name" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <input name="firstName" value={formData.firstName} placeholder="First Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                        <input name="lastName" value={formData.lastName} placeholder="Last Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    </div>
+
+                                    {/* REGIONAL OFFICE FIELDS */}
+                                    {formData.role === 'Regional Office' && (
+                                        <div className="space-y-3 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                                            <label className="text-xs font-bold text-purple-700 uppercase">Region Assignment</label>
+                                            <select
+                                                name="region"
+                                                onChange={handleChange}
+                                                value={formData.region}
+                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-purple-500"
+                                                required
+                                            >
+                                                <option value="">Select Region</option>
+                                                {/* Use locationData keys or CSV regions? User snippet used locationData. Let's use generic regions logic if possible or locationData */}
+                                                {Object.keys(locationData).sort().map((reg) => (
+                                                    <option key={reg} value={reg}>{reg}</option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                name="office"
+                                                value={formData.office}
+                                                placeholder="Office Name (Do not abbreviate)"
+                                                onChange={handleChange}
+                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                                required
+                                            />
+                                            <input
+                                                name="position"
+                                                value={formData.position}
+                                                placeholder="Position"
+                                                onChange={handleChange}
+                                                className="w-full bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                                                required
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* SCHOOL DIVISION OFFICE FIELDS */}
+                                    {formData.role === 'School Division Office' && (
+                                        <div className="space-y-3 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                                            <label className="text-xs font-bold text-orange-700 uppercase">Division Assignment</label>
+                                            <select
+                                                name="region"
+                                                onChange={handleRegionChange}
+                                                value={formData.region}
+                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500"
+                                                required
+                                            >
+                                                <option value="">Select Region</option>
+                                                {Object.keys(locationData).sort().map((reg) => (
+                                                    <option key={reg} value={reg}>{reg}</option>
+                                                ))}
+                                            </select>
+
+                                            <select
+                                                name="division"
+                                                onChange={handleChange}
+                                                value={formData.division}
+                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                                                disabled={!formData.region}
+                                                required
+                                            >
+                                                <option value="">Select Division</option>
+                                                {/* Filter Divisions based on Region from CSV Data (Rich Source) */}
+                                                {[...new Set(csvData
+                                                    .filter(s => s.region === formData.region)
+                                                    .map(s => s.division))]
+                                                    .sort()
+                                                    .map(div => (
+                                                        <option key={div} value={div}>{div}</option>
+                                                    ))
+                                                }
+                                            </select>
+
+                                            <input
+                                                name="position"
+                                                value={formData.position}
+                                                placeholder="Position"
+                                                onChange={handleChange}
+                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                                                required
+                                            />
+                                        </div>
+                                    )}
+
+
+                                    <input name="email" type="email" placeholder="Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required readOnly={isOtpVerified} />
+
+                                    {/* Generic Location Dropdowns (For Engineer, Admin if needed - Optional but good practice) */}
+                                    {/* Hiding them for minimal Engineer view unless requested. User snippet had them for Generic. I'll add them if Engineer */}
+                                    {['Engineer'].includes(formData.role) && (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {/* Using locations.json for hierarchy */}
+                                            <select name="region" onChange={handleRegionChange} value={formData.region} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500">
+                                                <option value="">Region</option>
+                                                {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
+                                            </select>
+                                            <select name="province" onChange={handleProvinceChange} value={formData.province} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.region}>
+                                                <option value="">Province</option>
+                                                {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                            </select>
+                                            <select name="city" onChange={handleCityChange} value={formData.city} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.province}>
+                                                <option value="">City/Mun</option>
+                                                {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                            <select name="barangay" onChange={handleChange} value={formData.barangay} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.city}>
+                                                <option value="">Barangay</option>
+                                                {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                                            </select>
+                                        </div>
                                     )}
                                 </div>
                             )}
 
-                            {/* === PASSWORD (COMMON) === */}
-                            <div className="pt-2 border-t border-slate-100">
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Security</label>
+                            {/* === 3. EMAIL VERIFICATION & SECURITY === */}
+                            <div className="pt-2 border-t border-slate-100 animate-in fade-in">
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+                                    <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
+                                        {formData.role === 'School Head' ? 2 : 2}
+                                    </span>
+                                    Account Security
+                                </h3>
+
+                                {/* OTP SECTION */}
+                                <div className="mb-6 space-y-3">
+                                    {/* If School Head, email is readonly. If Generic, it's editable above. */}
+                                    {/* We display email here again or just the OTP controls? The generic flow has email field above. The School Head flow has auto-email. */}
+                                    {/* Let's show the email input here ONLY if School Head (since it was hidden/auto in their block) OR if we want to confirm it. */}
+                                    {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
+
+                                    {/* OTP CONTROLS */}
+                                    <div className="flex flex-col gap-3">
+                                        <p className="text-xs text-slate-500">
+                                            Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
+                                        </p>
+
+                                        {!isOtpVerified && (
+                                            <button
+                                                type="button"
+                                                onClick={handleSendOtp}
+                                                disabled={otpLoading || !canResend || !formData.email}
+                                                className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-3 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                {otpLoading ? 'Sending Code...' : !canResend ? `Resend in ${timer}s` : isOtpSent ? 'Resend Verification Code' : 'Send Verification Code'}
+                                            </button>
+                                        )}
+
+                                        {/* OTP INPUTS */}
+                                        {isOtpSent && !isOtpVerified && (
+                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Enter Code</label>
+                                                <div className="flex justify-between gap-2 mb-3">
+                                                    {otp.map((digit, index) => (
+                                                        <input
+                                                            key={index}
+                                                            type="text"
+                                                            maxLength="1"
+                                                            value={digit}
+                                                            onChange={e => handleOtpChange(e.target, index)}
+                                                            className="w-10 h-12 text-center border-2 border-slate-200 rounded-lg focus:border-blue-500 outline-none text-lg font-bold bg-white"
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleVerifyOtp}
+                                                    className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700"
+                                                >
+                                                    Verify Code
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {isOtpVerified && (
+                                            <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border border-green-200">
+                                                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                                Email Verified Successfully
+                                            </div>
+                                        )}
+                                    </div>
+
+                                </div>
+
                                 <div className="space-y-3">
                                     <input name="password" type="password" placeholder="Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
                                     <input name="confirmPassword" type="password" placeholder="Confirm Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
@@ -520,7 +838,7 @@ const Register = () => {
                             {/* SUBMIT BUTTON */}
                             <button
                                 type="submit"
-                                disabled={loading}
+                                disabled={loading || !isOtpVerified}
                                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 rounded-xl shadow-xl shadow-blue-500/30 transform transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                             >
                                 {loading ? 'Processing...' : 'Complete Registration'}
