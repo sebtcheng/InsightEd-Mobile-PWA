@@ -218,16 +218,23 @@ const LearnerStatistics = () => {
             uid: user.uid,
             userName: user.displayName || 'School Head',
             role: 'School Head',
+            submitted_at: new Date().toISOString(),
             // IMPORTANT: Also update the nested object for JSONB persistence
             learner_stats_grids: {}
         };
 
         // Re-construct the grid object from the flat formData
-        const allKeys = Object.keys(formData);
-        allKeys.forEach(key => {
-            if (key.startsWith('stat_')) {
-                payload.learner_stats_grids[key] = formData[key];
-            }
+        // FIX: Ensure this is DENSE (contains all keys) even if formData is sparse (because offline)
+        // This mitigates backend issues where missing keys might be treated as null or result in data loss.
+        const allGrades = getGrades();
+        const allCats = ['sned', 'disability', 'als', 'muslim', 'ip', 'displaced', 'repetition', 'overage', 'dropout'];
+
+        allCats.forEach(cat => {
+            allGrades.forEach(g => {
+                const key = `stat_${cat}_${g}`;
+                // Use the value from formData if present (user edited), otherwise 0
+                payload.learner_stats_grids[key] = formData[key] || 0;
+            });
         });
 
         const cats = ['sned', 'disability', 'als', 'muslim', 'ip', 'displaced', 'repetition', 'overage', 'dropout'];
@@ -258,6 +265,28 @@ const LearnerStatistics = () => {
             }
         });
 
+        // 1. EXPLICIT OFFLINE CHECK (Matches Enrolment.jsx)
+        if (!navigator.onLine) {
+            try {
+                console.log("Offline mode detected. Saving to Outbox...", payload);
+                await addToOutbox({
+                    type: 'LEARNER_STATISTICS',
+                    label: 'Learner Statistics',
+                    url: '/api/save-learner-statistics',
+                    payload: payload
+                });
+                setShowOfflineModal(true);
+                setIsLocked(true);
+            } catch (err) {
+                console.error("Offline Save Error:", err);
+                alert("Failed to save to Outbox. Please try again or check your storage.");
+            } finally {
+                setSaving(false);
+            }
+            return;
+        }
+
+        // 2. ONLINE SAVE
         try {
             const res = await fetch('/api/save-learner-statistics', {
                 method: 'POST',
@@ -272,15 +301,20 @@ const LearnerStatistics = () => {
                 throw new Error("Server error");
             }
         } catch (err) {
-            console.warn("Saving to outbox...");
-            await addToOutbox({
-                type: 'LEARNER_STATISTICS',
-                label: 'Learner Statistics',
-                url: '/api/save-learner-statistics',
-                payload: payload
-            });
-            setShowOfflineModal(true);
-            setIsLocked(true);
+            console.warn("Network request failed, falling back to Outbox...", err);
+            try {
+                await addToOutbox({
+                    type: 'LEARNER_STATISTICS',
+                    label: 'Learner Statistics',
+                    url: '/api/save-learner-statistics',
+                    payload: payload
+                });
+                setShowOfflineModal(true);
+                setIsLocked(true);
+            } catch (outboxErr) {
+                console.error("Outbox Fallback Failed:", outboxErr);
+                alert("Failed to save online AND failed to save to Outbox.");
+            }
         } finally {
             setSaving(false);
         }
