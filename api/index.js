@@ -143,6 +143,7 @@ pool.connect(async (err, client, release) => {
       console.log('✅ Checked/Extended users table schema');
     } catch (migErr) {
       console.error('❌ Failed to migrate users table:', migErr.message);
+    }
     // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
     try {
       await client.query(`
