@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
@@ -11,6 +11,7 @@ import Papa from 'papaparse';
 
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [userData, setUserData] = useState(null);
     const [stats, setStats] = useState(null);
     const [engStats, setEngStats] = useState(null);
@@ -130,6 +131,15 @@ const MonitoringDashboard = () => {
         });
 
     }, []);
+
+    // NEW: Handle Active Tab from Navigation State
+    useEffect(() => {
+        if (location.state?.activeTab) {
+            setActiveTab(location.state.activeTab);
+            // Optional: Clear state so it doesn't persist on refresh if undesirable, 
+            // but for now keeping it is fine.
+        }
+    }, [location.state]);
 
     // Effect for Central Office: Update divisions when Region changes
     useEffect(() => {

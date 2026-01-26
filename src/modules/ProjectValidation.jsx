@@ -205,7 +205,12 @@ const ProjectValidation = () => {
                                     if (selectedProject) {
                                         setSelectedProject(null);
                                     } else if (monitorSchoolId) {
-                                        navigate('/jurisdiction-schools');
+                                        // RO/SDO Navigation Fix: Go back to Dashboard instead of School List
+                                        if (userRole === 'Regional Office' || userRole === 'School Division Office') {
+                                             navigate('/monitoring-dashboard', { state: { activeTab: 'engineer' } });
+                                        } else {
+                                             navigate('/jurisdiction-schools');
+                                        }
                                     } else {
                                         navigate(-1);
                                     }
