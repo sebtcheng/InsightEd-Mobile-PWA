@@ -7,9 +7,12 @@ import { TbHomeEdit, TbCloudUpload, TbClipboardList } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings } from "react-icons/fi"; // Changed to Gear icon
 
-const BottomNav = ({ userRole = 'Engineer' }) => {
+const BottomNav = ({ userRole }) => {
     const navigate = useNavigate();
     const location = useLocation();
+
+    // If no role is provided yet (loading), don't show the nav bar
+    if (!userRole) return null;
 
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
@@ -53,7 +56,10 @@ const BottomNav = ({ userRole = 'Engineer' }) => {
         ]
     };
 
-    const currentNavItems = navConfigs[userRole] || navConfigs['Engineer'];
+    const currentNavItems = navConfigs[userRole];
+
+    // If role exists but not in config (unexpected), don't show anything or show safe fallback
+    if (!currentNavItems) return null; 
 
     return createPortal(
         <div style={styles.wrapper}>
