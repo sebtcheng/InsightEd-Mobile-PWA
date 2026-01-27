@@ -37,6 +37,10 @@ export default defineConfig({
             purpose: 'any maskable'
           }
         ]
+      },
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,csv}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
       }
     })
   ],
