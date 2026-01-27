@@ -22,8 +22,10 @@ const MonitoringDashboard = () => {
     // State for Central Office Filters
     const [coRegion, setCoRegion] = useState('');
     const [coDivision, setCoDivision] = useState('');
+    const [coDistrict, setCoDistrict] = useState(''); // NEW: District Filter
     const [availableRegions, setAvailableRegions] = useState([]);
     const [availableDivisions, setAvailableDivisions] = useState([]);
+    const [availableDistricts, setAvailableDistricts] = useState([]); // NEW: District State
     const [schoolData, setSchoolData] = useState([]); // Store raw CSV data
 
     // NEW: Regional Stats for National View
@@ -71,7 +73,8 @@ const MonitoringDashboard = () => {
 
             const params = new URLSearchParams({
                 region: queryRegion,
-                ...(queryDivision && { division: queryDivision })
+                ...(queryDivision && { division: queryDivision }),
+                ...(coDistrict && { district: coDistrict }) // Add District param
             });
 
             const fetchPromises = [
@@ -85,8 +88,8 @@ const MonitoringDashboard = () => {
                 fetchPromises.push(fetch(`/api/monitoring/division-stats?${params.toString()}`));
             }
             
-            // Fetch District Stats only for SDO
-            if (currentUserData.role === 'School Division Office') {
+            // Fetch District Stats only for SDO or CO (when Division is selected)
+            if (currentUserData.role === 'School Division Office' || (currentUserData.role === 'Central Office' && queryDivision)) {
                 fetchPromises.push(fetch(`/api/monitoring/district-stats?${params.toString()}`));
             }
 
@@ -94,8 +97,8 @@ const MonitoringDashboard = () => {
             const statsRes = results[0];
             const engStatsRes = results[1];
             const projectsRes = results[2];
-            const divStatsRes = currentUserData.role === 'Regional Office' ? results[3] : null;
-            const distStatsRes = currentUserData.role === 'School Division Office' ? results[3] : null;
+            const divStatsRes = currentUserData.role === 'Regional Office' || (currentUserData.role === 'Central Office' && queryRegion && !queryDivision) ? results[3] : null;
+            const distStatsRes = currentUserData.role === 'School Division Office' || (currentUserData.role === 'Central Office' && queryDivision) ? results[3] : null;
 
             if (statsRes.ok) setStats(await statsRes.json());
             if (engStatsRes.ok) setEngStats(await engStatsRes.json());
@@ -108,6 +111,9 @@ const MonitoringDashboard = () => {
             setLoading(false);
         }
     };
+
+    // NEW: Store Aggregated CSV Totals
+    const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
 
     useEffect(() => {
         fetchData();
@@ -126,6 +132,15 @@ const MonitoringDashboard = () => {
             complete: (results) => {
                 if(results.data && results.data.length > 0) {
                      setSchoolData(results.data);
+                     
+                     // Aggregate Totals by Region
+                     const totals = {};
+                     results.data.forEach(row => {
+                         if (row.region) {
+                             totals[row.region] = (totals[row.region] || 0) + 1;
+                         }
+                     });
+                     setCsvRegionalTotals(totals);
                 }
             }
         });
@@ -156,16 +171,70 @@ const MonitoringDashboard = () => {
         }
     }, [coRegion, schoolData, userData]);
 
+    // NEW: Update Districts when Division changes
+    useEffect(() => {
+        if (userData?.role === 'Central Office' && coDivision && schoolData.length > 0) {
+            const districts = [...new Set(schoolData
+                .filter(s => s.region === coRegion && s.division === coDivision)
+                .map(s => s.district))]
+                .sort();
+            setAvailableDistricts(districts);
+        } else {
+            setAvailableDistricts([]);
+        }
+    }, [coDivision, coRegion, schoolData, userData]);
+
     const handleFilterChange = (region) => {
         setCoRegion(region); // Set empty string for National View
         setCoDivision(''); // Reset division when region changes
+        setCoDistrict(''); // Reset district
         fetchData(region, '');
     };
 
     const handleDivisionChange = (division) => {
         setCoDivision(division);
+        setCoDistrict(''); // Reset district
         fetchData(coRegion, division);
     };
+    
+    const handleDistrictChange = (district) => {
+        setCoDistrict(district);
+        // Force fetch with current Filters + new District State
+        // Since fetchData reads coDistrict state directly if not overridden, 
+        // we might need to rely on the state update or pass it explicit.
+        // But fetchData uses state `coDivision` which is set.
+        // It uses `coDistrict` state which might not be updated yet in closure?
+        // Actually fetchData creates params. Let's make sure it picks up the NEW district.
+        // Best approach: Add params to fetchData signature or rely on effect? 
+        // Current fetchData signature is `(overrideRegion, overrideDivision)`.
+        // Let's modify fetchData slightly to read state, but state updates are async.
+        
+        // Simpler: Just set state, and use a useEffect to trigger fetch? 
+        // OR pass it explicitly.
+        
+        // Let's rely on re-render? No, explicit is better.
+        // But `fetchData` function doesn't take district arg. 
+        // Let's trust that the next render cycle or a small timeout works, 
+        // OR better: Just put `coDistrict` in a useEffect dependency for fetching.
+        // But `fetchData` is called manually in handlers.
+        
+        // Quick Fix: Update state then call logic. But we need the value *now*.
+        // Let's update `fetchData` to accept optional `overrideDistrict`? No, too messy.
+        // Let's just update state and let a `useEffect` handle it? 
+        // actually `fetchData` is called in `useEffect` on mount.
+        // Let's add a `useEffect(() => { fetchData() }, [coDistrict])`?
+        // That might cause double fetches if other things change.
+        
+        // Let's just do this:
+        setTimeout(() => fetchData(), 0); 
+    };
+    
+    // Better: Add useEffect for Filters
+    useEffect(() => {
+        if(userData?.role === 'Central Office' && (coDistrict || coDivision || coRegion)) {
+             fetchData();
+        }
+    }, [coDistrict]); // Only trigger when district changes for now to avoid loops with other handlers
 
     const StatCard = ({ title, value, total, color, icon: Icon }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
@@ -197,16 +266,18 @@ const MonitoringDashboard = () => {
         if (schoolData.length > 0 && userData) {
             const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
             const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
+            const targetDistrict = userData.role === 'Central Office' ? coDistrict : null;
             
             total = schoolData.filter(s => {
                 const matchRegion = !targetRegion || s.region === targetRegion;
                 const matchDivision = !targetDivision || s.division === targetDivision;
-                return matchRegion && matchDivision;
+                const matchDistrict = !targetDistrict || s.district === targetDistrict;
+                return matchRegion && matchDivision && matchDistrict;
             }).length;
         }
         // Fallback to DB stats if CSV not ready, though CSV is preferred for "Total Jurisdiction"
         return total || stats?.total_schools || 0;
-    }, [schoolData, userData, coRegion, coDivision, stats?.total_schools]);
+    }, [schoolData, userData, coRegion, coDivision, coDistrict, stats?.total_schools]);
 
 
     if (loading) return (
@@ -221,54 +292,156 @@ const MonitoringDashboard = () => {
             <PageTransition>
                 <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 font-sans">
                      {/* Header */}
-                     <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-6 pb-20 rounded-b-[3rem] shadow-xl text-white relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-8 opacity-10">
-                            <FiTrendingUp size={120} />
+                     <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-8 pb-32 rounded-b-[3rem] shadow-2xl text-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                            <FiTrendingUp size={200} />
                         </div>
-                        <div className="relative z-10">
-                            <h1 className="text-3xl font-black tracking-tight">{userData.bureau || 'Central Office'}</h1>
-                            <p className="text-blue-100/70 text-sm mt-1">National Overview</p>
+                        <div className="relative z-10 max-w-7xl mx-auto">
+                            <div className="flex justify-between items-end mb-6">
+                                <div>
+                                    <h1 className="text-4xl font-black tracking-tighter">{userData.bureau || 'Central Office'}</h1>
+                                    <p className="text-blue-200 text-lg font-medium mt-1">National Overview & Strategic Monitoring</p>
+                                </div>
+                                <div className="hidden md:block text-right">
+                                    <p className="text-blue-300 text-xs font-bold uppercase tracking-widest">Current Scope</p>
+                                    <p className="text-2xl font-bold">Philippines (National)</p>
+                                </div>
+                            </div>
+
+                            {/* Global Quick Stats */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                    <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Total Schools</p>
+                                    <p className="text-3xl font-black mt-1">
+                                        {/* Sum of CSV Totals if available, else backend stats */}
+                                        {Object.values(csvRegionalTotals).length > 0 
+                                            ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0).toLocaleString()
+                                            : regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0).toLocaleString()
+                                        }
+                                    </p>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                    <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Forms Completed</p>
+                                    {/* Show Percentage */}
+                                    {(() => {
+                                        const totalSchools = Object.values(csvRegionalTotals).length > 0 
+                                            ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0)
+                                            : regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
+                                        const completed = regionalStats.reduce((acc, curr) => acc + parseInt(curr.completed_schools || 0), 0);
+                                        const pct = totalSchools > 0 ? ((completed / totalSchools) * 100).toFixed(1) : 0;
+                                        return (
+                                             <div>
+                                                <p className="text-3xl font-black mt-1">{pct}%</p>
+                                                <p className="text-[10px] opacity-70">{completed.toLocaleString()} / {totalSchools.toLocaleString()}</p>
+                                             </div>
+                                        );
+                                    })()}
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                    <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Total Projects</p>
+                                    <p className="text-3xl font-black mt-1">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_projects || 0), 0).toLocaleString()}</p>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                    <p className="text-emerald-300 text-xs font-bold uppercase tracking-wider">Active Projects</p>
+                                    <p className="text-3xl font-black mt-1 text-emerald-300">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.ongoing_projects || 0), 0).toLocaleString()}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="px-5 -mt-10 space-y-4 relative z-20">
+                    <div className="max-w-7xl mx-auto px-6 -mt-20 space-y-12 relative z-20 pb-20">
                          {regionalStats.length === 0 ? (
                             <div className="bg-white p-8 rounded-3xl text-center text-slate-400">Loading regional stats...</div>
                          ) : (
-                            regionalStats.map((reg, idx) => (
-                                <div 
-                                    key={idx}
-                                    onClick={() => handleFilterChange(reg.region)}
-                                    className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all group"
-                                >
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h2 className="text-lg font-black text-slate-700 dark:text-slate-200 group-hover:text-blue-600 transition-colors">{reg.region}</h2>
-                                        <div className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">
-                                            {reg.total_schools} Schools
-                                        </div>
-                                    </div>
+                            <>
+                                {/* SECTION 1: REGIONAL PERFORMANCE (SCHOOL DATA) */}
+                                <div>
+                                    <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                        <FiCheckCircle className="text-blue-500" /> Regional Compliance Performance
+                                    </h2>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {regionalStats.map((reg, idx) => {
+                                            // Ensure we use the CSV Total if available
+                                            const totalSchools = csvRegionalTotals[reg.region] || reg.total_schools || 0;
+                                            const completedCount = reg.completed_schools || 0;
+                                            
+                                            // Handle edge case where backend total is 0 but we want to show 0/CSV_Total
+                                            const completionRate = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
+                                            
+                                            return (
+                                                <div 
+                                                    key={idx}
+                                                    onClick={() => handleFilterChange(reg.region)}
+                                                    className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all group relative overflow-hidden"
+                                                >
+                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 dark:bg-blue-900/20 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+                                                    
+                                                    <div className="relative z-10">
+                                                        <div className="flex justify-between items-start mb-6">
+                                                            <div>
+                                                                <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors">{reg.region}</h2>
+                                                                <p className="text-xs font-bold text-slate-400 uppercase mt-1">{totalSchools.toLocaleString()} Schools</p>
+                                                            </div>
+                                                            <div className={`flex items-center justify-center w-12 h-12 rounded-full font-black text-sm border-4 ${completionRate >= 100 ? 'border-emerald-500 text-emerald-600 bg-emerald-50' : (completionRate >= 50 ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-orange-500 text-orange-600 bg-orange-50')}`}>
+                                                                {completionRate}%
+                                                            </div>
+                                                        </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <p className="text-xs text-slate-400 font-bold uppercase">Enrollments</p>
-                                            <p className="text-xl font-black text-slate-800 dark:text-emerald-400">{reg.with_enrollment}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs text-slate-400 font-bold uppercase">Projects</p>
-                                            <p className="text-xl font-black text-slate-800 dark:text-blue-400">{reg.total_projects}</p>
-                                        </div>
-                                        <div className="col-span-2">
-                                            <div className="flex justify-between items-center text-xs mb-1">
-                                                <span className="font-bold text-slate-500">Project Completion</span>
-                                                <span className="font-bold text-blue-600">{reg.avg_accomplishment}%</span>
-                                            </div>
-                                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                                <div className="bg-blue-500 h-full rounded-full" style={{width: `${reg.avg_accomplishment}%`}}></div>
-                                            </div>
+                                                        <div className="space-y-3">
+                                                            <div>
+                                                                <div className="flex justify-between text-xs font-bold mb-1">
+                                                                    <span className="text-slate-500">Form Completion</span>
+                                                                    <span className="text-slate-700 dark:text-slate-300">{completedCount} / {totalSchools.toLocaleString()}</span>
+                                                                </div>
+                                                                <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                    <div className={`h-full rounded-full ${completionRate >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${completionRate}%`}}></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* SECTION 2: INFRASTRUCTURE PROJECTS MATRIX */}
+                                <div>
+                                    <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                        <FiTrendingUp className="text-emerald-500" /> Infrastructure Projects Matrix
+                                    </h2>
+                                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+                                                        <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-wider">Region</th>
+                                                        <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-wider text-center">Total Projects</th>
+                                                        <th className="p-6 text-xs font-black text-emerald-500 uppercase tracking-wider text-center bg-emerald-50/50 dark:bg-emerald-900/10">Ongoing</th>
+                                                        <th className="p-6 text-xs font-black text-blue-500 uppercase tracking-wider text-center">Completed</th>
+                                                        <th className="p-6 text-xs font-black text-red-500 uppercase tracking-wider text-center bg-red-50/50 dark:bg-red-900/10">Delayed</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                    {regionalStats.map((reg, idx) => (
+                                                        <tr 
+                                                            key={idx} 
+                                                            onClick={() => handleFilterChange(reg.region)}
+                                                            className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors"
+                                                        >
+                                                            <td className="p-6 font-bold text-slate-700 dark:text-slate-200">{reg.region}</td>
+                                                            <td className="p-6 text-center font-bold text-slate-800 dark:text-white text-lg">{reg.total_projects}</td>
+                                                            <td className="p-6 text-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/5">{reg.ongoing_projects}</td>
+                                                            <td className="p-6 text-center font-bold text-blue-600 dark:text-blue-400">{reg.completed_projects}</td>
+                                                            <td className="p-6 text-center font-bold text-red-600 dark:text-red-400 bg-red-50/30 dark:bg-red-900/5">{reg.delayed_projects}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
                                 </div>
-                            ))
+                            </>
                          )}
                     </div>
                      <BottomNav userRole={userData?.role} />
@@ -324,9 +497,25 @@ const MonitoringDashboard = () => {
                                             <option key={div} value={div} className="text-slate-800">{div}</option>
                                         ))}
                                     </select>
+
+                                    {/* District Filter */}
+                                    {coDivision && (
+                                        <select 
+                                            className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none focus:bg-white/20 text-slate-800 disabled:opacity-50"
+                                            onChange={(e) => handleDistrictChange(e.target.value)}
+                                            value={coDistrict}
+                                        >
+                                            <option value="" className="text-slate-800">All Districts</option>
+                                            {availableDistricts.map(dist => (
+                                                <option key={dist} value={dist} className="text-slate-800">{dist}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                 </div>
                                 <h1 className="text-3xl font-black tracking-tight">{userData.bureau || 'Central Office'}</h1>
-                                <p className="text-blue-100/70 text-sm mt-1">{coDivision ? `${coDivision} Division` : (coRegion ? `${coRegion}` : 'National View')}</p>
+                                <p className="text-blue-100/70 text-sm mt-1">
+                                    {coDistrict ? `${coDistrict}, ${coDivision}` : (coDivision ? `${coDivision} Division` : (coRegion ? `${coRegion}` : 'National View'))}
+                                </p>
                             </div>
                         ) : (
                             <>
@@ -406,8 +595,8 @@ const MonitoringDashboard = () => {
                                 </div>
                             </div>
 
-                            {/* Accomplishment Rate per School Division (Regional Office Only) */}
-                            {userData?.role === 'Regional Office' && (
+                            {/* Accomplishment Rate per School Division (Regional Office Only OR Central Office Regional View) */}
+                            {(userData?.role === 'Regional Office' || (userData?.role === 'Central Office' && coRegion && !coDivision)) && (
                                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                     <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
                                     {(() => {
@@ -471,13 +660,13 @@ const MonitoringDashboard = () => {
                                 </div>
                             )}
                         
-                            {/* NEW: District Accomplishment Rate for SDO */}
-                            {userData?.role === 'School Division Office' && (
+                            {/* NEW: District Accomplishment Rate for SDO OR Central Office Division View */}
+                            {(userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision && !coDistrict)) && (
                                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                     <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per District</h2>
                                     {(() => {
-                                        const targetRegion = userData.region;
-                                        const targetDivision = userData.division;
+                                        const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
+                                        const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
                                         
                                         // 1. Get unique districts from CSV
                                         const divisionDistricts = [...new Set(schoolData

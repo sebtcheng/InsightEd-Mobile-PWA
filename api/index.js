@@ -141,13 +141,13 @@ const initOtpTable = async () => {
             ADD COLUMN IF NOT EXISTS office TEXT,
             ADD COLUMN IF NOT EXISTS position TEXT;
         `);
-      console.log('✅ Checked/Extended users table schema');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate users table:', migErr.message);
-    }
-    // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
-    try {
-      await client.query(`
+        console.log('✅ Checked/Extended users table schema');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate users table:', migErr.message);
+      }
+      // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
+      try {
+        await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS sha_category TEXT,
@@ -1949,6 +1949,11 @@ app.get('/api/monitoring/stats', async (req, res) => {
       params.push(division);
     }
 
+    if (req.query.district) {
+      statsQuery += ` AND TRIM(district) = TRIM($${params.length + 1})`;
+      params.push(req.query.district);
+    }
+
     const result = await pool.query(statsQuery, params);
     res.json(result.rows[0]);
   } catch (err) {
@@ -2052,6 +2057,11 @@ app.get('/api/monitoring/schools', async (req, res) => {
       params.push(division);
     }
 
+    if (req.query.district) {
+      query += ` AND TRIM(sp.district) = TRIM($${params.length + 1})`;
+      params.push(req.query.district);
+    }
+
     query += ` ORDER BY school_name ASC`;
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -2081,6 +2091,11 @@ COUNT(*) as total_projects,
       params.push(division);
     }
 
+    if (req.query.district) {
+      query += ` AND TRIM(district) = TRIM($${params.length + 1})`;
+      params.push(req.query.district);
+    }
+
     const result = await pool.query(query, params);
     res.json(result.rows[0]);
   } catch (err) {
@@ -2106,6 +2121,11 @@ project_id as id, project_name as "projectName", school_id as "schoolId", school
     if (division) {
       query += ` AND TRIM(division) = TRIM($2)`;
       params.push(division);
+    }
+
+    if (req.query.district) {
+      query += ` AND TRIM(district) = TRIM($${params.length + 1})`;
+      params.push(req.query.district);
     }
 
     query += ` ORDER BY created_at DESC`;
@@ -2206,6 +2226,7 @@ school_id, school_name, division, region,
 });
 
 // --- 30b. GET: Aggregated Regional Stats (For Central Office) ---
+// --- 30b. GET: Aggregated Regional Stats (For Central Office) ---
 app.get('/api/monitoring/regions', async (req, res) => {
   try {
     const query = `
@@ -2214,7 +2235,16 @@ app.get('/api/monitoring/regions', async (req, res) => {
           region,
           COUNT(*) as total_schools,
           COUNT(CASE WHEN total_enrollment > 0 THEN 1 END) as with_enrollment,
-          COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as with_head
+          COUNT(CASE WHEN head_last_name IS NOT NULL THEN 1 END) as with_head,
+          SUM(CASE WHEN (
+            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+          ) = 7 THEN 1 ELSE 0 END) as completed_schools
         FROM school_profiles
         GROUP BY region
       ),
@@ -2222,7 +2252,11 @@ app.get('/api/monitoring/regions', async (req, res) => {
         SELECT 
           region,
           COUNT(*) as total_projects,
-          AVG(accomplishment_percentage) as avg_accomplishment
+          AVG(accomplishment_percentage) as avg_accomplishment,
+          -- Map 'Ongoing' and 'Not Yet Started' (and anything else not Completed/Delayed) to Ongoing/Active
+          COUNT(CASE WHEN status ILIKE 'Ongoing' OR status ILIKE 'Not Yet Started' THEN 1 END) as ongoing_projects,
+          COUNT(CASE WHEN status ILIKE 'Completed' THEN 1 END) as completed_projects,
+          COUNT(CASE WHEN status ILIKE 'Delayed' THEN 1 END) as delayed_projects
         FROM engineer_form
         GROUP BY region
       )
@@ -2231,8 +2265,13 @@ app.get('/api/monitoring/regions', async (req, res) => {
         COALESCE(s.total_schools, 0) as total_schools,
         COALESCE(s.with_enrollment, 0) as with_enrollment,
         COALESCE(s.with_head, 0) as with_head,
+        COALESCE(s.completed_schools, 0) as completed_schools,
+        
         COALESCE(p.total_projects, 0) as total_projects,
-        COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment
+        COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment,
+        COALESCE(p.ongoing_projects, 0) as ongoing_projects,
+        COALESCE(p.completed_projects, 0) as completed_projects,
+        COALESCE(p.delayed_projects, 0) as delayed_projects
       FROM school_stats s
       FULL OUTER JOIN project_stats p ON s.region = p.region
       WHERE s.region IS NOT NULL OR p.region IS NOT NULL
