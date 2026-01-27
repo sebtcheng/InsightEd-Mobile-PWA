@@ -98,6 +98,7 @@ const ShiftingModalities = () => {
     };
 
     // --- FETCH DATA (With Offline Offering Recovery) ---
+    // --- FETCH DATA (Refactored for Sync Cache) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -107,28 +108,53 @@ const ShiftingModalities = () => {
                 if (storedSchoolId) setSchoolId(storedSchoolId);
                 if (storedOffering) setOffering(storedOffering);
 
+                // STEP 1: LOAD CACHE IMMEDIATELY
+                // Fix: Standardizing on CACHE_SHIFTING_ to match write key
+                let loadedFromCache = false;
+                const CACHE_KEY = `CACHE_SHIFTING_${user.uid}`;
+                const cachedData = localStorage.getItem(CACHE_KEY);
+
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        if (parsed.shifts) setShifts(parsed.shifts);
+                        if (parsed.modes) setModes(parsed.modes);
+                        if (parsed.adms) setAdms(parsed.adms);
+                        // Also restore offering if in cache, as it controls visibility
+                        if (parsed.curricular_offering) setOffering(parsed.curricular_offering);
+
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached Shifting Modalities (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
+                }
+
                 try {
-                    // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                    // STEP 2: CHECK OUTBOX
                     let restored = false;
                     if (!viewOnly) {
                         try {
-                            const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
                             const drafts = await getOutbox();
-                            const draft = drafts.find(d => d.type === 'SHIFTING_MODALITIES' && (cachedId ? d.payload.schoolId === cachedId : true));
-
+                            const draft = drafts.find(d => d.type === 'SHIFTING_MODALITIES');
                             if (draft) {
-                                console.log("Restored draft from Outbox (Instant Load)");
+                                console.log("Restored draft from Outbox");
                                 const p = draft.payload;
 
+                                if (p.curricular_offering || p.offering) {
+                                    const draftOff = p.curricular_offering || p.offering;
+                                    setOffering(draftOff);
+                                    localStorage.setItem('schoolOffering', draftOff);
+                                }
+
+                                // Map Draft to State
                                 const loadedShifts = {};
                                 const loadedModes = {};
                                 const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-
                                 levels.forEach(lvl => {
                                     loadedShifts[`shift_${lvl}`] = p[`shift_${lvl}`] || '';
                                     loadedModes[`mode_${lvl}`] = p[`mode_${lvl}`] || '';
                                 });
-
                                 const loadedAdms = {
                                     adm_mdl: p.adm_mdl || false,
                                     adm_odl: p.adm_odl || false,
@@ -144,38 +170,41 @@ const ShiftingModalities = () => {
                                 setIsLocked(false);
                                 restored = true;
                                 setLoading(false);
-                                return; // EXIT EARLY
+                                return;
                             }
-                        } catch (e) {
-                            console.error("Outbox check failed:", e);
-                        }
+                        } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // 2. FETCH FROM API (If not restored) 
+                    // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         let fetchUrl = `/api/learning-modalities/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
+                        // Only show loading if we didn't load from cache
+                        if (!loadedFromCache) setLoading(true);
+
                         const res = await fetch(fetchUrl);
                         const json = await res.json();
 
                         if (json.exists || (viewOnly && schoolIdParam)) {
+                            // Update IDs
                             setSchoolId(json.school_id || json.schoolId || storedSchoolId);
-                            setOffering(json.curricular_offering || json.offering || storedOffering || '');
+                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                            setOffering(newOffering);
 
-                            // Keep cache in sync
-                            if (!viewOnly) {
-                                localStorage.setItem('schoolId', json.schoolId || json.school_id || storedSchoolId);
-                                localStorage.setItem('schoolOffering', json.curricular_offering || json.offering || '');
+                            if (!viewOnly && json.school_id) {
+                                localStorage.setItem('schoolId', json.school_id || json.schoolId || storedSchoolId);
+                                localStorage.setItem('schoolOffering', newOffering);
                             }
 
                             const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+
+                            // Map DB to State
                             const loadedShifts = {};
                             const loadedModes = {};
                             const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-
                             levels.forEach(lvl => {
                                 loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
                                 loadedModes[`mode_${lvl}`] = dbData[`mode_${lvl}`] || '';
@@ -194,34 +223,36 @@ const ShiftingModalities = () => {
                             setAdms(loadedAdms);
                             setOriginalData({ shifts: loadedShifts, modes: loadedModes, adms: loadedAdms });
 
-                            // Check if has content to lock
-                            // Check if has content to lock
+                            // Check Content for Lock
                             const hasContent = Object.values(loadedShifts).some(v => v) ||
                                 Object.values(loadedModes).some(v => v) ||
                                 loadedAdms.adm_mdl || loadedAdms.adm_odl ||
                                 loadedAdms.adm_tvi || loadedAdms.adm_blended || loadedAdms.adm_others;
+
                             if (hasContent) {
                                 setIsLocked(true);
                                 setHasSavedData(true);
                             }
 
-                            // CACHE DATA
-                            const cachePayload = { shifts: loadedShifts, modes: loadedModes, adms: loadedAdms, schoolId: dbData.school_id };
-                            localStorage.setItem(`CACHE_SHIFTING_${dbData.school_id || storedSchoolId}`, JSON.stringify(cachePayload));
+                            // UPDATE CACHE
+                            const cachePayload = { shifts: loadedShifts, modes: loadedModes, adms: loadedAdms, schoolId: dbData.school_id, curricular_offering: newOffering };
+                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                         }
                     }
                 } catch (error) {
                     console.error("Fetch Error:", error);
-                    // OFFLINE CACHE RECOVERY
-                    const cached = localStorage.getItem(`CACHE_SHIFTING_${storedSchoolId || 'default'}`);
-                    if (cached) {
-                        console.log("Loaded cached data for Shifting (Offline Mode)");
-                        const data = JSON.parse(cached);
-                        setShifts(data.shifts);
-                        setModes(data.modes);
-                        setAdms(data.adms);
-                        setOriginalData(data);
-                        setIsLocked(true);
+                    if (!loadedFromCache) {
+                        // Fallback: Retry cache
+                        const CACHE_KEY = `CACHE_SHIFTING_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY);
+                        if (cached) {
+                            const data = JSON.parse(cached);
+                            setShifts(data.shifts);
+                            setModes(data.modes);
+                            setAdms(data.adms);
+                            setOriginalData(data);
+                            setIsLocked(true);
+                        }
                     }
                 }
             }

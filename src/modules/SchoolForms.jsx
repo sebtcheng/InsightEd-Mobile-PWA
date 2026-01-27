@@ -116,58 +116,74 @@ const SchoolForms = () => {
     ];
 
     // --- 2. FETCH DATA ---
+    // --- 2. FETCH DATA ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                try {
-                    const profileRes = await fetch(`/api/school-by-user/${user.uid}`);
-                    if (!profileRes.ok) throw new Error("Network response was not ok");
-                    const profileJson = await profileRes.json();
-                    if (profileJson.exists) {
-                        setSchoolProfile(profileJson.data);
-                        if (profileJson.data.curricular_offering) {
-                            setCurricularOffering(profileJson.data.curricular_offering);
+                // STEP 1: IMMEDIATE CACHE LOAD
+                let loadedFromCache = false;
+                const cachedProfile = localStorage.getItem('fullSchoolProfile');
+                const cachedOffering = localStorage.getItem('schoolOffering');
+
+                if (cachedProfile) {
+                    try {
+                        const parsedProfile = JSON.parse(cachedProfile);
+                        setSchoolProfile(parsedProfile);
+                        if (cachedOffering) {
+                            setCurricularOffering(cachedOffering);
                             setIsOfferingLocked(true);
-                        } else {
-                            setCurricularOffering('');
-                            setIsOfferingLocked(false);
+                        } else if (parsedProfile.curricular_offering) {
+                            setCurricularOffering(parsedProfile.curricular_offering);
+                            setIsOfferingLocked(true);
                         }
-                        // Cache for offline usage
-                        localStorage.setItem('fullSchoolProfile', JSON.stringify(profileJson.data));
-                        localStorage.setItem('schoolOffering', profileJson.data.curricular_offering || '');
+
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached school profile (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
+                }
+
+                try {
+                    // STEP 2: BACKGROUND FETCH
+                    // Only show loading if we didn't load from cache
+                    // However, since we are fetching two things, let's keep it simple.
+                    // If we want to show a spinner on *first ever load* (no cache), we shouldn't have set loading=false above.
+                    // If loadedFromCache is true, we leave loading=false.
+
+                    const [profileRes, headRes] = await Promise.all([
+                        fetch(`/api/school-by-user/${user.uid}`),
+                        fetch(`/api/school-head/${user.uid}`)
+                    ]);
+
+                    if (profileRes.ok) {
+                        const profileJson = await profileRes.json();
+                        if (profileJson.exists) {
+                            setSchoolProfile(profileJson.data);
+                            if (profileJson.data.curricular_offering) {
+                                setCurricularOffering(profileJson.data.curricular_offering);
+                                setIsOfferingLocked(true);
+                            } else {
+                                setCurricularOffering('');
+                                setIsOfferingLocked(false);
+                            }
+                            // Cache for offline usage
+                            localStorage.setItem('fullSchoolProfile', JSON.stringify(profileJson.data));
+                            localStorage.setItem('schoolOffering', profileJson.data.curricular_offering || '');
+                        }
                     }
 
-                    const headRes = await fetch(`/api/school-head/${user.uid}`);
-                    if (!headRes.ok) throw new Error("Network response was not ok");
-                    const headJson = await headRes.json();
-                    if (headJson.exists) setHeadProfile(headJson.data);
+                    if (headRes.ok) {
+                        const headJson = await headRes.json();
+                        if (headJson.exists) setHeadProfile(headJson.data);
+                    }
+
                 } catch (error) {
-                    console.warn("⚠️ Offline/Network Error. Loading from cache...");
-                    const cachedProfile = localStorage.getItem('fullSchoolProfile');
-                    const cachedOffering = localStorage.getItem('schoolOffering');
-
-                    if (cachedProfile) {
-                        try {
-                            const parsedProfile = JSON.parse(cachedProfile);
-                            setSchoolProfile(parsedProfile);
-                            if (cachedOffering) {
-                                setCurricularOffering(cachedOffering);
-                                setIsOfferingLocked(true);
-                            }
-                            // Fallback if not separately saved
-                            else if (parsedProfile.curricular_offering) {
-                                setCurricularOffering(parsedProfile.curricular_offering);
-                                setIsOfferingLocked(true);
-                            }
-
-                            console.log("✅ School profile loaded from cache.");
-                        } catch (e) {
-                            console.error("Failed to parse cached profile", e);
-                        }
-                    }
+                    console.error("Network Error:", error);
+                    // If we didn't load from cache, and network failed, we might check cache again? 
+                    // No, Step 1 already checked cache.
                 }
             }
-            setTimeout(() => setLoading(false), 600);
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);

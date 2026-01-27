@@ -65,6 +65,7 @@ pool.connect(async (err, client, release) => {
   } else {
     isDbConnected = true;
     console.log('✅ Connected to Neon Database successfully!');
+    await initOtpTable();
 
     // --- INIT NOTIFICATIONS TABLE ---
     try {

@@ -397,7 +397,7 @@ const Register = () => {
             return;
         }
 
-        
+
         // STRICT OTP ENFORCEMENT
         if (!isOtpVerified) {
             alert("Please verify your email via OTP before registering.");
@@ -434,7 +434,7 @@ const Register = () => {
                 if (authError.code === 'auth/email-already-in-use') {
                     // ATTEMPT RECOVERY: Try logging in to see if it's a "Zombie" account (No Firestore Data)
                     // If they entered the CORRECT password for the existing email, we can proceed to check if it's a zombie.
-                    
+
                     try {
                         const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
                         user = userCredential.user;
@@ -443,11 +443,11 @@ const Register = () => {
                         if (loginError.code === 'auth/wrong-password') {
                             throw new Error("Account already exists with a different password. Please log in or reset your password.");
                         } else if (loginError.code === 'auth/too-many-requests') {
-                             throw new Error("Access temporarily disabled due to many failed attempts. Reset your password or try again later.");
+                            throw new Error("Access temporarily disabled due to many failed attempts. Reset your password or try again later.");
                         } else {
-                             // Network error or other auth issue
-                             console.error("Recovery Login Error:", loginError);
-                             throw new Error("Email already in use. Please log in.");
+                            // Network error or other auth issue
+                            console.error("Recovery Login Error:", loginError);
+                            throw new Error("Email already in use. Please log in.");
                         }
                     }
 
@@ -904,22 +904,22 @@ const Register = () => {
                                             </h3>
                                             <div className="grid grid-cols-2 gap-3">
                                                 {/* Using locations.json for hierarchy */}
-                                            <select name="region" onChange={handleRegionChange} value={formData.region} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500">
-                                                <option value="">Region</option>
-                                                {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
-                                            </select>
-                                            <select name="province" onChange={handleProvinceChange} value={formData.province} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.region}>
-                                                <option value="">Province</option>
-                                                {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                                            </select>
-                                            <select name="city" onChange={handleCityChange} value={formData.city} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.province}>
-                                                <option value="">City/Mun</option>
-                                                {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                            <select name="barangay" onChange={handleChange} value={formData.barangay} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.city}>
-                                                <option value="">Barangay</option>
-                                                {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
-                                            </select>
+                                                <select name="region" onChange={handleRegionChange} value={formData.region} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="">Region</option>
+                                                    {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
+                                                </select>
+                                                <select name="province" onChange={handleProvinceChange} value={formData.province} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.region}>
+                                                    <option value="">Province</option>
+                                                    {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                                                </select>
+                                                <select name="city" onChange={handleCityChange} value={formData.city} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.province}>
+                                                    <option value="">City/Mun</option>
+                                                    {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <select name="barangay" onChange={handleChange} value={formData.barangay} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.city}>
+                                                    <option value="">Barangay</option>
+                                                    {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                                                </select>
                                             </div>
                                         </div>
                                     )}
@@ -928,7 +928,7 @@ const Register = () => {
 
                             {/* === 3. EMAIL VERIFICATION & SECURITY === */}
                             <div className="pt-2 border-t border-slate-100 animate-in fade-in">
-                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3 hidden">
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
                                         {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
                                     </span>
@@ -943,7 +943,7 @@ const Register = () => {
                                     {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
 
                                     {/* OTP CONTROLS */}
-                                    <div className="flex flex-col gap-3 hidden">
+                                    <div className="flex flex-col gap-3">
                                         <p className="text-xs text-slate-500">
                                             Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
                                         </p>

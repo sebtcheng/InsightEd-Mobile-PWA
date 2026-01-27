@@ -78,34 +78,31 @@ const SchoolResources = () => {
         seats_grade_11: 0, seats_grade_12: 0
     };
 
-    // --- FETCH DATA ---
+    // --- FETCH DATA (Strict Sync Cache Strategy) ---
     const [enrollmentData, setEnrollmentData] = useState({});
     const [curricularOffering, setCurricularOffering] = useState('');
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                // Check local cache first
-                const cachedId = localStorage.getItem('schoolId');
-                if (cachedId) setSchoolId(cachedId);
+                // DEFAULT STATE
+                const defaultFormData = initialFields;
 
-                // Fetch user role for BottomNav
-                const userDoc = await getDoc(doc(db, "users", user.uid));
-                if (userDoc.exists()) setUserRole(userDoc.data().role);
+                // 1. SYNC CACHE LOADING
+                const storedSchoolId = localStorage.getItem('schoolId');
+                const storedOffering = localStorage.getItem('schoolOffering');
+                if (storedSchoolId) setSchoolId(storedSchoolId);
+                if (storedOffering) setCurricularOffering(storedOffering);
 
-                // 1. Fetch BASIC PROFILE / ENROLLMENT (needed for computation & ID)
-                try {
-                    let profileFetchUrl = `/api/school-by-user/${user.uid}`;
-                    if (viewOnly && schoolIdParam) {
-                        profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
-                    }
-                    const profileRes = await fetch(profileFetchUrl);
-                    const profileJson = await profileRes.json();
+                // Load Profile Cache (Enrollment) - Critical for calculations
+                const cachedProfile = localStorage.getItem('fullSchoolProfile');
+                if (cachedProfile) {
+                    try {
+                        const pData = JSON.parse(cachedProfile);
+                        // Offering from profile has precedence if valid
+                        if (pData.curricular_offering) setCurricularOffering(pData.curricular_offering);
 
-                    if (profileJson.exists || (viewOnly && schoolIdParam)) {
-                        const pData = (viewOnly && schoolIdParam) ? profileJson : profileJson.data;
-                        setSchoolId(pData.school_id || pData.schoolId);
-                        setCurricularOffering(pData.curricular_offering || pData.curricularOffering || '');
+                        // Map Enrollment using cached data
                         setEnrollmentData({
                             gradeKinder: pData.grade_kinder || pData.kinder || 0,
                             grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
@@ -116,89 +113,129 @@ const SchoolResources = () => {
                             grade11: (pData.abm_11 + pData.stem_11 + pData.humss_11 + pData.gas_11 + pData.tvl_ict_11 + pData.tvl_he_11 + pData.tvl_ia_11 + pData.tvl_afa_11 + pData.arts_11 + pData.sports_11) || 0,
                             grade12: (pData.abm_12 + pData.stem_12 + pData.humss_12 + pData.gas_12 + pData.tvl_ict_12 + pData.tvl_he_12 + pData.tvl_ia_12 + pData.tvl_afa_12 + pData.arts_12 + pData.sports_12) || 0
                         });
-                    }
-                } catch (e) {
-                    console.log("Offline: Loading basic profile from cache");
-                    const cachedProfile = localStorage.getItem('fullSchoolProfile');
-                    if (cachedProfile) {
-                        const pData = JSON.parse(cachedProfile);
-                        setCurricularOffering(pData.curricularOffering || '');
-                        // Simplify offline enrollment load (might be limited if not full profile)
-                    }
+                    } catch (e) { console.error("Profile cache error", e); }
                 }
 
-                // 2. FETCH RESOURCES (With Outbox Priority)
-                try {
-                    let restored = false;
+                // Load Resources Cache (Main Form)
+                let loadedFromCache = false;
+                const CACHE_KEY_RES = `CACHE_RESOURCES_${user.uid}`;
+                const cachedRes = localStorage.getItem(CACHE_KEY_RES);
 
-                    // A. CHECK OUTBOX FIRST (Inverted Logic)
+                if (cachedRes) {
+                    try {
+                        const parsed = JSON.parse(cachedRes);
+                        setFormData({ ...defaultFormData, ...parsed });
+                        setOriginalData({ ...defaultFormData, ...parsed });
+
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached Resources (Instant Load)");
+                    } catch (e) { console.error("Resources cache error", e); }
+                }
+
+                try {
+                    // 2. CHECK OUTBOX
+                    let restored = false;
                     if (!viewOnly) {
                         try {
-                            const cachedId = localStorage.getItem('schoolId') || (viewOnly && schoolIdParam ? schoolIdParam : null);
                             const drafts = await getOutbox();
-                            const draft = drafts.find(d => d.type === 'SCHOOL_RESOURCES' && (cachedId ? d.payload.schoolId === cachedId : true));
-
+                            const draft = drafts.find(d => d.type === 'SCHOOL_RESOURCES');
                             if (draft) {
-                                console.log("Restored draft from Outbox (Instant Load)");
-                                const p = draft.payload;
-                                setFormData(prev => ({ ...prev, ...p }));
+                                console.log("Restored draft from Outbox");
+                                setFormData({ ...defaultFormData, ...draft.payload });
                                 setIsLocked(false);
                                 restored = true;
                                 setLoading(false);
-                                // We don't return here because we still want Step 1 (Enrollment) to have finished or run, 
-                                // but typically Step 1 runs before this block anyway.
-                                // If we return, we skip the API fetch below, which is correct.
+                                return; // EXIT EARLY
                             }
-                        } catch (e) {
-                            console.error("Outbox check failed:", e);
-                        }
+                        } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // B. FETCH FROM API (If not restored)
+                    // 3. BACKGROUND FETCHES
                     if (!restored) {
+                        let profileFetchUrl = `/api/school-by-user/${user.uid}`;
                         let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
+                            profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                             resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
-                        const res = await fetch(resourcesFetchUrl);
-                        const json = await res.json();
 
-                        if (json.exists || (viewOnly && schoolIdParam)) {
-                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                            setSchoolId(dbData.school_id || dbData.schoolId || cachedId);
+                        // Only show loading if we didn't load from cache
+                        if (!loadedFromCache) setLoading(true);
 
-                            // Map database columns to state
+                        // Fetch All in Parallel
+                        const [userDoc, profileRes, resourcesRes] = await Promise.all([
+                            getDoc(doc(db, "users", user.uid)).catch(() => ({ exists: () => false })),
+                            fetch(profileFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
+                            fetch(resourcesFetchUrl).then(r => r.json()).catch(e => ({ exists: false }))
+                        ]);
+
+                        // Handle Role
+                        if (userDoc.exists()) setUserRole(userDoc.data().role);
+
+                        // Handle Profile (Enrollment updates)
+                        if (profileRes.exists || (viewOnly && schoolIdParam)) {
+                            const pData = (viewOnly && schoolIdParam) ? profileRes : profileRes.data;
+                            setSchoolId(pData.school_id || pData.schoolId);
+                            setCurricularOffering(pData.curricular_offering || pData.curricularOffering || storedOffering || '');
+
+                            const newEnrollment = {
+                                gradeKinder: pData.grade_kinder || pData.kinder || 0,
+                                grade1: pData.grade_1 || 0, grade2: pData.grade_2 || 0,
+                                grade3: pData.grade_3 || 0, grade4: pData.grade_4 || 0,
+                                grade5: pData.grade_5 || 0, grade6: pData.grade_6 || 0,
+                                grade7: pData.grade_7 || 0, grade8: pData.grade_8 || 0,
+                                grade9: pData.grade_9 || 0, grade10: pData.grade_10 || 0,
+                                grade11: (pData.abm_11 + pData.stem_11 + pData.humss_11 + pData.gas_11 + pData.tvl_ict_11 + pData.tvl_he_11 + pData.tvl_ia_11 + pData.tvl_afa_11 + pData.arts_11 + pData.sports_11) || 0,
+                                grade12: (pData.abm_12 + pData.stem_12 + pData.humss_12 + pData.gas_12 + pData.tvl_ict_12 + pData.tvl_he_12 + pData.tvl_ia_12 + pData.tvl_afa_12 + pData.arts_12 + pData.sports_12) || 0
+                            };
+                            setEnrollmentData(newEnrollment);
+
+                            if (!viewOnly && pData.school_id) {
+                                localStorage.setItem('schoolId', pData.school_id);
+                            }
+                        }
+
+                        // Handle Resources
+                        if (resourcesRes.exists || (viewOnly && schoolIdParam)) {
+                            const dbData = (viewOnly && schoolIdParam) ? resourcesRes : resourcesRes.data;
+
+                            // Map to State
                             const loaded = {};
-                            Object.keys(initialFields).forEach(key => {
-                                loaded[key] = dbData[key] ?? (typeof initialFields[key] === 'string' ? '' : 0);
+                            Object.keys(defaultFormData).forEach(key => {
+                                loaded[key] = dbData[key] ?? (typeof defaultFormData[key] === 'string' ? '' : 0);
                             });
 
                             setFormData(loaded);
                             setOriginalData(loaded);
 
-                            if (loaded.res_internet_type || loaded.res_toilets_male) { // Simple check if data exists
+                            if (loaded.res_internet_type || loaded.res_toilets_male) {
                                 setIsLocked(true);
                             }
 
-                            // CACHE DATA
-                            localStorage.setItem(`CACHE_RESOURCES_${dbData.school_id || cachedId}`, JSON.stringify(loaded));
+                            // Update Cache
+                            localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
                         }
                     }
-                } catch (e) {
-                    console.error("Fetch Resources Error:", e);
-                    // OFFLINE CACHE RECOVERY
-                    const cachedId = localStorage.getItem('schoolId');
-                    const cached = localStorage.getItem(`CACHE_RESOURCES_${cachedId || 'default'}`);
-                    if (cached) {
-                        console.log("Loaded cached data for Resources (Offline Mode)");
-                        const data = JSON.parse(cached);
-                        setFormData(data);
-                        setOriginalData(data);
-                        setIsLocked(true);
+
+                } catch (error) {
+                    console.error("Fetch Error:", error);
+                    if (!loadedFromCache) {
+                        const CACHE_KEY_RES = `CACHE_RESOURCES_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY_RES);
+                        if (cached) {
+                            try {
+                                const data = JSON.parse(cached);
+                                setFormData(data);
+                                setOriginalData(data);
+                                setIsLocked(true);
+                            } catch (e) { }
+                        }
                     }
                 }
-                setLoading(false);
             }
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);

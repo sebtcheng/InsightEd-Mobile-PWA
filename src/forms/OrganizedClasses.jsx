@@ -72,70 +72,110 @@ const OrganizedClasses = () => {
         }
     };
 
-    // --- FETCH DATA ---
+    // --- FETCH DATA (Strict Sync Cache Strategy) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // DEFAULT STATE (Prevents Uncontrolled Input Errors)
+                const defaultFormData = {
+                    kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
+                    g7: 0, g8: 0, g9: 0, g10: 0,
+                    g11: 0, g12: 0
+                };
+                const defaultClassSize = {
+                    cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
+                    cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
+                    cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
+                    cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
+                    cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
+                    cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
+                    cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
+                    cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
+                    cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
+                    cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
+                    cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
+                    cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
+                };
+
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
 
                 if (storedSchoolId) setSchoolId(storedSchoolId);
                 if (storedOffering) setOffering(storedOffering);
 
+                // STEP 1: IMMEDIATE CACHE LOAD
+                let loadedFromCache = false;
+                const CACHE_KEY = `CACHE_ORGANIZED_CLASSES_${user.uid}`;
+                const cachedData = localStorage.getItem(CACHE_KEY);
+
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+
+                        // Smart Restore: Handle both Flat (Old) and Structured (New) Cache
+                        let restoredForm = {};
+                        let restoredSize = {};
+
+                        if (parsed.formData) {
+                            restoredForm = parsed.formData;
+                            restoredSize = parsed.classSizeData || {};
+                        } else {
+                            // Map FLat DB structure
+                            restoredForm = {
+                                kinder: parsed.classes_kinder ?? parsed.kinder ?? 0,
+                                g1: parsed.classes_grade_1 ?? parsed.grade_1 ?? 0, g2: parsed.classes_grade_2 ?? parsed.grade_2 ?? 0,
+                                g3: parsed.classes_grade_3 ?? parsed.grade_3 ?? 0, g4: parsed.classes_grade_4 ?? parsed.grade_4 ?? 0,
+                                g5: parsed.classes_grade_5 ?? parsed.grade_5 ?? 0, g6: parsed.classes_grade_6 ?? parsed.grade_6 ?? 0,
+                                g7: parsed.classes_grade_7 ?? parsed.grade_7 ?? 0, g8: parsed.classes_grade_8 ?? parsed.grade_8 ?? 0,
+                                g9: parsed.classes_grade_9 ?? parsed.grade_9 ?? 0, g10: parsed.classes_grade_10 ?? parsed.grade_10 ?? 0,
+                                g11: parsed.classes_grade_11 ?? parsed.grade_11 ?? 0, g12: parsed.classes_grade_12 ?? parsed.grade_12 ?? 0
+                            };
+                            // NOTE: We don't map flat class size here extensively to keep code clean, assuming newly cached data is structured
+                            // or relied on network for deep legacy fix unless critical.
+                        }
+
+                        // MERGE to ensure no undefineds (Fix Uncontrolled Input)
+                        setFormData({ ...defaultFormData, ...restoredForm });
+                        setClassSizeData({ ...defaultClassSize, ...restoredSize });
+
+                        setOriginalData(parsed);
+                        // Restore Offering from cache if possible
+                        const cacheOff = parsed.curricular_offering || parsed.offering || (parsed.formData ? parsed.formData.offering : '') || storedOffering;
+                        if (cacheOff) setOffering(cacheOff);
+
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached Organized Classes data (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
+                }
+
                 try {
-                    // 1. Check Outbox FIRST (Inverted Logic)
+                    // STEP 2: CHECK OUTBOX
                     let restored = false;
                     if (!viewOnly) {
                         try {
-                            const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
                             const drafts = await getOutbox();
-                            // If we don't have a schoolId yet, we can't efficiently filter, but we might rely on user.uid? 
-                            // Actually drafts stores payload.schoolId.
-                            // If cachedId is null, we might miss it. But usually schoolId is cached.
-                            // However, we can also check if any draft of type ORGANIZED_CLASSES exists for this user if we stored uid?
-                            // For now, relying on cachedId or filtering by type if we assume 1 active draft per form per user.
-
-                            const draft = drafts.find(d => d.type === 'ORGANIZED_CLASSES' && (cachedId ? d.payload.schoolId === cachedId : true));
+                            const draft = drafts.find(d => d.type === 'ORGANIZED_CLASSES');
 
                             if (draft) {
-                                console.log("Restored draft from Outbox (Instant Load)");
+                                console.log("Restored draft from Outbox");
                                 const p = draft.payload;
-                                setFormData({
-                                    kinder: p.kinder || 0,
-                                    g1: p.g1 || 0, g2: p.g2 || 0, g3: p.g3 || 0,
-                                    g4: p.g4 || 0, g5: p.g5 || 0, g6: p.g6 || 0,
-                                    g7: p.g7 || 0, g8: p.g8 || 0, g9: p.g9 || 0, g10: p.g10 || 0,
-                                    g11: p.g11 || 0, g12: p.g12 || 0
-                                });
 
-                                setClassSizeData({
-                                    cntLessG1: p.cntLessG1 || 0, cntWithinG1: p.cntWithinG1 || 0, cntAboveG1: p.cntAboveG1 || 0,
-                                    cntLessG2: p.cntLessG2 || 0, cntWithinG2: p.cntWithinG2 || 0, cntAboveG2: p.cntAboveG2 || 0,
-                                    cntLessG3: p.cntLessG3 || 0, cntWithinG3: p.cntWithinG3 || 0, cntAboveG3: p.cntAboveG3 || 0,
-                                    cntLessG4: p.cntLessG4 || 0, cntWithinG4: p.cntWithinG4 || 0, cntAboveG4: p.cntAboveG4 || 0,
-                                    cntLessG5: p.cntLessG5 || 0, cntWithinG5: p.cntWithinG5 || 0, cntAboveG5: p.cntAboveG5 || 0,
-                                    cntLessG6: p.cntLessG6 || 0, cntWithinG6: p.cntWithinG6 || 0, cntAboveG6: p.cntAboveG6 || 0,
-                                    cntLessG7: p.cntLessG7 || 0, cntWithinG7: p.cntWithinG7 || 0, cntAboveG7: p.cntAboveG7 || 0,
-                                    cntLessG8: p.cntLessG8 || 0, cntWithinG8: p.cntWithinG8 || 0, cntAboveG8: p.cntAboveG8 || 0,
-                                    cntLessG9: p.cntLessG9 || 0, cntWithinG9: p.cntWithinG9 || 0, cntAboveG9: p.cntAboveG9 || 0,
-                                    cntLessG10: p.cntLessG10 || 0, cntWithinG10: p.cntWithinG10 || 0, cntAboveG10: p.cntAboveG10 || 0,
-                                    cntLessG11: p.cntLessG11 || 0, cntWithinG11: p.cntWithinG11 || 0, cntAboveG11: p.cntAboveG11 || 0,
-                                    cntLessG12: p.cntLessG12 || 0, cntWithinG12: p.cntWithinG12 || 0, cntAboveG12: p.cntAboveG12 || 0
-                                });
+                                if (p.curricular_offering || p.offering) {
+                                    setOffering(p.curricular_offering || p.offering);
+                                }
+
+                                setFormData({ ...defaultFormData, ...p });
+                                setClassSizeData({ ...defaultClassSize, ...p });
+
                                 restored = true;
                                 setLoading(false);
-
-                                // We still might want role?
-                                const docRef = doc(db, "users", user.uid);
-                                getDoc(docRef).then(snap => { if (snap.exists()) setUserRole(snap.data().role); });
-                                return; // EXIT EARLY
                             }
-                        } catch (e) {
-                            console.error("Outbox check failed:", e);
-                        }
+                        } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // 2. FETCH FROM API (Only if no draft found)
+                    // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         const docRef = doc(db, "users", user.uid);
                         let fetchUrl = `/api/organized-classes/${user.uid}`;
@@ -143,94 +183,85 @@ const OrganizedClasses = () => {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
-                        console.time("OrganizedClassesFetch");
+                        // CRITICAL: Only show loading if NOT loaded from cache
+                        if (!loadedFromCache) setLoading(true);
+
                         const [docSnap, apiResult] = await Promise.all([
-                            getDoc(docRef).catch(e => { console.error("Role fetch error", e); return { exists: () => false }; }),
+                            getDoc(docRef).catch(e => ({ exists: () => false })),
                             fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
                         ]);
-                        console.timeEnd("OrganizedClassesFetch");
 
-                        // Handle Role
                         if (docSnap.exists()) setUserRole(docSnap.data().role);
 
-                        // Handle API Data
                         const json = apiResult;
 
                         if (json.exists || (viewOnly && schoolIdParam)) {
                             setSchoolId(json.school_id || json.schoolId);
-                            setOffering(json.curricular_offering || json.offering || storedOffering || '');
+                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                            setOffering(newOffering);
 
-                            localStorage.setItem('schoolId', json.schoolId);
-                            localStorage.setItem('schoolOffering', json.offering || '');
+                            if (!viewOnly && json.schoolId) {
+                                localStorage.setItem('schoolId', json.schoolId);
+                                localStorage.setItem('schoolOffering', newOffering);
+                            }
 
                             const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-                            const hasData = Object.values(dbData).some(val => val !== null && val !== 0);
 
-                            localStorage.setItem(`CACHE_ORGANIZED_CLASSES_${json.schoolId || schoolIdParam || 'default'}`, JSON.stringify(dbData));
-
-                            const initialData = {
-                                kinder: dbData.classes_kinder || dbData.kinder || 0,
-                                g1: dbData.classes_grade_1 || dbData.grade_1 || 0, g2: dbData.classes_grade_2 || dbData.grade_2 || 0, g3: dbData.classes_grade_3 || dbData.grade_3 || 0,
-                                g4: dbData.classes_grade_4 || dbData.grade_4 || 0, g5: dbData.classes_grade_5 || dbData.grade_5 || 0, g6: dbData.classes_grade_6 || dbData.grade_6 || 0,
-                                g7: dbData.classes_grade_7 || dbData.grade_7 || 0, g8: dbData.classes_grade_8 || dbData.grade_8 || 0, g9: dbData.classes_grade_9 || dbData.grade_9 || 0, g10: dbData.classes_grade_10 || dbData.grade_10 || 0,
-                                g11: dbData.classes_grade_11 || dbData.grade_11 || 0, g12: dbData.classes_grade_12 || dbData.grade_12 || 0
+                            const newFormData = {
+                                kinder: dbData.classes_kinder ?? dbData.kinder ?? 0,
+                                g1: dbData.classes_grade_1 ?? dbData.grade_1 ?? 0, g2: dbData.classes_grade_2 ?? dbData.grade_2 ?? 0,
+                                g3: dbData.classes_grade_3 ?? dbData.grade_3 ?? 0, g4: dbData.classes_grade_4 ?? dbData.grade_4 ?? 0,
+                                g5: dbData.classes_grade_5 ?? dbData.grade_5 ?? 0, g6: dbData.classes_grade_6 ?? dbData.grade_6 ?? 0,
+                                g7: dbData.classes_grade_7 ?? dbData.grade_7 ?? 0, g8: dbData.classes_grade_8 ?? dbData.grade_8 ?? 0,
+                                g9: dbData.classes_grade_9 ?? dbData.grade_9 ?? 0, g10: dbData.classes_grade_10 ?? dbData.grade_10 ?? 0,
+                                g11: dbData.classes_grade_11 ?? dbData.grade_11 ?? 0, g12: dbData.classes_grade_12 ?? dbData.grade_12 ?? 0
                             };
-                            setFormData(initialData);
 
-                            const initialClassSize = {
-                                cntLessG1: dbData.cnt_less_g1 || 0, cntWithinG1: dbData.cnt_within_g1 || 0, cntAboveG1: dbData.cnt_above_g1 || 0,
-                                cntLessG2: dbData.cnt_less_g2 || 0, cntWithinG2: dbData.cnt_within_g2 || 0, cntAboveG2: dbData.cnt_above_g2 || 0,
-                                cntLessG3: dbData.cnt_less_g3 || 0, cntWithinG3: dbData.cnt_within_g3 || 0, cntAboveG3: dbData.cnt_above_g3 || 0,
-                                cntLessG4: dbData.cnt_less_g4 || 0, cntWithinG4: dbData.cnt_within_g4 || 0, cntAboveG4: dbData.cnt_above_g4 || 0,
-                                cntLessG5: dbData.cnt_less_g5 || 0, cntWithinG5: dbData.cnt_within_g5 || 0, cntAboveG5: dbData.cnt_above_g5 || 0,
-                                cntLessG6: dbData.cnt_less_g6 || 0, cntWithinG6: dbData.cnt_within_g6 || 0, cntAboveG6: dbData.cnt_above_g6 || 0,
-                                cntLessG7: dbData.cnt_less_g7 || 0, cntWithinG7: dbData.cnt_within_g7 || 0, cntAboveG7: dbData.cnt_above_g7 || 0,
-                                cntLessG8: dbData.cnt_less_g8 || 0, cntWithinG8: dbData.cnt_within_g8 || 0, cntAboveG8: dbData.cnt_above_g8 || 0,
-                                cntLessG9: dbData.cnt_less_g9 || 0, cntWithinG9: dbData.cnt_within_g9 || 0, cntAboveG9: dbData.cnt_above_g9 || 0,
-                                cntLessG10: dbData.cnt_less_g10 || 0, cntWithinG10: dbData.cnt_within_g10 || 0, cntAboveG10: dbData.cnt_above_g10 || 0,
-                                cntLessG11: dbData.cnt_less_g11 || 0, cntWithinG11: dbData.cnt_within_g11 || 0, cntAboveG11: dbData.cnt_above_g11 || 0,
-                                cntLessG12: dbData.cnt_less_g12 || 0, cntWithinG12: dbData.cnt_within_g12 || 0, cntAboveG12: dbData.cnt_above_g12 || 0
+                            const newClassSize = {
+                                cntLessG1: dbData.cnt_less_g1 ?? 0, cntWithinG1: dbData.cnt_within_g1 ?? 0, cntAboveG1: dbData.cnt_above_g1 ?? 0,
+                                cntLessG2: dbData.cnt_less_g2 ?? 0, cntWithinG2: dbData.cnt_within_g2 ?? 0, cntAboveG2: dbData.cnt_above_g2 ?? 0,
+                                cntLessG3: dbData.cnt_less_g3 ?? 0, cntWithinG3: dbData.cnt_within_g3 ?? 0, cntAboveG3: dbData.cnt_above_g3 ?? 0,
+                                cntLessG4: dbData.cnt_less_g4 ?? 0, cntWithinG4: dbData.cnt_within_g4 ?? 0, cntAboveG4: dbData.cnt_above_g4 ?? 0,
+                                cntLessG5: dbData.cnt_less_g5 ?? 0, cntWithinG5: dbData.cnt_within_g5 ?? 0, cntAboveG5: dbData.cnt_above_g5 ?? 0,
+                                cntLessG6: dbData.cnt_less_g6 ?? 0, cntWithinG6: dbData.cnt_within_g6 ?? 0, cntAboveG6: dbData.cnt_above_g6 ?? 0,
+                                cntLessG7: dbData.cnt_less_g7 ?? 0, cntWithinG7: dbData.cnt_within_g7 ?? 0, cntAboveG7: dbData.cnt_above_g7 ?? 0,
+                                cntLessG8: dbData.cnt_less_g8 ?? 0, cntWithinG8: dbData.cnt_within_g8 ?? 0, cntAboveG8: dbData.cnt_above_g8 ?? 0,
+                                cntLessG9: dbData.cnt_less_g9 ?? 0, cntWithinG9: dbData.cnt_within_g9 ?? 0, cntAboveG9: dbData.cnt_above_g9 ?? 0,
+                                cntLessG10: dbData.cnt_less_g10 ?? 0, cntWithinG10: dbData.cnt_within_g10 ?? 0, cntAboveG10: dbData.cnt_above_g10 ?? 0,
+                                cntLessG11: dbData.cnt_less_g11 ?? 0, cntWithinG11: dbData.cnt_within_g11 ?? 0, cntAboveG11: dbData.cnt_above_g11 ?? 0,
+                                cntLessG12: dbData.cnt_less_g12 ?? 0, cntWithinG12: dbData.cnt_within_g12 ?? 0, cntAboveG12: dbData.cnt_above_g12 ?? 0
                             };
-                            setClassSizeData(initialClassSize);
-                            setOriginalData({ ...initialData, classSize: initialClassSize });
 
-                            if (hasData) setIsLocked(true);
+                            setFormData(prev => ({ ...prev, ...newFormData }));
+                            setClassSizeData(prev => ({ ...prev, ...newClassSize }));
+
+                            // Create Structured Cache
+                            const cachePayload = {
+                                formData: newFormData,
+                                classSizeData: newClassSize,
+                                curricular_offering: newOffering,
+                                schoolId: json.schoolId
+                            };
+                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+                            setOriginalData(cachePayload);
+                            setIsLocked(true);
                         }
                     }
                 } catch (error) {
-                    console.error("Error fetching classes:", error);
-                    // OFFLINE CACHE RECOVERY
-                    const cached = localStorage.getItem(`CACHE_ORGANIZED_CLASSES_${schoolIdParam || localStorage.getItem('schoolId') || 'default'}`);
-                    if (cached) {
-                        console.log("Loaded cached data for Organized Classes (Offline Mode)");
-                        const dbData = JSON.parse(cached);
-
-                        const initialData = {
-                            kinder: dbData.classes_kinder || dbData.kinder || 0,
-                            g1: dbData.classes_grade_1 || dbData.grade_1 || 0, g2: dbData.classes_grade_2 || dbData.grade_2 || 0, g3: dbData.classes_grade_3 || dbData.grade_3 || 0,
-                            g4: dbData.classes_grade_4 || dbData.grade_4 || 0, g5: dbData.classes_grade_5 || dbData.grade_5 || 0, g6: dbData.classes_grade_6 || dbData.grade_6 || 0,
-                            g7: dbData.classes_grade_7 || dbData.grade_7 || 0, g8: dbData.classes_grade_8 || dbData.grade_8 || 0, g9: dbData.classes_grade_9 || dbData.grade_9 || 0, g10: dbData.classes_grade_10 || dbData.grade_10 || 0,
-                            g11: dbData.classes_grade_11 || dbData.grade_11 || 0, g12: dbData.classes_grade_12 || dbData.grade_12 || 0
-                        };
-                        setFormData(initialData);
-
-                        const initialClassSize = {
-                            cntLessG1: dbData.cnt_less_g1 || 0, cntWithinG1: dbData.cnt_within_g1 || 0, cntAboveG1: dbData.cnt_above_g1 || 0,
-                            cntLessG2: dbData.cnt_less_g2 || 0, cntWithinG2: dbData.cnt_within_g2 || 0, cntAboveG2: dbData.cnt_above_g2 || 0,
-                            cntLessG3: dbData.cnt_less_g3 || 0, cntWithinG3: dbData.cnt_within_g3 || 0, cntAboveG3: dbData.cnt_above_g3 || 0,
-                            cntLessG4: dbData.cnt_less_g4 || 0, cntWithinG4: dbData.cnt_within_g4 || 0, cntAboveG4: dbData.cnt_above_g4 || 0,
-                            cntLessG5: dbData.cnt_less_g5 || 0, cntWithinG5: dbData.cnt_within_g5 || 0, cntAboveG5: dbData.cnt_above_g5 || 0,
-                            cntLessG6: dbData.cnt_less_g6 || 0, cntWithinG6: dbData.cnt_within_g6 || 0, cntAboveG6: dbData.cnt_above_g6 || 0,
-                            cntLessG7: dbData.cnt_less_g7 || 0, cntWithinG7: dbData.cnt_within_g7 || 0, cntAboveG7: dbData.cnt_above_g7 || 0,
-                            cntLessG8: dbData.cnt_less_g8 || 0, cntWithinG8: dbData.cnt_within_g8 || 0, cntAboveG8: dbData.cnt_above_g8 || 0,
-                            cntLessG9: dbData.cnt_less_g9 || 0, cntWithinG9: dbData.cnt_within_g9 || 0, cntAboveG9: dbData.cnt_above_g9 || 0,
-                            cntLessG10: dbData.cnt_less_g10 || 0, cntWithinG10: dbData.cnt_within_g10 || 0, cntAboveG10: dbData.cnt_above_g10 || 0,
-                            cntLessG11: dbData.cnt_less_g11 || 0, cntWithinG11: dbData.cnt_within_g11 || 0, cntAboveG11: dbData.cnt_above_g11 || 0,
-                            cntLessG12: dbData.cnt_less_g12 || 0, cntWithinG12: dbData.cnt_within_g12 || 0, cntAboveG12: dbData.cnt_above_g12 || 0
-                        };
-                        setClassSizeData(initialClassSize);
-                        setOriginalData({ ...initialData, classSize: initialClassSize });
-                        setIsLocked(true); // Always lock cached data (read-only)
+                    console.error("Network Error:", error);
+                    if (!loadedFromCache) {
+                        const CACHE_KEY = `CACHE_ORGANIZED_CLASSES_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY);
+                        if (cached) {
+                            try {
+                                const parsed = JSON.parse(cached);
+                                // Simple restore fallback
+                                if (parsed.formData) {
+                                    setFormData({ ...defaultFormData, ...parsed.formData });
+                                    setClassSizeData({ ...defaultClassSize, ...parsed.classSizeData });
+                                }
+                            } catch (e) { }
+                        }
                     }
                 }
             }

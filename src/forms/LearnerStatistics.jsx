@@ -107,6 +107,12 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
 
 const LearnerStatistics = () => {
     const navigate = useNavigate();
+    // Use location to determine viewOnly mode
+    const location = window.location;
+    const queryParams = new URLSearchParams(location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const monitorSchoolId = queryParams.get('schoolId');
+
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [isLocked, setIsLocked] = useState(false);
@@ -161,6 +167,32 @@ const LearnerStatistics = () => {
             const storedSchoolId = localStorage.getItem('schoolId');
             const storedOffering = localStorage.getItem('schoolOffering');
 
+            // STEP 1: LOCK - IMMEDIATE LOAD
+            if (storedOffering) {
+                // We don't have a direct setter for just offering unless we update formData
+                // LearnerStatistics uses formData.curricular_offering usually.
+                setFormData(prev => ({ ...prev, curricular_offering: storedOffering }));
+            }
+
+            // SWR: Load Cached Data Immediately
+            const CACHE_KEY = `CACHE_LEARNER_STATS_${user.uid}`;
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+                try {
+                    const parsed = JSON.parse(cachedData);
+                    // Restore complex state
+                    // We need to carefully restore formData structure if it's flat
+                    // LearnerStatistics saves formData which includes grids usually?
+                    // Previous caching code (not visible) likely saves the whole 'formData' object
+                    // Check logic: setFormData(parsed);
+                    setFormData(prev => ({ ...prev, ...parsed }));
+
+                    setIsLocked(true);
+                    setLoading(false); // CRITICAL: Instant Load
+                    console.log("Loaded cached Learner Stats data (Instant Load)");
+                } catch (e) { console.error("Cache parse error", e); }
+            }
+
             try {
                 // 1. CHECK OUTBOX FIRST (Inverted Logic)
                 let restored = false;
@@ -175,6 +207,12 @@ const LearnerStatistics = () => {
                     if (draft) {
                         console.log("Restored draft from Outbox (Instant Load)");
                         setFormData(prev => ({ ...prev, ...draft.payload }));
+
+                        // CRITICAL: Lock Offering from Draft
+                        if (draft.payload.curricular_offering) {
+                            localStorage.setItem('schoolOffering', draft.payload.curricular_offering);
+                        }
+
                         setIsLocked(false);
                         restored = true;
                         setLoading(false);
@@ -190,6 +228,14 @@ const LearnerStatistics = () => {
                     const result = await res.json();
                     if (result.exists) {
                         const fallbackOffering = result.data.curricular_offering || storedOffering || '';
+
+                        // CRITICAL: Save Offering to localStorage
+                        // Assuming result.data.school_id is available
+                        const targetSchoolId = result.data.school_id || result.data.schoolId || storedSchoolId;
+                        if (!viewOnly && targetSchoolId) {
+                            localStorage.setItem('schoolId', targetSchoolId);
+                            localStorage.setItem('schoolOffering', result.data.curricular_offering || '');
+                        }
 
                         // Flatten the grids into formData
                         const flattenedGrids = {};
@@ -222,17 +268,16 @@ const LearnerStatistics = () => {
                         setIsLocked(true);
 
                         // CACHE DATA
-                        // We cache the raw result.data or the processed?
-                        // If we cache result.data, we need to re-process on load. 
-                        // Let's cache the RESULT.DATA to maintain source of truth structure.
-                        localStorage.setItem(`CACHE_LEARNER_STATS_${result.data.schoolId || storedSchoolId || 'default'}`, JSON.stringify(result.data));
+                        const CACHE_KEY = `CACHE_LEARNER_STATS_${user.uid}`;
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(result.data));
                     }
                 }
             } catch (err) {
                 console.error("Fetch Error:", err);
 
                 // OFFLINE CACHE RECOVERY
-                const cached = localStorage.getItem(`CACHE_LEARNER_STATS_${storedSchoolId || 'default'}`);
+                const CACHE_KEY = `CACHE_LEARNER_STATS_${user.uid}`;
+                const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     console.log("Loaded cached data for Learner Stats (Offline Mode)");
                     const dbData = JSON.parse(cached);

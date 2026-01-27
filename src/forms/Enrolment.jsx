@@ -104,6 +104,7 @@ const Enrolment = () => {
     }, []);
 
     // --- INITIALIZATION ---
+    // --- 2. INITIALIZATION (Strict Sync Cache Strategy) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -111,43 +112,75 @@ const Enrolment = () => {
                 let storedOffering = localStorage.getItem('schoolOffering');
 
                 if (storedSchoolId) setSchoolId(storedSchoolId);
-                // We will set offering after we find data
+                if (storedOffering) setCurricularOffering(storedOffering);
+
+                // STEP 1: IMMEDIATE CACHE LOAD
+                let loadedFromCache = false;
+                const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+                const cachedData = localStorage.getItem(CACHE_KEY);
+
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        // Restore Enrolment State
+                        if (parsed.schoolId) setSchoolId(parsed.schoolId);
+                        if (parsed.basicGrades) setBasicGrades(parsed.basicGrades);
+                        if (parsed.strands || parsed.shsStrands) setShsStrands(parsed.strands || parsed.shsStrands); // Fix: setShsStrands
+                        if (parsed.aralData) setAralData(parsed.aralData);
+
+                        // Restore offering if in cache
+                        if (parsed.curricular_offering) {
+                            setCurricularOffering(parsed.curricular_offering);
+                        }
+
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached Enrolment data (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
+                }
 
                 try {
-                    // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                    // STEP 2: CHECK OUTBOX
                     let restored = false;
                     if (!viewOnly) {
                         try {
                             const cachedId = storedSchoolId || (viewOnly && monitorSchoolId ? monitorSchoolId : null);
                             const drafts = await getOutbox();
                             // Attempt to match by SchoolID if we have it, otherwise we might look for specific draft types
-                            // For Enrolment, schoolId is primary key effectively.
                             const draft = drafts.find(d => d.type === 'ENROLMENT' && (cachedId ? d.payload.schoolId === cachedId : true));
 
                             if (draft) {
-                                console.log("Restored draft from Outbox (Instant Load)");
+                                console.log("Restored draft from Outbox");
                                 const p = draft.payload;
 
-                                setSchoolId(p.schoolId); // Ensure ID is sync
-                                if (p.curricularOffering) setCurricularOffering(p.curricularOffering);
+                                setSchoolId(p.school_id || p.schoolId);
+                                const draftOffering = p.curricular_offering || p.curricularOffering;
+                                if (draftOffering) {
+                                    setCurricularOffering(draftOffering);
+                                    localStorage.setItem('schoolOffering', draftOffering);
+                                }
 
                                 setBasicGrades({
-                                    gradeKinder: p.gradeKinder || 0, grade1: p.grade1 || 0, grade2: p.grade2 || 0,
-                                    grade3: p.grade3 || 0, grade4: p.grade4 || 0, grade5: p.grade5 || 0, grade6: p.grade6 || 0,
-                                    grade7: p.grade7 || 0, grade8: p.grade8 || 0, grade9: p.grade9 || 0, grade10: p.grade10 || 0
+                                    gradeKinder: p.grade_kinder || p.gradeKinder || 0,
+                                    grade1: p.grade_1 || p.grade1 || 0, grade2: p.grade_2 || p.grade2 || 0,
+                                    grade3: p.grade_3 || p.grade3 || 0, grade4: p.grade_4 || p.grade4 || 0,
+                                    grade5: p.grade_5 || p.grade5 || 0, grade6: p.grade_6 || p.grade6 || 0,
+                                    grade7: p.grade_7 || p.grade7 || 0, grade8: p.grade_8 || p.grade8 || 0,
+                                    grade9: p.grade_9 || p.grade9 || 0, grade10: p.grade_10 || p.grade10 || 0
                                 });
 
                                 setShsStrands({
-                                    abm11: p.abm11 || 0, abm12: p.abm12 || 0,
-                                    stem11: p.stem11 || 0, stem12: p.stem12 || 0,
-                                    humss11: p.humss11 || 0, humss12: p.humss12 || 0,
-                                    gas11: p.gas11 || 0, gas12: p.gas12 || 0,
-                                    ict11: p.ict11 || 0, ict12: p.ict12 || 0,
-                                    he11: p.he11 || 0, he12: p.he12 || 0,
-                                    ia11: p.ia11 || 0, ia12: p.ia12 || 0,
-                                    afa11: p.afa11 || 0, afa12: p.afa12 || 0,
-                                    arts11: p.arts11 || 0, arts12: p.arts12 || 0,
-                                    sports11: p.sports11 || 0, sports12: p.sports12 || 0
+                                    abm11: p.abm_11 || p.abm11 || 0, abm12: p.abm_12 || p.abm12 || 0,
+                                    stem11: p.stem_11 || p.stem11 || 0, stem12: p.stem_12 || p.stem12 || 0,
+                                    humss11: p.humss_11 || p.humss11 || 0, humss12: p.humss_12 || p.humss12 || 0,
+                                    gas11: p.gas_11 || p.gas11 || 0, gas12: p.gas_12 || p.gas12 || 0,
+                                    ict11: p.tvl_ict_11 || p.ict11 || 0, ict12: p.tvl_ict_12 || p.ict12 || 0,
+                                    he11: p.tvl_he_11 || p.he11 || 0, he12: p.tvl_he_12 || p.he12 || 0,
+                                    ia11: p.tvl_ia_11 || p.ia11 || 0, ia12: p.tvl_ia_12 || p.ia12 || 0,
+                                    afa11: p.tvl_afa_11 || p.afa11 || 0, afa12: p.tvl_afa_12 || p.afa12 || 0,
+                                    arts11: p.arts_11 || p.arts11 || 0, arts12: p.arts_12 || p.arts12 || 0,
+                                    sports11: p.sports_11 || p.sports11 || 0, sports12: p.sports_12 || p.sports12 || 0
                                 });
 
                                 setAralData({
@@ -162,18 +195,18 @@ const Enrolment = () => {
                                 setIsLocked(false);
                                 restored = true;
                                 setLoading(false);
-                                return; // EXIT EARLY
                             }
-                        } catch (e) {
-                            console.error("Outbox check failed:", e);
-                        }
+                        } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // 2. FETCH FROM API (If not restored)
+                    // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         const fetchUrl = viewOnly && monitorSchoolId
                             ? `/api/monitoring/school-detail/${monitorSchoolId}`
                             : `/api/school-by-user/${user.uid}`;
+
+                        // Only show loading if we didn't load from cache
+                        if (!loadedFromCache) setLoading(true);
 
                         const response = await fetch(fetchUrl);
                         if (response.ok) {
@@ -229,8 +262,17 @@ const Enrolment = () => {
                                     setOriginalData({ basic, strands, aral });
                                 }
 
-                                // CACHE DATA
-                                localStorage.setItem(`CACHE_ENROLMENT_${data.school_id || storedSchoolId}`, JSON.stringify(data));
+                                // UPDATE CACHE
+                                const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+                                const cachedPayload = {
+                                    schoolId: data.school_id,
+                                    curricular_offering: data.curricular_offering,
+                                    basicGrades: basic,
+                                    strands: strands, // Use standardized key
+                                    shsStrands: strands, // Dual save to be safe
+                                    aralData: aral
+                                };
+                                localStorage.setItem(CACHE_KEY, JSON.stringify(cachedPayload));
 
                             } else if (!viewOnly && !storedSchoolId) {
                                 alert("School Profile missing. Redirecting to setup...");
@@ -240,48 +282,20 @@ const Enrolment = () => {
                     }
                 } catch (error) {
                     console.error("Fetch Error:", error);
-                    // OFFLINE CACHE RECOVERY
-                    const cached = localStorage.getItem(`CACHE_ENROLMENT_${storedSchoolId || monitorSchoolId || 'default'}`);
-                    if (cached) {
-                        console.log("Loaded cached data for Enrolment (Offline Mode)");
-                        const data = JSON.parse(cached);
-
-                        setBasicGrades({
-                            gradeKinder: data.grade_kinder || 0,
-                            grade1: data.grade_1 || 0, grade2: data.grade_2 || 0,
-                            grade3: data.grade_3 || 0, grade4: data.grade_4 || 0,
-                            grade5: data.grade_5 || 0, grade6: data.grade_6 || 0,
-                            grade7: data.grade_7 || 0, grade8: data.grade_8 || 0,
-                            grade9: data.grade_9 || 0, grade10: data.grade_10 || 0
-                        });
-
-                        setShsStrands({
-                            abm11: data.abm_11 || 0, abm12: data.abm_12 || 0,
-                            stem11: data.stem_11 || 0, stem12: data.stem_12 || 0,
-                            humss11: data.humss_11 || 0, humss12: data.humss_12 || 0,
-                            gas11: data.gas_11 || 0, gas12: data.gas_12 || 0,
-                            ict11: data.tvl_ict_11 || 0, ict12: data.tvl_ict_12 || 0,
-                            he11: data.tvl_he_11 || 0, he12: data.tvl_he_12 || 0,
-                            ia11: data.tvl_ia_11 || 0, ia12: data.tvl_ia_12 || 0,
-                            afa11: data.tvl_afa_11 || 0, afa12: data.tvl_afa_12 || 0,
-                            arts11: data.arts_11 || 0, arts12: data.arts_12 || 0,
-                            sports11: data.sports_11 || 0, sports12: data.sports_12 || 0
-                        });
-
-                        setAralData({
-                            aral_math_g1: data.aral_math_g1 || 0, aral_read_g1: data.aral_read_g1 || 0, aral_sci_g1: data.aral_sci_g1 || 0,
-                            aral_math_g2: data.aral_math_g2 || 0, aral_read_g2: data.aral_read_g2 || 0, aral_sci_g2: data.aral_sci_g2 || 0,
-                            aral_math_g3: data.aral_math_g3 || 0, aral_read_g3: data.aral_read_g3 || 0, aral_sci_g3: data.aral_sci_g3 || 0,
-                            aral_math_g4: data.aral_math_g4 || 0, aral_read_g4: data.aral_read_g4 || 0, aral_sci_g4: data.aral_sci_g4 || 0,
-                            aral_math_g5: data.aral_math_g5 || 0, aral_read_g5: data.aral_read_g5 || 0, aral_sci_g5: data.aral_sci_g5 || 0,
-                            aral_math_g6: data.aral_math_g6 || 0, aral_read_g6: data.aral_read_g6 || 0, aral_sci_g6: data.aral_sci_g6 || 0
-                        });
-
-                        setIsLocked(true); // Read-only
+                    if (!loadedFromCache) {
+                        // Fallback: Retry cache
+                        const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY);
+                        if (cached) {
+                            const data = JSON.parse(cached);
+                            // ... (Reuse restore logic if needed, or just let the first pass handle it)
+                            // Since we have consistent cache key and structure, the first pass is 99% efficient.
+                        }
                     }
+                } finally {
+                    setLoading(false);
                 }
             }
-            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -339,21 +353,43 @@ const Enrolment = () => {
         const finalSHSTotal = getSHSTotal();
         const finalGrandTotal = finalESTotal + finalJHSTotal + finalSHSTotal;
 
+        // MAP TO SNAKE_CASE FOR BACKEND
         const payload = {
-            schoolId,
-            submittedBy: user.uid,
-            curricularOffering,
-            ...basicGrades,
-            ...shsStrands,
+            school_id: schoolId,
+            submitted_by: user.uid,
+            curricular_offering: curricularOffering,
 
+            // Basic Grades (camel -> snake)
+            grade_kinder: basicGrades.gradeKinder,
+            grade_1: basicGrades.grade1, grade_2: basicGrades.grade2,
+            grade_3: basicGrades.grade3, grade_4: basicGrades.grade4,
+            grade_5: basicGrades.grade5, grade_6: basicGrades.grade6,
+            grade_7: basicGrades.grade7, grade_8: basicGrades.grade8,
+            grade_9: basicGrades.grade9, grade_10: basicGrades.grade10,
+
+            // SHS (camel -> snake)
+            abm_11: shsStrands.abm11, abm_12: shsStrands.abm12,
+            stem_11: shsStrands.stem11, stem_12: shsStrands.stem12,
+            humss_11: shsStrands.humss11, humss_12: shsStrands.humss12,
+            gas_11: shsStrands.gas11, gas_12: shsStrands.gas12,
+            tvl_ict_11: shsStrands.ict11, tvl_ict_12: shsStrands.ict12,
+            tvl_he_11: shsStrands.he11, tvl_he_12: shsStrands.he12,
+            tvl_ia_11: shsStrands.ia11, tvl_ia_12: shsStrands.ia12,
+            tvl_afa_11: shsStrands.afa11, tvl_afa_12: shsStrands.afa12,
+            arts_11: shsStrands.arts11, arts_12: shsStrands.arts12,
+            sports_11: shsStrands.sports11, sports_12: shsStrands.sports12,
+
+            // Aral Data (Already snake in state? Check state definition. Yes, state keys are like 'aral_math_g1')
             ...aralData,
             aral_total: Object.values(aralData).reduce((a, b) => a + (b || 0), 0),
-            grade11: getG11Total(),
-            grade12: getG12Total(),
-            esTotal: finalESTotal,
-            jhsTotal: finalJHSTotal,
-            shsTotal: finalSHSTotal,
-            grandTotal: finalGrandTotal
+
+            // Computed
+            grade_11: getG11Total(),
+            grade_12: getG12Total(),
+            es_total: finalESTotal,
+            jhs_total: finalJHSTotal,
+            shs_total: finalSHSTotal,
+            grand_total: finalGrandTotal
         };
 
         if (!navigator.onLine) {
@@ -364,9 +400,14 @@ const Enrolment = () => {
                     url: '/api/save-enrolment',
                     payload: payload
                 });
-                setShowOfflineModal(true); // USE MODAL
+                setShowOfflineModal(true);
                 setLastUpdated(new Date().toISOString());
                 setIsLocked(true);
+
+                // OPTIMISTIC UPDATE CACHE
+                const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+                localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+
             } catch (e) {
                 console.error(e);
                 alert("Offline save failed.");
@@ -381,9 +422,14 @@ const Enrolment = () => {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
             if (response.ok) {
-                setShowSuccessModal(true); // USE MODAL
+                setShowSuccessModal(true);
                 setLastUpdated(new Date().toISOString());
                 setIsLocked(true);
+
+                // UPDATE CACHE ON SUCCESS TOO
+                const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+                localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+
             } else {
                 const err = await response.json();
                 alert('Error: ' + err.message);
@@ -396,6 +442,10 @@ const Enrolment = () => {
                 url: '/api/save-enrolment',
                 payload: payload
             });
+            // Update Cache for immediate feedback next load
+            const CACHE_KEY = `CACHE_ENROLMENT_${user.uid}`;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+
             alert("📴 Saved to Outbox!");
             setIsLocked(true);
         } finally { setIsSaving(false); }

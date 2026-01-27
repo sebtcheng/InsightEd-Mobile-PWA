@@ -104,11 +104,30 @@ const SchoolInformation = () => {
     };
 
     // --- 2. LOAD DATA ---
+    // --- 2. LOAD DATA (Strict Sync Cache Strategy) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // STEP 1: IMMEDIATE CACHE LOAD
+                let loadedFromCache = false;
+                const CACHE_KEY = `CACHE_SCHOOL_INFO_${user.uid}`;
+                const cachedData = localStorage.getItem(CACHE_KEY);
+
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        setFormData(parsed);
+                        setOriginalData(parsed);
+                        // setLastUpdated(parsed.lastUpdated || null); // Optional restoration
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached School Info (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
+                }
+
                 try {
-                    // 1. CHECK OUTBOX FIRST (Inverted Logic)
+                    // STEP 2: CHECK OUTBOX
                     let restored = false;
                     if (!viewOnly) {
                         try {
@@ -116,9 +135,9 @@ const SchoolInformation = () => {
                             const draft = drafts.find(d => d.type === 'SCHOOL_HEAD_INFO' && d.payload.uid === user.uid);
 
                             if (draft) {
-                                console.log("Restored draft from Outbox (Instant Load)");
+                                console.log("Restored draft from Outbox");
                                 const draftData = draft.payload;
-                                setFormData({
+                                const merged = {
                                     lastName: draftData.lastName || '',
                                     firstName: draftData.firstName || '',
                                     middleName: draftData.middleName || '',
@@ -128,24 +147,24 @@ const SchoolInformation = () => {
                                     sex: draftData.sex || '',
                                     region: draftData.region || '',
                                     division: draftData.division || ''
-                                });
+                                };
+                                setFormData(merged);
                                 setIsLocked(false);
                                 restored = true;
                                 setLoading(false);
-                                return; // EXIT EARLY
                             }
-                        } catch (e) {
-                            console.error("Outbox check failed:", e);
-                        }
+                        } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // 2. FETCH FROM API (Only if no draft found)
+                    // STEP 3: BACKGROUND FETCH
                     if (!restored) {
-                        // Determine which ID to use for fetching
                         let fetchUrl = `/api/school-head/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
+
+                        // Only show loading if we didn't load from cache
+                        if (!loadedFromCache) setLoading(true);
 
                         const response = await fetch(fetchUrl);
                         if (response.ok) {
@@ -164,30 +183,32 @@ const SchoolInformation = () => {
                                     region: data.head_region || '',
                                     division: data.head_division || ''
                                 };
+
                                 setFormData(loadedData);
                                 setOriginalData(loadedData);
                                 setLastUpdated(data.updated_at || data.submitted_at);
                                 setIsLocked(true);
 
-                                // CACHE DATA
-                                localStorage.setItem(`CACHE_SCHOOL_INFO_${user.uid}`, JSON.stringify(loadedData));
+                                // UPDATE CACHE
+                                localStorage.setItem(CACHE_KEY, JSON.stringify(loadedData));
                             }
                         }
                     }
-                } catch (e) {
-                    console.error("Fetch Error:", e);
-                    // OFFLINE CACHE RECOVERY
-                    const cached = localStorage.getItem(`CACHE_SCHOOL_INFO_${user.uid}`);
-                    if (cached) {
-                        console.log("Loaded cached data for School Info (Offline Mode)");
-                        const loadedData = JSON.parse(cached);
-                        setFormData(loadedData);
-                        setOriginalData(loadedData);
-                        setIsLocked(true); // Read-only
+                } catch (error) {
+                    console.error("Fetch Error:", error);
+                    if (!loadedFromCache) {
+                        // Fallback: Retry cache
+                        const CACHE_KEY = `CACHE_SCHOOL_INFO_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY);
+                        if (cached) {
+                            const data = JSON.parse(cached);
+                            setFormData(data);
+                            setOriginalData(data);
+                            setIsLocked(true);
+                        }
                     }
                 }
             }
-            // Remove artifical delay
             setLoading(false);
         });
         return () => unsubscribe();

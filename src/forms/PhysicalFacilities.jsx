@@ -62,38 +62,66 @@ const PhysicalFacilities = () => {
 
     const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
 
+    // --- FETCH DATA (Refactored for Sync Cache) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 const storedSchoolId = localStorage.getItem('schoolId');
+                const storedOffering = localStorage.getItem('schoolOffering');
                 if (storedSchoolId) setSchoolId(storedSchoolId);
 
-                // 1. CHECK OUTBOX FIRST (Inverted Logic)
-                let restored = false;
-                if (!viewOnly) {
-                    try {
-                        const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
-                        const drafts = await getOutbox();
-                        const draft = drafts.find(d => d.type === 'PHYSICAL_FACILITIES' && (cachedId ? d.payload.schoolId === cachedId : true));
+                // DEFAULT STATE
+                const defaultFormData = initialFields;
 
-                        if (draft) {
-                            console.log("Restored draft from Outbox (Instant Load)");
-                            setFormData(prev => ({ ...prev, ...draft.payload }));
-                            setIsLocked(false);
-                            restored = true;
-                            setLoading(false);
-                            return; // EXIT EARLY
-                        }
-                    } catch (e) {
-                        console.error("Outbox check failed:", e);
-                    }
+                // STEP 1: LOAD CACHE IMMEDIATELY
+                let loadedFromCache = false;
+                const CACHE_KEY = `CACHE_PHYSICAL_FACILITIES_${user.uid}`;
+                const cachedData = localStorage.getItem(CACHE_KEY);
+
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        setFormData({ ...defaultFormData, ...parsed });
+                        setOriginalData({ ...defaultFormData, ...parsed });
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached Physical Facilities (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
                 }
 
-                // 2. FETCH FROM API (If not restored)
-                if (!restored) {
-                    try {
+                try {
+                    // STEP 2: CHECK OUTBOX
+                    let restored = false;
+                    if (!viewOnly) {
+                        try {
+                            const drafts = await getOutbox();
+                            const draft = drafts.find(d => d.type === 'PHYSICAL_FACILITIES');
+                            if (draft) {
+                                console.log("Restored draft from Outbox");
+                                setFormData({ ...defaultFormData, ...draft.payload });
+
+                                if (draft.payload.curricular_offering || draft.payload.offering) {
+                                    localStorage.setItem('schoolOffering', draft.payload.curricular_offering || draft.payload.offering);
+                                }
+
+                                setIsLocked(false);
+                                restored = true;
+                                setLoading(false);
+                                return; // Stop here if draft found
+                            }
+                        } catch (e) { console.error("Outbox check failed:", e); }
+                    }
+
+                    // STEP 3: BACKGROUND FETCH
+                    if (!restored) {
                         let fetchUrl = `/api/physical-facilities/${user.uid}`;
-                        if (viewOnly && schoolIdParam) fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        if (viewOnly && schoolIdParam) {
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
+
+                        // Only show loading if we didn't load from cache
+                        if (!loadedFromCache) setLoading(true);
 
                         const res = await fetch(fetchUrl);
                         const json = await res.json();
@@ -102,49 +130,52 @@ const PhysicalFacilities = () => {
                             const dbData = (viewOnly && schoolIdParam) ? json : json.data;
                             if (!schoolIdParam) setSchoolId(dbData.school_id || dbData.schoolId || storedSchoolId);
 
-                            // Keep cache in sync
-                            if (dbData.school_id) localStorage.setItem('schoolId', dbData.school_id);
+                            if (dbData.school_id && !viewOnly) {
+                                localStorage.setItem('schoolId', dbData.school_id);
+                                if (json.curricular_offering) localStorage.setItem('schoolOffering', json.curricular_offering);
+                            }
 
                             const loaded = {};
                             Object.keys(initialFields).forEach(key => {
                                 loaded[key] = dbData[key] ?? 0;
                             });
+
                             setFormData(loaded);
                             setOriginalData(loaded);
 
-                            // Lock if data exists
                             if (dbData.build_classrooms_total > 0 || viewOnly) setIsLocked(true);
 
-                            // CACHE DATA
-                            localStorage.setItem(`CACHE_FACILITIES_${dbData.school_id || storedSchoolId}`, JSON.stringify(loaded));
-
+                            // UPDATE CACHE
+                            localStorage.setItem(CACHE_KEY, JSON.stringify(loaded));
                         } else {
-                            setFormData(initialFields);
+                            if (!loadedFromCache) setFormData(defaultFormData);
                         }
-                    } catch (err) {
-                        console.log("Offline/Error fetching facilities:", err);
-                        // OFFLINE CACHE RECOVERY
-                        const cached = localStorage.getItem(`CACHE_FACILITIES_${storedSchoolId || 'default'}`);
+                    }
+                } catch (error) {
+                    console.error("Fetch Error:", error);
+                    if (!loadedFromCache) {
+                        // Fallback: Try main cache again
+                        const CACHE_KEY = `CACHE_PHYSICAL_FACILITIES_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY);
                         if (cached) {
-                            console.log("Loaded cached data for Facilities (Offline Mode)");
                             const data = JSON.parse(cached);
                             setFormData(data);
                             setOriginalData(data);
                             setIsLocked(true);
                         } else {
-                            // Try legacy cache key if exists? Or just fallback
+                            // Fallback: Try Legacy Cache
                             const localData = localStorage.getItem('physicalFacilitiesData');
                             if (localData) {
-                                setFormData(JSON.parse(localData));
+                                console.log("Loaded legacy physical facilities data");
+                                const data = JSON.parse(localData);
+                                setFormData(data);
                                 setIsLocked(true);
-                            } else {
-                                setFormData(initialFields);
                             }
                         }
                     }
                 }
-                setLoading(false);
             }
+            setLoading(false);
         });
         return () => unsubscribe();
     }, []);

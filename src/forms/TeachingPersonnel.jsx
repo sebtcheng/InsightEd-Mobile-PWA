@@ -88,56 +88,98 @@ const TeachingPersonnel = () => {
                 if (storedSchoolId) setSchoolId(storedSchoolId);
                 if (storedOffering) setOffering(storedOffering);
 
+                // DEFAULT STATE (Prevents Uncontrolled Input Errors)
+                const defaultFormData = {
+                    teach_kinder: 0, teach_g1: 0, teach_g2: 0, teach_g3: 0, teach_g4: 0, teach_g5: 0, teach_g6: 0,
+                    teach_g7: 0, teach_g8: 0, teach_g9: 0, teach_g10: 0,
+                    teach_g11: 0, teach_g12: 0,
+                    teach_multi_1_2: 0, teach_multi_3_4: 0, teach_multi_5_6: 0,
+                    teach_multi_3plus_flag: false,
+                    teach_multi_3plus_count: 0,
+                    teach_exp_0_1: 0, teach_exp_2_5: 0, teach_exp_6_10: 0,
+                    teach_exp_11_15: 0, teach_exp_16_20: 0, teach_exp_21_25: 0,
+                    teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
+                    teach_exp_40_45: 0,
+                };
+
+                // STEP 1: LOAD CACHE IMMEDIATELY
+                let loadedFromCache = false;
+                const CACHE_KEY = `CACHE_TEACHING_PERSONNEL_${user.uid}`;
+                const cachedData = localStorage.getItem(CACHE_KEY);
+
+                if (cachedData) {
+                    try {
+                        const parsed = JSON.parse(cachedData);
+                        setFormData({ ...defaultFormData, ...parsed }); // Merge with defaults
+                        setOriginalData({ ...defaultFormData, ...parsed });
+
+                        // Restore Offering from cache if available
+                        if (parsed.curricular_offering || parsed.offering) {
+                            setOffering(parsed.curricular_offering || parsed.offering);
+                        }
+
+                        setIsLocked(true);
+                        setLoading(false); // CRITICAL: Instant Load
+                        loadedFromCache = true;
+                        console.log("Loaded cached Teaching Personnel (Instant Load)");
+                    } catch (e) { console.error("Cache parse error", e); }
+                }
+
                 try {
-                    // 1. Check Outbox FIRST (Inverted Logic)
+                    // STEP 2: CHECK OUTBOX
                     let restored = false;
                     if (!viewOnly) {
                         try {
-                            const cachedId = storedSchoolId || (viewOnly && schoolIdParam ? schoolIdParam : null);
                             const drafts = await getOutbox();
-
-                            const draft = drafts.find(d => d.type === 'TEACHING_PERSONNEL' && (cachedId ? d.payload.schoolId === cachedId : true));
-
+                            const draft = drafts.find(d => d.type === 'TEACHING_PERSONNEL');
                             if (draft) {
-                                console.log("Restored draft from Outbox (Instant Load)");
-                                setFormData(prev => ({ ...prev, ...draft.payload }));
+                                console.log("Restored draft from Outbox");
+                                if (draft.payload.curricular_offering || draft.payload.offering) {
+                                    setOffering(draft.payload.curricular_offering || draft.payload.offering);
+                                }
+                                setFormData({ ...defaultFormData, ...draft.payload });
                                 restored = true;
                                 setLoading(false);
 
-                                // Fetch role in background
-                                const docRef = doc(db, "users", user.uid);
-                                getDoc(docRef).then(snap => { if (snap.exists()) setUserRole(snap.data().role); });
-                                return; // EXIT EARLY
+                                getDoc(doc(db, "users", user.uid)).then(s => { if (s.exists()) setUserRole(s.data().role); });
+                                return;
                             }
-                        } catch (e) {
-                            console.error("Outbox check failed:", e);
-                        }
+                        } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // 2. FETCH FROM API (Only if no draft found)
+                    // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         let fetchUrl = `/api/teaching-personnel/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
-                        // START PARALLEL REQUESTS
+                        // Only show loading if we didn't load from cache
+                        if (!loadedFromCache) setLoading(true);
+
                         const [userDoc, apiResult] = await Promise.all([
-                            getDoc(doc(db, "users", user.uid)),
+                            getDoc(doc(db, "users", user.uid)).catch(e => ({ exists: () => false })),
                             fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
                         ]);
 
-                        // 1. Handle Role
                         if (userDoc.exists()) setUserRole(userDoc.data().role);
 
-                        // 2. Handle API Data
                         const json = apiResult;
 
                         if (json.exists || (viewOnly && schoolIdParam)) {
+                            // Update School ID / Offering
+                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
                             setSchoolId(json.school_id || json.schoolId || storedSchoolId);
-                            setOffering(json.curricular_offering || json.offering || storedOffering || '');
+                            setOffering(newOffering);
+
+                            if (!viewOnly && json.school_id) {
+                                localStorage.setItem('schoolId', json.school_id);
+                                localStorage.setItem('schoolOffering', newOffering);
+                            }
 
                             const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+
+                            // Map DB to Form
                             const initialData = {
                                 teach_kinder: dbData.teach_kinder || 0,
                                 teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
@@ -149,7 +191,6 @@ const TeachingPersonnel = () => {
                                 teach_multi_5_6: dbData.teach_multi_5_6 || 0,
                                 teach_multi_3plus_flag: dbData.teach_multi_3plus_flag || false,
                                 teach_multi_3plus_count: dbData.teach_multi_3plus_count || 0,
-
                                 teach_exp_0_1: dbData.teach_exp_0_1 || 0,
                                 teach_exp_2_5: dbData.teach_exp_2_5 || 0,
                                 teach_exp_6_10: dbData.teach_exp_6_10 || 0,
@@ -161,50 +202,30 @@ const TeachingPersonnel = () => {
                                 teach_exp_36_40: dbData.teach_exp_36_40 || 0,
                                 teach_exp_40_45: dbData.teach_exp_40_45 || 0,
                             };
+
                             setFormData(initialData);
                             setOriginalData(initialData);
 
                             const hasData = Object.values(dbData).some(val => val > 0);
                             if (hasData || viewOnly) setIsLocked(true);
 
-                            // Save to Cache
-                            localStorage.setItem(`CACHE_TEACHING_PERSONNEL_${json.schoolId || storedSchoolId || 'default'}`, JSON.stringify(dbData));
+                            // UPDATE CACHE
+                            const cachePayload = { ...initialData, curricular_offering: newOffering, schoolId: json.school_id };
+                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                         }
                     }
                 } catch (error) {
-                    console.error("Fetch error:", error);
-                    // OFFLINE CACHE RECOVERY
-                    const cached = localStorage.getItem(`CACHE_TEACHING_PERSONNEL_${schoolIdParam || localStorage.getItem('schoolId') || 'default'}`);
-                    if (cached) {
-                        console.log("Loaded cached data for Teaching Personnel (Offline Mode)");
-                        const dbData = JSON.parse(cached);
-
-                        const initialData = {
-                            teach_kinder: dbData.teach_kinder || 0,
-                            teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
-                            teach_g4: dbData.teach_g4 || 0, teach_g5: dbData.teach_g5 || 0, teach_g6: dbData.teach_g6 || 0,
-                            teach_g7: dbData.teach_g7 || 0, teach_g8: dbData.teach_g8 || 0, teach_g9: dbData.teach_g9 || 0, teach_g10: dbData.teach_g10 || 0,
-                            teach_g11: dbData.teach_g11 || 0, teach_g12: dbData.teach_g12 || 0,
-                            teach_multi_1_2: dbData.teach_multi_1_2 || 0,
-                            teach_multi_3_4: dbData.teach_multi_3_4 || 0,
-                            teach_multi_5_6: dbData.teach_multi_5_6 || 0,
-                            teach_multi_3plus_flag: dbData.teach_multi_3plus_flag || false,
-                            teach_multi_3plus_count: dbData.teach_multi_3plus_count || 0,
-
-                            teach_exp_0_1: dbData.teach_exp_0_1 || 0,
-                            teach_exp_2_5: dbData.teach_exp_2_5 || 0,
-                            teach_exp_6_10: dbData.teach_exp_6_10 || 0,
-                            teach_exp_11_15: dbData.teach_exp_11_15 || 0,
-                            teach_exp_16_20: dbData.teach_exp_16_20 || 0,
-                            teach_exp_21_25: dbData.teach_exp_21_25 || 0,
-                            teach_exp_26_30: dbData.teach_exp_26_30 || 0,
-                            teach_exp_31_35: dbData.teach_exp_31_35 || 0,
-                            teach_exp_36_40: dbData.teach_exp_36_40 || 0,
-                            teach_exp_40_45: dbData.teach_exp_40_45 || 0,
-                        };
-                        setFormData(initialData);
-                        setOriginalData(initialData);
-                        setIsLocked(true);
+                    console.error("Fetch Error:", error);
+                    // OFFLINE FALLBACK (If not already loaded from Step 1)
+                    if (!loadedFromCache) {
+                        const CACHE_KEY = `CACHE_TEACHING_PERSONNEL_${user.uid}`;
+                        const cached = localStorage.getItem(CACHE_KEY);
+                        if (cached) {
+                            const dbData = JSON.parse(cached);
+                            setFormData({ ...defaultFormData, ...dbData });
+                            setOriginalData({ ...defaultFormData, ...dbData });
+                            setIsLocked(true);
+                        }
                     }
                 }
             }

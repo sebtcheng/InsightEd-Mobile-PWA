@@ -175,132 +175,172 @@ const SchoolProfile = () => {
     useEffect(() => {
         let isMounted = true;
 
-        const initialize = async () => {
-            let processedRegDiv = {};
-            let processedDivDist = {};
-            let tempLegs = [];
-
-            // A. CSV Fetch
+        // A. CSV Fetch - Independent
+        const loadDirectory = async () => {
             try {
                 const csvResponse = await fetch('/schools.csv');
                 if (csvResponse.ok) {
                     const contentType = csvResponse.headers.get("content-type");
-                    if (contentType && contentType.includes("html")) {
-                        // Check for SPA fallback returning index.html instead of CSV
-                        throw new Error("CSV file not found (HTML returned)");
-                    }
+                    if (contentType && contentType.includes("html")) throw new Error("CSV file not found (HTML returned)");
 
                     const csvText = await csvResponse.text();
-                    const parsedData = await new Promise((resolve) => {
-                        Papa.parse(csvText, {
-                            header: true, skipEmptyLines: true,
-                            complete: (results) => resolve(results.data),
-                            error: () => resolve([])
-                        });
+                    Papa.parse(csvText, {
+                        header: true, skipEmptyLines: true,
+                        complete: (results) => {
+                            if (!isMounted) return;
+                            const parsedData = results.data;
+                            if (Array.isArray(parsedData) && parsedData.length > 0) {
+                                setSchoolDirectory(parsedData);
+
+                                // Process Maps
+                                const processedRegDiv = {};
+                                const processedDivDist = {};
+                                const tempLegsSet = new Set();
+                                const clean = (str) => str ? String(str).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
+                                parsedData.forEach(row => {
+                                    if (!row) return;
+                                    const keys = Object.keys(row);
+                                    if (keys.length === 0) return;
+                                    const reg = row[keys.find(k => clean(k) === 'region')]?.trim();
+                                    const div = row[keys.find(k => clean(k) === 'division')]?.trim();
+                                    const dist = row[keys.find(k => clean(k) === 'district')]?.trim();
+                                    const leg = row[keys.find(k => clean(k).includes('legislative') || clean(k) === 'legdistrict')]?.trim();
+
+                                    if (reg && div) { if (!processedRegDiv[reg]) processedRegDiv[reg] = new Set(); processedRegDiv[reg].add(div); }
+                                    if (div && dist) { if (!processedDivDist[div]) processedDivDist[div] = new Set(); processedDivDist[div].add(dist); }
+                                    if (leg) tempLegsSet.add(leg);
+                                });
+
+                                // Convert Sets to Arrays
+                                const finalRegDiv = {}; const finalDivDist = {};
+                                Object.keys(processedRegDiv).forEach(k => finalRegDiv[k] = Array.from(processedRegDiv[k]).sort());
+                                Object.keys(processedDivDist).forEach(k => finalDivDist[k] = Array.from(processedDivDist[k]).sort());
+
+                                setRegionDivMap(finalRegDiv);
+                                setDivDistMap(finalDivDist);
+                                setLegDistrictOptions(Array.from(tempLegsSet).sort());
+                            }
+                        },
+                        error: () => { if (isMounted) console.warn("CSV Parse failed"); }
                     });
-
-                    if (isMounted && Array.isArray(parsedData) && parsedData.length > 0) {
-                        setSchoolDirectory(parsedData);
-                        const tempRegDivSet = {}; const tempDivDistSet = {}; const tempLegsSet = new Set();
-                        const clean = (str) => str ? String(str).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
-
-                        parsedData.forEach(row => {
-                            if (!row) return; // Defensive check
-                            const keys = Object.keys(row);
-                            if (keys.length === 0) return;
-
-                            const reg = row[keys.find(k => clean(k) === 'region')]?.trim();
-                            const div = row[keys.find(k => clean(k) === 'division')]?.trim();
-                            const dist = row[keys.find(k => clean(k) === 'district')]?.trim();
-                            const leg = row[keys.find(k => clean(k).includes('legislative') || clean(k) === 'legdistrict')]?.trim();
-
-                            if (reg && div) { if (!tempRegDivSet[reg]) tempRegDivSet[reg] = new Set(); tempRegDivSet[reg].add(div); }
-                            if (div && dist) { if (!tempDivDistSet[div]) tempDivDistSet[div] = new Set(); tempDivDistSet[div].add(dist); }
-                            if (leg) tempLegsSet.add(leg);
-                        });
-
-                        Object.keys(tempRegDivSet).forEach(k => processedRegDiv[k] = Array.from(tempRegDivSet[k]).sort());
-                        Object.keys(tempDivDistSet).forEach(k => processedDivDist[k] = Array.from(tempDivDistSet[k]).sort());
-                        tempLegs = Array.from(tempLegsSet).sort();
-
-                        setRegionDivMap(processedRegDiv);
-                        setDivDistMap(processedDivDist);
-                        setLegDistrictOptions(tempLegs);
-                    }
                 }
-            } catch (err) {
-                console.warn("⚠️ Offline Mode or CSV Error:", err);
+            } catch (err) { console.warn("CSV Fetch Error:", err); }
+        };
+        loadDirectory();
+
+        // B. User Profile Load - Sync Cache Strategy
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (!isMounted) return;
+            if (!user) { navigate('/'); return; }
+
+            // STEP 1: IMMEDIATE CACHE LOAD
+            let loadedFromCache = false;
+            let loadedOffering = '';
+
+            const cachedProfile = localStorage.getItem('fullSchoolProfile');
+            const cachedOffering = localStorage.getItem('schoolOffering');
+
+            if (cachedProfile) {
+                try {
+                    const localData = JSON.parse(cachedProfile);
+                    // Critical: Restore Offering
+                    if (!localData.curricularOffering) {
+                        localData.curricularOffering = cachedOffering || '';
+                    }
+                    loadedOffering = localData.curricularOffering;
+
+                    setFormData(localData);
+                    setOriginalData(localData);
+                    setHasSavedData(true);
+                    setLoading(false); // CRITICAL: Instant Load
+                    loadedFromCache = true;
+                    console.log("Loaded cached School Profile (Instant Load)");
+
+                    // Validation Check
+                    if (localData.schoolName) checkSchoolName(localData.schoolName);
+                    if (localData.schoolId && !isFirstTime) setIsLocked(true);
+
+                    // Note: applyDataToState logic for options comes later via Effects or we re-run it?
+                    // Ideally we call applyDataToState, but maps aren't ready. 
+                    // We can call it with empty maps (it checks for existence).
+                    applyDataToState(localData, {}, {});
+
+                } catch (e) { console.error("Cache Parse Error:", e); }
             }
 
-            // B. User Profile Load
-            onAuthStateChanged(auth, async (user) => {
-                if (!isMounted) return;
+            // STEP 2: BACKGROUND FETCH
+            try {
+                const fetchUrl = viewOnly && monitorSchoolId
+                    ? `/api/monitoring/school-detail/${monitorSchoolId}`
+                    : `/api/school-by-user/${user.uid}`;
 
-                if (!user) {
-                    navigate('/'); // Redirect if not logged in
-                    return;
-                }
-
-                let profileLoaded = false;
-
-                // 1. MONITOR VIEW or NORMAL FLOW
-                try {
-                    const fetchUrl = viewOnly && monitorSchoolId
-                        ? `/api/monitoring/school-detail/${monitorSchoolId}`
-                        : `/api/school-by-user/${user.uid}`;
-
-                    const response = await fetch(fetchUrl);
-                    if (!response.ok) throw new Error("Network error");
-
+                const response = await fetch(fetchUrl);
+                if (response.ok) {
                     const result = await response.json();
-
-                    // Monitoring detail returns the flat row, normal fetch returns { exists, data }
                     const dbData = (viewOnly && monitorSchoolId) ? result : result.data;
 
                     if (dbData) {
                         const loadedData = mapDbToForm(dbData);
-                        applyDataToState(loadedData, processedRegDiv, processedDivDist);
+
+                        // Save to Cache
                         setLastUpdated(dbData.submitted_at);
                         setHasSavedData(true);
                         if (!viewOnly) saveToLocalCache(loadedData);
-                        profileLoaded = true;
-                    }
-                } catch (error) {
-                    console.log("⚠️ Fetch error:", error.message);
-                }
 
-                // 2. Offline Fallback
-                if (!profileLoaded) {
-                    const cachedProfile = localStorage.getItem('fullSchoolProfile');
-                    if (cachedProfile) {
-                        try {
-                            const localData = JSON.parse(cachedProfile);
+                        // Update State (Silent Update if Cached)
+                        if (!loadedFromCache) {
+                            setFormData(loadedData);
+                            setOriginalData(loadedData);
+                            if (loadedData.schoolId && !isFirstTime) setIsLocked(true);
+                        } else {
+                            // Silent State Update - merging to ensure latest
+                            setFormData(loadedData);
+                            setOriginalData(loadedData);
+                        }
 
-                            // Restore Offering from sticky note if missing
-                            if (!localData.curricularOffering) {
-                                localData.curricularOffering = localStorage.getItem('schoolOffering') || '';
-                            }
-
-                            console.log("✅ Loaded from Cache:", localData);
-                            applyDataToState(localData, regionDivMap, divDistMap);
-                            setHasSavedData(true);
-
-                            // 👇 THIS FIXES THE "PENDING" ISSUE IN OFFLINE MODE
-                            if (localData.schoolId) {
-                                localStorage.setItem('schoolProfileStatus', 'complete');
-                            }
-
-                        } catch (parseErr) { console.error("Cache Parse Error:", parseErr); }
+                        // Re-apply options if we have maps now? 
+                        // Note: We don't have access to the *result* of loadDirectory here easily due to closure.
+                        // But we can let the separate Effect handle options update.
                     }
                 }
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                // Offline Fallback handled by Step 1.
+                // If we didn't load cache in Step 1, we truly have nothing.
+            }
 
-                if (isMounted) setLoading(false);
-            });
-        };
+            setLoading(false);
+        });
 
-        initialize();
-        return () => { isMounted = false; };
+        return () => { isMounted = false; unsubscribe(); };
     }, []);
+
+    // --- 2.1 SYNC OPTIONS WHEN MAPS LOAD ---
+    // If formData is loaded BEFORE CSV, we need to populate dropdowns when CSV arrives.
+    useEffect(() => {
+        if (!formData.region) return;
+
+        // Populate Province/City (JSON)
+        if (locationData && locationData[formData.region]) {
+            setProvinceOptions(Object.keys(locationData[formData.region]).sort());
+            if (formData.province && locationData[formData.region][formData.province]) {
+                setCityOptions(Object.keys(locationData[formData.region][formData.province]).sort());
+                if (formData.municipality && locationData[formData.region][formData.province][formData.municipality]) {
+                    setBarangayOptions(locationData[formData.region][formData.province][formData.municipality].sort());
+                }
+            }
+        }
+
+        // Populate Division/District (CSV)
+        if (regionDivMap && regionDivMap[formData.region]) {
+            setDivisionOptions(regionDivMap[formData.region]);
+            if (formData.division && divDistMap && divDistMap[formData.division]) {
+                setDistrictOptions(divDistMap[formData.division]);
+            }
+        }
+
+    }, [formData.region, formData.province, formData.municipality, formData.division, regionDivMap, divDistMap]);
 
     // --- OTHER HELPERS ---
     const formatTimestamp = (isoString) => {
@@ -760,17 +800,17 @@ const SchoolProfile = () => {
                         </form>
                     </div>
 
-                        {(viewOnly || isDummy) && (
-                            <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                                <button
-                                    type="button"
-                                    onClick={() => navigate('/jurisdiction-schools')}
-                                    className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
-                                >
-                                    ← Back to School List
-                                </button>
-                            </div>
-                        )}
+                    {(viewOnly || isDummy) && (
+                        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/jurisdiction-schools')}
+                                className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
+                            >
+                                ← Back to School List
+                            </button>
+                        </div>
+                    )}
 
                 </div>
             </PageTransition >
