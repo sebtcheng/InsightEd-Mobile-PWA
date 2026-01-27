@@ -893,7 +893,7 @@ const MonitoringDashboard = () => {
                                         {jurisdictionProjects.map((project) => (
                                             <div
                                                 key={project.id}
-                                                onClick={() => navigate(`/project-validation?schoolId=${project.schoolId}`)}
+                                                onClick={() => navigate(`/project-details/${project.id}`)}
                                                 className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 active:scale-[0.98] transition-all cursor-pointer group"
                                             >
                                                 <div className="flex justify-between items-start mb-2">

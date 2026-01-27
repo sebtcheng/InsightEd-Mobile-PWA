@@ -2,11 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition'; // Assuming you have this
 
+import { TbPhoto } from "react-icons/tb";
+
 const DetailedProjInfo = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [project, setProject] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    
+    // New State for Images
+    const [projectImages, setProjectImages] = useState([]);
+    const [imageLoading, setImageLoading] = useState(true);
 
     useEffect(() => {
         const fetchProjectDetails = async () => {
@@ -24,7 +30,21 @@ const DetailedProjInfo = () => {
             }
         };
 
+        const fetchImages = async () => {
+            setImageLoading(true);
+            try {
+                const res = await fetch(`/api/project-images/${id}`);
+                const data = await res.json();
+                setProjectImages(data);
+            } catch (error) {
+                console.error("Error loading images:", error);
+            } finally {
+                setImageLoading(false);
+            }
+        };
+
         fetchProjectDetails();
+        fetchImages();
     }, [id, navigate]);
 
     if (isLoading) return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading details...</div>;
@@ -97,6 +117,39 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Division" value={project.division} />
                             </div>
                         </div>
+                    </div>
+
+                    {/* Photos Section */}
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between px-1">
+                            <h3 className="text-slate-700 font-bold text-sm flex items-center gap-2">
+                                <TbPhoto /> Project Photos
+                            </h3>
+                            <span className="bg-slate-200 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full">
+                                {projectImages.length} Images
+                            </span>
+                        </div>
+
+                        {imageLoading ? (
+                            <div className="bg-white rounded-2xl p-8 border border-slate-100 flex justify-center">
+                                <div className="w-8 h-8 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
+                            </div>
+                        ) : projectImages.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-3">
+                                {projectImages.map((img, idx) => (
+                                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
+                                        <img src={img.image_url || img.image_data} alt={`Project ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
+                                            <p className="text-white text-[10px] font-medium truncate w-full">By: {img.uploaded_by}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-200 text-slate-400 text-sm">
+                                No photos available for this project.
+                            </div>
+                        )}
                     </div>
 
                     {/* Remarks Section */}
