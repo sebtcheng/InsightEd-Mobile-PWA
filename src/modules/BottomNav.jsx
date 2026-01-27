@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 // Icons 
 import { TbHomeEdit, TbCloudUpload, TbClipboardList } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
-import { FiSettings } from "react-icons/fi"; // Changed to Gear icon
+import { FiSettings, FiCheckSquare } from "react-icons/fi"; // Changed to Gear icon
 
 const BottomNav = ({ userRole }) => {
     const navigate = useNavigate();
@@ -40,13 +40,15 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
-            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
-            { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
+            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'Engineer', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            // { label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
-            { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
-            { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
+            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
+            { label: 'Engineer', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            //{ label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare }, 
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
@@ -65,14 +67,16 @@ const BottomNav = ({ userRole }) => {
         <div style={styles.wrapper}>
             <div style={styles.navContainer}>
                 {currentNavItems.map((item) => {
-                    const isActive = location.pathname === item.path;
+                    const isActive = location.pathname === item.path && 
+                        (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && item.state.activeTab === 'all'));
+                    
                     const Icon = item.icon;
 
                     return (
                         <button
                             key={item.label}
                             style={styles.navButton}
-                            onClick={() => navigate(item.path)}
+                            onClick={() => navigate(item.path, { state: item.state })}
                         >
                             <Icon
                                 size={24}

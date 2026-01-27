@@ -4,7 +4,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin } from 'react-icons/fi';
+import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft } from 'react-icons/fi';
 import { TbTrophy } from 'react-icons/tb';
 
 import Papa from 'papaparse';
@@ -17,7 +17,7 @@ const MonitoringDashboard = () => {
     const [engStats, setEngStats] = useState(null);
     const [jurisdictionProjects, setJurisdictionProjects] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('all');
+    const [activeTab, setActiveTab] = useState('home');
 
     // State for Central Office Filters
     const [coRegion, setCoRegion] = useState('');
@@ -32,6 +32,8 @@ const MonitoringDashboard = () => {
     const [regionalStats, setRegionalStats] = useState([]);
     const [divisionStats, setDivisionStats] = useState([]); // Per-division stats for RO
     const [districtStats, setDistrictStats] = useState([]); // Per-district stats for SDO
+    const [districtSchools, setDistrictSchools] = useState([]); // Schools for Drill-down
+    const [loadingDistrict, setLoadingDistrict] = useState(false);
 
     const fetchData = async (overrideRegion, overrideDivision) => {
         const user = auth.currentUser;
@@ -197,35 +199,33 @@ const MonitoringDashboard = () => {
         fetchData(coRegion, division);
     };
     
-    const handleDistrictChange = (district) => {
+    const handleDistrictChange = async (district) => {
         setCoDistrict(district);
-        // Force fetch with current Filters + new District State
-        // Since fetchData reads coDistrict state directly if not overridden, 
-        // we might need to rely on the state update or pass it explicit.
-        // But fetchData uses state `coDivision` which is set.
-        // It uses `coDistrict` state which might not be updated yet in closure?
-        // Actually fetchData creates params. Let's make sure it picks up the NEW district.
-        // Best approach: Add params to fetchData signature or rely on effect? 
-        // Current fetchData signature is `(overrideRegion, overrideDivision)`.
-        // Let's modify fetchData slightly to read state, but state updates are async.
         
-        // Simpler: Just set state, and use a useEffect to trigger fetch? 
-        // OR pass it explicitly.
-        
-        // Let's rely on re-render? No, explicit is better.
-        // But `fetchData` function doesn't take district arg. 
-        // Let's trust that the next render cycle or a small timeout works, 
-        // OR better: Just put `coDistrict` in a useEffect dependency for fetching.
-        // But `fetchData` is called manually in handlers.
-        
-        // Quick Fix: Update state then call logic. But we need the value *now*.
-        // Let's update `fetchData` to accept optional `overrideDistrict`? No, too messy.
-        // Let's just update state and let a `useEffect` handle it? 
-        // actually `fetchData` is called in `useEffect` on mount.
-        // Let's add a `useEffect(() => { fetchData() }, [coDistrict])`?
-        // That might cause double fetches if other things change.
-        
-        // Let's just do this:
+        if (district) {
+            setLoadingDistrict(true);
+            try {
+                // Determine params
+                const user = auth.currentUser;
+                // Use state or user data (User data is safer for SDO)
+                const region = userData.role === 'Central Office' ? coRegion : userData.region;
+                const division = userData.role === 'Central Office' ? coDivision : userData.division;
+                
+                const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setDistrictSchools(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch district schools:", error);
+            } finally {
+                setLoadingDistrict(false);
+            }
+        } else {
+             setDistrictSchools([]);
+        }
+
+        // Trigger global stats fetch
         setTimeout(() => fetchData(), 0); 
     };
     
@@ -417,8 +417,8 @@ const MonitoringDashboard = () => {
                                                     <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
                                                         <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-wider">Region</th>
                                                         <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-wider text-center">Total Projects</th>
-                                                        <th className="p-6 text-xs font-black text-emerald-500 uppercase tracking-wider text-center bg-emerald-50/50 dark:bg-emerald-900/10">Ongoing</th>
-                                                        <th className="p-6 text-xs font-black text-blue-500 uppercase tracking-wider text-center">Completed</th>
+                                                        <th className="p-6 text-xs font-black text-blue-500 uppercase tracking-wider text-center bg-blue-50/50 dark:bg-blue-900/10">Ongoing</th>
+                                                        <th className="p-6 text-xs font-black text-emerald-500 uppercase tracking-wider text-center bg-emerald-50/50 dark:bg-emerald-900/10">Completed</th>
                                                         <th className="p-6 text-xs font-black text-red-500 uppercase tracking-wider text-center bg-red-50/50 dark:bg-red-900/10">Delayed</th>
                                                     </tr>
                                                 </thead>
@@ -431,8 +431,8 @@ const MonitoringDashboard = () => {
                                                         >
                                                             <td className="p-6 font-bold text-slate-700 dark:text-slate-200">{reg.region}</td>
                                                             <td className="p-6 text-center font-bold text-slate-800 dark:text-white text-lg">{reg.total_projects}</td>
-                                                            <td className="p-6 text-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/5">{reg.ongoing_projects}</td>
-                                                            <td className="p-6 text-center font-bold text-blue-600 dark:text-blue-400">{reg.completed_projects}</td>
+                                                            <td className="p-6 text-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-900/5">{reg.ongoing_projects}</td>
+                                                            <td className="p-6 text-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/5">{reg.completed_projects}</td>
                                                             <td className="p-6 text-center font-bold text-red-600 dark:text-red-400 bg-red-50/30 dark:bg-red-900/5">{reg.delayed_projects}</td>
                                                         </tr>
                                                     ))}
@@ -471,52 +471,28 @@ const MonitoringDashboard = () => {
 
                     <div className="relative z-10">
                         {userData?.role === 'Central Office' || userData?.role === 'Super User' ? (
-                            <div className="mb-4 space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold uppercase tracking-widest opacity-80">View Region:</span>
-                                    <select 
-                                        className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none focus:bg-white/20 text-slate-800"
-                                        onChange={(e) => handleFilterChange(e.target.value)}
-                                        value={coRegion}
-                                    >
-                                        <option value="" className="text-slate-800">National View</option> 
-                                        {availableRegions.map(reg => (
-                                            <option key={reg} value={reg} className="text-slate-800">{reg}</option>
-                                        ))}
-                                    </select>
-                                    
-                                    {/* Division Filter */}
-                                    <select 
-                                        className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none focus:bg-white/20 text-slate-800 disabled:opacity-50"
-                                        onChange={(e) => handleDivisionChange(e.target.value)}
-                                        value={coDivision}
-                                        disabled={!coRegion}
-                                    >
-                                        <option value="" className="text-slate-800">All Divisions</option>
-                                        {availableDivisions.map(div => (
-                                            <option key={div} value={div} className="text-slate-800">{div}</option>
-                                        ))}
-                                    </select>
-
-                                    {/* District Filter */}
-                                    {coDivision && (
-                                        <select 
-                                            className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none focus:bg-white/20 text-slate-800 disabled:opacity-50"
-                                            onChange={(e) => handleDistrictChange(e.target.value)}
-                                            value={coDistrict}
+                                <div className="flex items-center gap-2 mb-4">
+                                    {(coRegion || coDivision || coDistrict) && (
+                                        <button 
+                                            onClick={() => {
+                                                if (coDistrict) handleDistrictChange(''); // Back to Division View
+                                                else if (coDivision) handleDivisionChange(''); // Back to Regional View
+                                                else if (coRegion) handleFilterChange(''); // Back to National View
+                                            }}
+                                            className="mr-2 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition flex items-center justify-center group"
+                                            title="Go Back"
                                         >
-                                            <option value="" className="text-slate-800">All Districts</option>
-                                            {availableDistricts.map(dist => (
-                                                <option key={dist} value={dist} className="text-slate-800">{dist}</option>
-                                            ))}
-                                        </select>
+                                            <FiArrowLeft className="text-lg group-hover:-translate-x-0.5 transition-transform" />
+                                        </button>
                                     )}
+                                    
+                                    <div>
+                                        <h1 className="text-3xl font-black tracking-tight">{userData.bureau || 'Central Office'}</h1>
+                                        <p className="text-blue-100/70 text-sm mt-1 font-bold uppercase tracking-widest">
+                                            {coDistrict ? `${coDistrict}, ${coDivision}` : (coDivision ? `${coDivision} Division` : (coRegion ? `${coRegion}` : 'National View'))}
+                                        </p>
+                                    </div>
                                 </div>
-                                <h1 className="text-3xl font-black tracking-tight">{userData.bureau || 'Central Office'}</h1>
-                                <p className="text-blue-100/70 text-sm mt-1">
-                                    {coDistrict ? `${coDistrict}, ${coDivision}` : (coDivision ? `${coDivision} Division` : (coRegion ? `${coRegion}` : 'National View'))}
-                                </p>
-                            </div>
                         ) : (
                             <>
                                 <div className="flex items-center gap-2 mb-2 opacity-80">
@@ -531,26 +507,28 @@ const MonitoringDashboard = () => {
                         )}
                     </div>
 
-                    {/* Tabs */}
-                    <div className="flex gap-2 mt-8 relative z-10">
-                        {['all', 'school', 'engineer'].map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab
-                                        ? 'bg-white text-[#004A99] shadow-lg'
-                                        : 'bg-white/10 text-white hover:bg-white/20'
-                                    }`}
-                            >
-                                {tab}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Tabs - Hidden for SDO AND RO as they use Bottom Nav */}
+                    {userData?.role !== 'School Division Office' && userData?.role !== 'Regional Office' && (
+                        <div className="flex gap-2 mt-8 relative z-10">
+                            {['all', 'school', 'engineer'].map(tab => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)}
+                                    className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab
+                                            ? 'bg-white text-[#004A99] shadow-lg'
+                                            : 'bg-white/10 text-white hover:bg-white/20'
+                                        }`}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="px-5 -mt-10 space-y-6 relative z-20">
-                    {/* ALL TAB */}
-                    {activeTab === 'all' && (
+                    {/* HOME TAB (Previously ALL) */}
+                    {(activeTab === 'all' || activeTab === 'home') && (
                         <>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
@@ -623,8 +601,8 @@ const MonitoringDashboard = () => {
                                                     ).length;
 
                                                     // 3. Get Completed Count from Backend Stats
-                                                    // Find the matching entry in divisionStats array
-                                                    const startStat = divisionStats.find(d => d.division === divName);
+                                                    // Find the matching entry in divisionStats array (Case Insensitive Match)
+                                                    const startStat = divisionStats.find(d => d.division?.trim().toLowerCase() === divName?.trim().toLowerCase());
                                                     const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
 
                                                     // 4. Calculate Percentage
@@ -635,10 +613,14 @@ const MonitoringDashboard = () => {
                                                     const color = colors[idx % colors.length];
 
                                                     return (
-                                                        <div key={divName} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                                                        <div 
+                                                            key={divName} 
+                                                            onClick={() => handleDivisionChange(divName)}
+                                                            className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group"
+                                                        >
                                                             <div className="flex justify-between items-center mb-2">
                                                                 <div>
-                                                                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{divName}</h3>
+                                                                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{divName}</h3>
                                                                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                                                                         {completedCount} out of {totalSchools} schools completed all forms
                                                                     </p>
@@ -668,6 +650,107 @@ const MonitoringDashboard = () => {
                                         const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
                                         const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
                                         
+                                        // IF DISTRICT SELECTED: SHOW DRILL-DOWN
+                                        if (coDistrict) {
+                                            if (loadingDistrict) {
+                                                return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
+                                            }
+
+                                            // Categorize Schools
+                                            // Completed = All 7 flags are true
+                                            const completedSchools = districtSchools.filter(s => 
+                                                s.profile_status && s.head_status && s.enrollment_status && 
+                                                s.classes_status && s.personnel_status && 
+                                                s.specialization_status && s.resources_status
+                                            );
+                                            
+                                            // Incomplete = Any flag is false
+                                            const incompleteSchools = districtSchools.filter(s => 
+                                                !(s.profile_status && s.head_status && s.enrollment_status && 
+                                                s.classes_status && s.personnel_status && 
+                                                s.specialization_status && s.resources_status)
+                                            );
+
+                                            return (
+                                                <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                                                    {/* Header with Back Button */}
+                                                    <div className="flex items-center gap-3">
+                                                        <button 
+                                                            onClick={() => handleDistrictChange('')}
+                                                            className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
+                                                        >
+                                                            <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
+                                                        </button>
+                                                        <div>
+                                                            <h3 className="font-black text-xl text-slate-800 dark:text-white">{coDistrict}</h3>
+                                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Submission Status</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* COMPLETED SCHOOLS */}
+                                                    <div className="bg-emerald-50/50 dark:bg-emerald-900/10 p-5 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
+                                                        <div className="flex items-center gap-2 mb-4">
+                                                            <FiCheckCircle className="text-emerald-500" size={20} />
+                                                            <h4 className="font-black text-emerald-700 dark:text-emerald-400 text-sm uppercase tracking-wider">Completed All Forms ({completedSchools.length})</h4>
+                                                        </div>
+                                                        {completedSchools.length === 0 ? (
+                                                            <p className="text-xs text-emerald-600/60 italic">No schools have completed all forms yet.</p>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {completedSchools.map((s) => (
+                                                                    <div key={s.school_id} className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm flex justify-between items-center border border-emerald-100 dark:border-emerald-900/30">
+                                                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{s.school_name}</span>
+                                                                        <TbTrophy className="text-emerald-500" />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* INCOMPLETE SCHOOLS */}
+                                                    <div className="bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-700">
+                                                        <div className="flex items-center gap-2 mb-4">
+                                                            <FiClock className="text-slate-400" size={20} />
+                                                            <h4 className="font-black text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider">Incomplete ({incompleteSchools.length})</h4>
+                                                        </div>
+                                                        {incompleteSchools.length === 0 ? (
+                                                            <p className="text-xs text-slate-400 italic">All schools have completed their submissions!</p>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {incompleteSchools.map((s) => {
+                                                                    const missing = [];
+                                                                    if (!s.profile_status) missing.push("Profile");
+                                                                    if (!s.head_status) missing.push("School Head");
+                                                                    if (!s.enrollment_status) missing.push("Enrollment");
+                                                                    if (!s.classes_status) missing.push("Classes");
+                                                                    if (!s.personnel_status) missing.push("Personnel");
+                                                                    if (!s.specialization_status) missing.push("Specialization");
+                                                                    if (!s.resources_status) missing.push("Resources");
+
+                                                                    return (
+                                                                        <div key={s.school_id} className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 opacity-80">
+                                                                            <div className="flex justify-between items-start">
+                                                                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{s.school_name}</span>
+                                                                                <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-2 py-0.5 rounded-full border border-rose-100 dark:border-rose-900/30 whitespace-nowrap">
+                                                                                    {missing.length} Missing
+                                                                                </span>
+                                                                            </div>
+                                                                            {missing.length > 0 && (
+                                                                                <p className="text-[10px] text-rose-400 mt-1 pl-0.5">
+                                                                                    Missing: {missing.join(", ")}
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        // DEFAULT: LIST OF DISTRICTS
                                         // 1. Get unique districts from CSV
                                         const divisionDistricts = [...new Set(schoolData
                                             .filter(s => s.region === targetRegion && s.division === targetDivision)
@@ -689,7 +772,7 @@ const MonitoringDashboard = () => {
                                                     ).length;
 
                                                     // 3. Count Completed from DB Stats
-                                                    const startStat = districtStats.find(d => d.district === distName);
+                                                    const startStat = districtStats.find(d => d.district?.trim().toLowerCase() === distName?.trim().toLowerCase());
                                                     const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
 
                                                     const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
@@ -699,10 +782,14 @@ const MonitoringDashboard = () => {
                                                     const color = colors[idx % colors.length];
 
                                                     return (
-                                                         <div key={distName} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl">
+                                                         <div 
+                                                            key={distName} 
+                                                            onClick={() => handleDistrictChange(distName)}
+                                                            className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group"
+                                                         >
                                                             <div className="flex justify-between items-center mb-2">
                                                                 <div>
-                                                                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">{distName}</h3>
+                                                                    <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{distName}</h3>
                                                                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                                                                         {completedCount} out of {totalSchools} schools completed all forms
                                                                     </p>
@@ -831,6 +918,55 @@ const MonitoringDashboard = () => {
                                                         ></div>
                                                     </div>
                                                     <span className="text-xs font-black text-slate-700 dark:text-slate-300">{project.accomplishmentPercentage}%</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* VALIDATION TAB (For SDO) */}
+                    {activeTab === 'validation' && (
+                        <div className="space-y-6">
+                            <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Data Validation</h2>
+                            
+                            {/* School Validation Section */}
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2">School Data Validation</h3>
+                                <p className="text-sm text-slate-500 mb-4">Validate school profiles and submitted forms.</p>
+                                <button
+                                    onClick={() => navigate('/jurisdiction-schools')} 
+                                    className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl font-bold uppercase tracking-wider text-xs hover:bg-blue-100 transition-colors"
+                                >
+                                    View Schools to Validate
+                                </button>
+                            </div>
+
+                            {/* Infrastructure Validation Section */}
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2">Infrastructure Validation</h3>
+                                <p className="text-sm text-slate-500 mb-4">Review and validate ongoing infrastructure projects.</p>
+                                
+                                {jurisdictionProjects.filter(p => p.validation_status !== 'Validated').length === 0 ? (
+                                    <p className="text-center text-slate-400 text-sm py-4">No pending project validations.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {jurisdictionProjects
+                                            .filter(p => p.validation_status !== 'Validated') // Show pending/rejected
+                                            .map((project) => (
+                                            <div
+                                                key={project.id}
+                                                onClick={() => navigate(`/project-validation?schoolId=${project.schoolId}`)}
+                                                className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex justify-between items-center group"
+                                            >
+                                                <div>
+                                                    <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600">{project.projectName}</h4>
+                                                    <p className="text-[10px] text-slate-400 uppercase mt-0.5">{project.schoolName}</p>
+                                                </div>
+                                                <div className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-[10px] font-bold uppercase">
+                                                    {project.validation_status || 'Pending'}
                                                 </div>
                                             </div>
                                         ))}

@@ -1919,7 +1919,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
   try {
-    const statsQuery = `
+    let statsQuery = `
       SELECT 
         COUNT(*) as total_schools,
         COUNT(CASE WHEN school_name IS NOT NULL THEN 1 END) as profile,
@@ -1934,10 +1934,10 @@ app.get('/api/monitoring/stats', async (req, res) => {
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+           (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
         ) = 7 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
@@ -1976,10 +1976,10 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+           (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
         ) = 7 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
@@ -2009,10 +2009,10 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+           (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
         ) = 7 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1) AND TRIM(division) = TRIM($2)
@@ -2076,23 +2076,24 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
-SELECT
-COUNT(*) as total_projects,
-  AVG(accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
-    COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed_count,
-    COUNT(CASE WHEN status = 'Ongoing' THEN 1 END) as ongoing_count
-      FROM engineer_form
-      WHERE TRIM(region) = TRIM($1)
-  `;
+      SELECT 
+        COUNT(*) as total_projects,
+        AVG(e.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
+        COUNT(CASE WHEN e.status = 'Completed' THEN 1 END) as completed_count,
+        COUNT(CASE WHEN e.status = 'Ongoing' THEN 1 END) as ongoing_count
+      FROM engineer_form e
+      JOIN school_profiles sp ON e.school_id = sp.school_id
+      WHERE TRIM(sp.region) = TRIM($1)
+    `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(division) = TRIM($2)`;
+      query += ` AND TRIM(sp.division) = TRIM($2)`;
       params.push(division);
     }
 
     if (req.query.district) {
-      query += ` AND TRIM(district) = TRIM($${params.length + 1})`;
+      query += ` AND TRIM(sp.district) = TRIM($${params.length + 1})`;
       params.push(req.query.district);
     }
 
@@ -2109,22 +2110,23 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
   const { region, division } = req.query;
   try {
     let query = `
-SELECT
-project_id as id, project_name as "projectName", school_id as "schoolId", school_name as "schoolName",
-  accomplishment_percentage as "accomplishmentPercentage", status,
-  validation_status as "validation_status", status_as_of as "statusAsOfDate"
-      FROM engineer_form
-      WHERE TRIM(region) = TRIM($1)
-  `;
+      SELECT
+        e.project_id as id, e.project_name as "projectName", e.school_id as "schoolId", e.school_name as "schoolName",
+        e.accomplishment_percentage as "accomplishmentPercentage", e.status,
+        e.validation_status as "validation_status", e.status_as_of as "statusAsOfDate"
+      FROM engineer_form e
+      JOIN school_profiles sp ON e.school_id = sp.school_id
+      WHERE TRIM(sp.region) = TRIM($1)
+    `;
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(division) = TRIM($2)`;
+      query += ` AND TRIM(sp.division) = TRIM($2)`;
       params.push(division);
     }
 
     if (req.query.district) {
-      query += ` AND TRIM(district) = TRIM($${params.length + 1})`;
+      query += ` AND TRIM(sp.district) = TRIM($${params.length + 1})`;
       params.push(req.query.district);
     }
 
@@ -2240,10 +2242,10 @@ app.get('/api/monitoring/regions', async (req, res) => {
             (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
             (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END)
+            (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
           ) = 7 THEN 1 ELSE 0 END) as completed_schools
         FROM school_profiles
         GROUP BY region
