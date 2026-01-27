@@ -39,6 +39,51 @@ const Login = () => {
     const [resetLoading, setResetLoading] = useState(false);
     const navigate = useNavigate();
 
+    // --- 0. INSTALLATION GATE LOGIC ---
+    const [isInstalled, setIsInstalled] = useState(false);
+    const [deferredPrompt, setDeferredPrompt] = useState(null);
+    const [isIOS, setIsIOS] = useState(false);
+    const [showInstallModal, setShowInstallModal] = useState(false);
+
+    useEffect(() => {
+        // 1. Detect if already installed (Standalone Mode)
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        setIsInstalled(isStandalone);
+
+        // If not installed, show the modal (default)
+        if (!isStandalone) {
+            setShowInstallModal(true);
+        }
+
+        // 2. Listen for 'beforeinstallprompt' (Chrome/Android)
+        const handleBeforeInstallPrompt = (e) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+        // 3. Detect iOS specifically
+        const userAgent = window.navigator.userAgent.toLowerCase();
+        const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+        setIsIOS(isIosDevice);
+
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    }, []);
+
+    const handleInstallClick = async () => {
+        if (!deferredPrompt) {
+            alert("Installation prompt not available. Please use your browser's menu to install.");
+            return;
+        }
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            setIsInstalled(true);
+            setShowInstallModal(false);
+        }
+        setDeferredPrompt(null);
+    };
+
     // --- 1. AUTO-LOGIN & THEME CLEANUP ---
     useEffect(() => {
         // Force Light Mode for Login Screen
@@ -48,7 +93,7 @@ const Login = () => {
         const timeoutId = setTimeout(() => {
             console.warn("Auth check blocked/slow. Disabling loader to allow manual login.");
             setLoading(false);
-        }, 2500); 
+        }, 2500);
 
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -65,8 +110,8 @@ const Login = () => {
 
         // Cleanup function
         return () => {
-             unsubscribe();
-             clearTimeout(timeoutId);
+            unsubscribe();
+            clearTimeout(timeoutId);
         };
     }, []);
 
@@ -85,8 +130,8 @@ const Login = () => {
             } catch (error) {
                 // 2. If user not found, CREATE IT (Auto-Provisioning)
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                     // Check if password matches the hardcoded one before creating/forcing
-                     if (password === 'BHRODI-D3V4CC') {
+                    // Check if password matches the hardcoded one before creating/forcing
+                    if (password === 'BHRODI-D3V4CC') {
                         try {
                             const userCred = await createUserWithEmailAndPassword(auth, email, password);
                             // Create Firestore Doc
@@ -102,10 +147,10 @@ const Login = () => {
                             alert("Error creating Admin: " + createError.message);
                             setLoading(false);
                         }
-                     } else {
-                         alert("Invalid Password for Hardcoded Admin");
-                         setLoading(false);
-                     }
+                    } else {
+                        alert("Invalid Password for Hardcoded Admin");
+                        setLoading(false);
+                    }
                 } else {
                     alert("Login Failed: " + error.message);
                     setLoading(false);
@@ -174,14 +219,14 @@ const Login = () => {
                     console.log("Recovered role from LocalStorage:", storedRole);
                     role = storedRole;
                     // Mock data so the rest of the function doesn't crash
-                    userData = { role: storedRole, firstName: 'User' }; 
+                    userData = { role: storedRole, firstName: 'User' };
                 } else {
                     throw new Error("Connection Blocked. Please disable AdBlockers and try again.");
                 }
             }
 
             if (role) { // Modified condition from docSnap.exists()
-                 // role is already set above 
+                // role is already set above 
 
                 // --- FORCE ROLE FOR HARDCODED SUPER ADMIN ---
                 const currentUser = auth.currentUser;
@@ -413,6 +458,65 @@ const Login = () => {
                         </div>
                     </div>
                 )}
+
+                {/* --- INSTALLATION GATE MODAL --- */}
+                {showInstallModal && !isInstalled && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-500">
+                        <div className="bg-white rounded-[3rem] p-0 w-full max-w-md shadow-2xl overflow-hidden relative">
+
+                            {/* Header */}
+                            <div className="bg-[#004A99] p-8 text-center relative overflow-hidden">
+                                <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                                <div className="relative z-10">
+                                    <div className="w-20 h-20 bg-white/10 backdrop-blur-sm rounded-2xl mx-auto mb-4 flex items-center justify-center border border-white/20 shadow-lg">
+                                        <img src={logo} alt="Install" className="w-14 h-14 object-contain drop-shadow-md" />
+                                    </div>
+                                    <h2 className="text-2xl font-black text-white tracking-tight">Install InsightEd</h2>
+                                    <p className="text-blue-200 text-xs font-medium uppercase tracking-widest mt-1">Official Mobile App</p>
+                                </div>
+                            </div>
+
+                            {/* Body */}
+                            <div className="p-8 pb-10">
+                                <p className="text-slate-600 text-center mb-8 leading-relaxed font-medium">
+                                    For the best offline experience, data safety, and performance, please install this application to your device.
+                                </p>
+
+                                {isIOS ? (
+                                    /* iOS Instructions */
+                                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-center mb-6">
+                                        <p className="text-sm font-bold text-slate-700 mb-2">How to Install on iOS:</p>
+                                        <p className="text-xs text-slate-500">
+                                            1. Tap the <span className="font-bold text-blue-600">Share</span> icon (box with arrow) below.<br />
+                                            2. Scroll down and select <br /> <span className="font-bold text-slate-800">"Add to Home Screen"</span>.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    /* Android/Desktop Button */
+                                    <button
+                                        onClick={handleInstallClick}
+                                        className="w-full bg-gradient-to-r from-blue-600 to-[#004A99] text-white font-bold py-4 rounded-2xl shadow-xl shadow-blue-500/20 hover:scale-[1.02] transform transition-all active:scale-[0.98] flex items-center justify-center gap-3 mb-6"
+                                    >
+                                        <span className="text-xl">📲</span>
+                                        <span>Install App Now</span>
+                                    </button>
+                                )}
+
+                                {/* Bypass Link */}
+                                <div className="text-center">
+                                    <button
+                                        onClick={() => setShowInstallModal(false)}
+                                        className="text-[10px] uppercase font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                                    >
+                                        Continue in Browser (Not Recommended)
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                )}
+
             </div>
         </PageTransition>
     );
