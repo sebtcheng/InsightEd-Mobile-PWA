@@ -309,7 +309,7 @@ const PhysicalFacilities = () => {
                             onClick={() => setShowEditModal(true)}
                             className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                         >
-                            <span>Enable Editing</span>
+                            <span>🔓 Unlock to Edit Data</span>
                         </button>
                     ) : (
                         <>

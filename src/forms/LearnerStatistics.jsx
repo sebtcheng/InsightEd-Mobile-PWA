@@ -558,7 +558,7 @@ const LearnerStatistics = () => {
                             onClick={() => setIsLocked(false)}
                             className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            <TbActivity /> Edit Statistics
+                            <TbActivity /> 🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <button

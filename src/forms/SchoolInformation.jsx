@@ -464,38 +464,27 @@ const SchoolInformation = () => {
                 </div>
             </div>
 
-            {/* --- FLOATING ACTION BAR --- */}
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
-                    {(viewOnly || isDummy) ? (
-                        <button
-                            type="button"
-                            onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
-                        >
-                            <FiArrowLeft /> Back to School List
+                    {viewOnly ? (
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
                         <button
                             onClick={() => setShowEditModal(true)}
-                            className="w-full py-4 rounded-2xl bg-amber-500 text-white font-bold shadow-lg shadow-amber-900/20 flex items-center justify-center gap-2 hover:bg-amber-600 transition-colors"
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            <span>✏️</span> Unlock to Edit
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            <button
-                                onClick={() => { setFormData(originalData); setIsLocked(true); }}
-                                className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors"
-                            >
+                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
                                 Cancel
                             </button>
-                            <button
-                                onClick={() => setShowSaveModal(true)}
-                                disabled={isSaving}
-                                className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                            >
-                                {isSaving ? "Saving..." : <><FiSave /> Save Changes</>}
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                                {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>
                     )}
@@ -503,54 +492,58 @@ const SchoolInformation = () => {
             </div>
 
             {/* --- MODALS --- */}
-            {showSaveModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
-                            <FiCheckCircle />
-                        </div>
-                        <h3 className="font-bold text-lg text-slate-800">Confirm Updates</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6">Are you sure the information is correct?</p>
+            {
+                showSaveModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
+                                <FiCheckCircle />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800">Confirm Updates</h3>
+                            <p className="text-sm text-slate-500 mt-2 mb-6">Are you sure the information is correct?</p>
 
-                        <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
-                            <input type="checkbox" checked={isChecked} onChange={(e) => setIsChecked(e.target.checked)} className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-600" />
-                            <span className="text-xs font-bold text-slate-600 select-none">I certify this information is correct.</span>
-                        </label>
+                            <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
+                                <input type="checkbox" checked={isChecked} onChange={(e) => setIsChecked(e.target.checked)} className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-600" />
+                                <span className="text-xs font-bold text-slate-600 select-none">I certify this information is correct.</span>
+                            </label>
 
-                        <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
-                            <button onClick={confirmSave} disabled={!isChecked} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${isChecked ? 'bg-[#004A99] hover:bg-blue-800' : 'bg-slate-200 cursor-not-allowed'}`}>Save</button>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                                <button onClick={confirmSave} disabled={!isChecked} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${isChecked ? 'bg-[#004A99] hover:bg-blue-800' : 'bg-slate-200 cursor-not-allowed'}`}>Save</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Edit Warning Modal for Unlock */}
-            {showEditModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
-                            <FiAlertCircle />
-                        </div>
-                        <h3 className="font-bold text-lg text-slate-800">Edit Information?</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6">You are about to modify official school head records. Please confirm to proceed.</p>
+            {
+                showEditModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
+                                <FiAlertCircle />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800">Edit Information?</h3>
+                            <p className="text-sm text-slate-500 mt-2 mb-6">You are about to modify official school head records. Please confirm to proceed.</p>
 
-                        <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
-                            <input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" />
-                            <span className="text-xs font-bold text-slate-600 select-none">I understand and wish to proceed.</span>
-                        </label>
+                            <label className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 cursor-pointer mb-6 border border-transparent hover:border-slate-100 transition">
+                                <input type="checkbox" checked={editAgreement} onChange={(e) => setEditAgreement(e.target.checked)} className="mt-1 w-4 h-4 text-amber-600 rounded focus:ring-amber-600" />
+                                <span className="text-xs font-bold text-slate-600 select-none">I understand and wish to proceed.</span>
+                            </label>
 
-                        <div className="flex gap-2">
-                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
-                            <button onClick={() => { setShowEditModal(false); setIsLocked(false); }} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-200 cursor-not-allowed'}`}>Proceed</button>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                                <button onClick={() => { setShowEditModal(false); setIsLocked(false); }} disabled={!editAgreement} className={`flex-1 py-3 rounded-xl text-white font-bold shadow-sm ${editAgreement ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-200 cursor-not-allowed'}`}>Proceed</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="School Head Information saved successfully!" />
-        </div>
+        </div >
     );
 };
 

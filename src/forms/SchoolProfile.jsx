@@ -259,7 +259,8 @@ const SchoolProfile = () => {
 
                     // Validation Check
                     if (localData.schoolName) checkSchoolName(localData.schoolName);
-                    if (localData.schoolId && !isFirstTime) setIsLocked(true);
+                    // Standardized Lock Logic: Always lock if data exists and not first time
+                    if (!isFirstTime) setIsLocked(true);
 
                     // Note: applyDataToState logic for options comes later via Effects or we re-run it?
                     // Ideally we call applyDataToState, but maps aren't ready. 
@@ -292,7 +293,7 @@ const SchoolProfile = () => {
                         if (!loadedFromCache) {
                             setFormData(loadedData);
                             setOriginalData(loadedData);
-                            if (loadedData.schoolId && !isFirstTime) setIsLocked(true);
+                            if (!isFirstTime) setIsLocked(true);
                         } else {
                             // Silent State Update - merging to ensure latest
                             setFormData(loadedData);
@@ -776,23 +777,41 @@ const SchoolProfile = () => {
                             </fieldset>
 
                             {!viewOnly && !isDummy && (
-                                <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                                    {isOffline ? (
-                                        <button type="button" disabled className="w-full bg-gray-400 text-white font-bold py-4 rounded-xl shadow-none cursor-not-allowed flex items-center justify-center gap-2">
-                                            <span>📵</span> Offline - Read Only
-                                        </button>
-                                    ) : isLocked ? (
-                                        <button type="button" onClick={() => setShowEditModal(true)} className="w-full bg-amber-500 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-amber-600 flex items-center justify-center gap-2" disabled={isDummy}>
-                                            <span>✏️</span> Unlock to Edit
-                                        </button>
-                                    ) : (
-                                        <>
-                                            {hasSavedData && <button type="button" onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-gray-100 text-gray-600 font-bold py-4 rounded-xl hover:bg-gray-200">Cancel</button>}
-                                            <button type="submit" disabled={isSaving || isDummy} className={`flex-[2] bg-[#CC0000] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-[#A30000] flex items-center justify-center gap-2 ${isSaving || isDummy ? 'opacity-70 cursor-not-allowed' : ''}`}>
-                                                {isSaving ? "Saving..." : (hasSavedData ? "Update Changes" : "Save Profile")}
+                                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
+                                    <div className="max-w-4xl mx-auto flex gap-3">
+                                        {isOffline ? (
+                                            <button type="button" disabled className="w-full py-4 rounded-2xl bg-slate-400 text-white font-bold shadow-none cursor-not-allowed flex items-center justify-center gap-2">
+                                                <span>📵</span> Offline - Read Only
                                             </button>
-                                        </>
-                                    )}
+                                        ) : isLocked ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsLocked(false)}
+                                                className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                                            >
+                                                🔓 Unlock to Edit Data
+                                            </button>
+                                        ) : (
+                                            <>
+                                                {hasSavedData && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setFormData(originalData); setIsLocked(true); }}
+                                                        className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="submit"
+                                                    disabled={isSaving}
+                                                    className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg"
+                                                >
+                                                    {isSaving ? "Saving..." : (hasSavedData ? "Save Changes" : "Save Profile")}
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -801,14 +820,16 @@ const SchoolProfile = () => {
                     </div>
 
                     {(viewOnly || isDummy) && (
-                        <div className="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 p-4 pb-8 z-50 flex gap-3 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-                            <button
-                                type="button"
-                                onClick={() => navigate('/jurisdiction-schools')}
-                                className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-800 active:scale-[0.98] transition flex items-center justify-center gap-2"
-                            >
-                                ← Back to School List
-                            </button>
+                        <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
+                            <div className="max-w-4xl mx-auto">
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/jurisdiction-schools')}
+                                    className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg"
+                                >
+                                    ← Back to School List
+                                </button>
+                            </div>
                         </div>
                     )}
 

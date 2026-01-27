@@ -79,7 +79,7 @@ const TeachingPersonnel = () => {
         }
     };
 
-    // --- FETCH DATA ---
+    // --- FETCH DATA (Strict Instant Load Strategy) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -88,7 +88,7 @@ const TeachingPersonnel = () => {
                 if (storedSchoolId) setSchoolId(storedSchoolId);
                 if (storedOffering) setOffering(storedOffering);
 
-                // DEFAULT STATE (Prevents Uncontrolled Input Errors)
+                // STEP 1: PREPARE DEFAULTS
                 const defaultFormData = {
                     teach_kinder: 0, teach_g1: 0, teach_g2: 0, teach_g3: 0, teach_g4: 0, teach_g5: 0, teach_g6: 0,
                     teach_g7: 0, teach_g8: 0, teach_g9: 0, teach_g10: 0,
@@ -102,7 +102,7 @@ const TeachingPersonnel = () => {
                     teach_exp_40_45: 0,
                 };
 
-                // STEP 1: LOAD CACHE IMMEDIATELY
+                // STEP 2: IMMEDIATE CACHE LOAD
                 let loadedFromCache = false;
                 const CACHE_KEY = `CACHE_TEACHING_PERSONNEL_${user.uid}`;
                 const cachedData = localStorage.getItem(CACHE_KEY);
@@ -125,9 +125,11 @@ const TeachingPersonnel = () => {
                     } catch (e) { console.error("Cache parse error", e); }
                 }
 
-                try {
-                    // STEP 2: CHECK OUTBOX
+                // STEP 3: ASYNC OPERATIONS (Outbox & Network)
+                const performAsyncChecks = async () => {
                     let restored = false;
+
+                    // A. Check Outbox
                     if (!viewOnly) {
                         try {
                             const drafts = await getOutbox();
@@ -139,6 +141,7 @@ const TeachingPersonnel = () => {
                                 }
                                 setFormData({ ...defaultFormData, ...draft.payload });
                                 restored = true;
+                                setIsLocked(false); // Unlocks form for draft editing
                                 setLoading(false);
 
                                 getDoc(doc(db, "users", user.uid)).then(s => { if (s.exists()) setUserRole(s.data().role); });
@@ -147,7 +150,7 @@ const TeachingPersonnel = () => {
                         } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // STEP 3: BACKGROUND FETCH
+                    // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/teaching-personnel/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
@@ -157,79 +160,71 @@ const TeachingPersonnel = () => {
                         // Only show loading if we didn't load from cache
                         if (!loadedFromCache) setLoading(true);
 
-                        const [userDoc, apiResult] = await Promise.all([
-                            getDoc(doc(db, "users", user.uid)).catch(e => ({ exists: () => false })),
-                            fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
-                        ]);
+                        try {
+                            const [userDoc, apiResult] = await Promise.all([
+                                getDoc(doc(db, "users", user.uid)).catch(e => ({ exists: () => false })),
+                                fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
+                            ]);
 
-                        if (userDoc.exists()) setUserRole(userDoc.data().role);
+                            if (userDoc.exists()) setUserRole(userDoc.data().role);
 
-                        const json = apiResult;
+                            const json = apiResult;
 
-                        if (json.exists || (viewOnly && schoolIdParam)) {
-                            // Update School ID / Offering
-                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
-                            setSchoolId(json.school_id || json.schoolId || storedSchoolId);
-                            setOffering(newOffering);
+                            if (json.exists || (viewOnly && schoolIdParam)) {
+                                // Update School ID / Offering
+                                const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                                setSchoolId(json.school_id || json.schoolId || storedSchoolId);
+                                setOffering(newOffering);
 
-                            if (!viewOnly && json.school_id) {
-                                localStorage.setItem('schoolId', json.school_id);
-                                localStorage.setItem('schoolOffering', newOffering);
+                                if (!viewOnly && json.school_id) {
+                                    localStorage.setItem('schoolId', json.school_id);
+                                    localStorage.setItem('schoolOffering', newOffering);
+                                }
+
+                                const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+
+                                // Map DB to Form (re-using initial structure for safety)
+                                const initialData = {
+                                    teach_kinder: dbData.teach_kinder || 0,
+                                    teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
+                                    teach_g4: dbData.teach_g4 || 0, teach_g5: dbData.teach_g5 || 0, teach_g6: dbData.teach_g6 || 0,
+                                    teach_g7: dbData.teach_g7 || 0, teach_g8: dbData.teach_g8 || 0, teach_g9: dbData.teach_g9 || 0, teach_g10: dbData.teach_g10 || 0,
+                                    teach_g11: dbData.teach_g11 || 0, teach_g12: dbData.teach_g12 || 0,
+                                    teach_multi_1_2: dbData.teach_multi_1_2 || 0,
+                                    teach_multi_3_4: dbData.teach_multi_3_4 || 0,
+                                    teach_multi_5_6: dbData.teach_multi_5_6 || 0,
+                                    teach_multi_3plus_flag: dbData.teach_multi_3plus_flag || false,
+                                    teach_multi_3plus_count: dbData.teach_multi_3plus_count || 0,
+                                    teach_exp_0_1: dbData.teach_exp_0_1 || 0,
+                                    teach_exp_2_5: dbData.teach_exp_2_5 || 0,
+                                    teach_exp_6_10: dbData.teach_exp_6_10 || 0,
+                                    teach_exp_11_15: dbData.teach_exp_11_15 || 0,
+                                    teach_exp_16_20: dbData.teach_exp_16_20 || 0,
+                                    teach_exp_21_25: dbData.teach_exp_21_25 || 0,
+                                    teach_exp_26_30: dbData.teach_exp_26_30 || 0,
+                                    teach_exp_31_35: dbData.teach_exp_31_35 || 0,
+                                    teach_exp_36_40: dbData.teach_exp_36_40 || 0,
+                                    teach_exp_40_45: dbData.teach_exp_40_45 || 0,
+                                };
+
+                                setFormData(initialData);
+                                setOriginalData(initialData);
+                                setIsLocked(true);
+
+                                // UPDATE CACHE
+                                const cachePayload = { ...initialData, curricular_offering: newOffering, schoolId: json.school_id };
+                                localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                             }
-
-                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-
-                            // Map DB to Form
-                            const initialData = {
-                                teach_kinder: dbData.teach_kinder || 0,
-                                teach_g1: dbData.teach_g1 || 0, teach_g2: dbData.teach_g2 || 0, teach_g3: dbData.teach_g3 || 0,
-                                teach_g4: dbData.teach_g4 || 0, teach_g5: dbData.teach_g5 || 0, teach_g6: dbData.teach_g6 || 0,
-                                teach_g7: dbData.teach_g7 || 0, teach_g8: dbData.teach_g8 || 0, teach_g9: dbData.teach_g9 || 0, teach_g10: dbData.teach_g10 || 0,
-                                teach_g11: dbData.teach_g11 || 0, teach_g12: dbData.teach_g12 || 0,
-                                teach_multi_1_2: dbData.teach_multi_1_2 || 0,
-                                teach_multi_3_4: dbData.teach_multi_3_4 || 0,
-                                teach_multi_5_6: dbData.teach_multi_5_6 || 0,
-                                teach_multi_3plus_flag: dbData.teach_multi_3plus_flag || false,
-                                teach_multi_3plus_count: dbData.teach_multi_3plus_count || 0,
-                                teach_exp_0_1: dbData.teach_exp_0_1 || 0,
-                                teach_exp_2_5: dbData.teach_exp_2_5 || 0,
-                                teach_exp_6_10: dbData.teach_exp_6_10 || 0,
-                                teach_exp_11_15: dbData.teach_exp_11_15 || 0,
-                                teach_exp_16_20: dbData.teach_exp_16_20 || 0,
-                                teach_exp_21_25: dbData.teach_exp_21_25 || 0,
-                                teach_exp_26_30: dbData.teach_exp_26_30 || 0,
-                                teach_exp_31_35: dbData.teach_exp_31_35 || 0,
-                                teach_exp_36_40: dbData.teach_exp_36_40 || 0,
-                                teach_exp_40_45: dbData.teach_exp_40_45 || 0,
-                            };
-
-                            setFormData(initialData);
-                            setOriginalData(initialData);
-
-                            const hasData = Object.values(dbData).some(val => val > 0);
-                            if (hasData || viewOnly) setIsLocked(true);
-
-                            // UPDATE CACHE
-                            const cachePayload = { ...initialData, curricular_offering: newOffering, schoolId: json.school_id };
-                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+                        } catch (err) {
+                            console.error("Fetch Error:", err);
+                        } finally {
+                            setLoading(false);
                         }
                     }
-                } catch (error) {
-                    console.error("Fetch Error:", error);
-                    // OFFLINE FALLBACK (If not already loaded from Step 1)
-                    if (!loadedFromCache) {
-                        const CACHE_KEY = `CACHE_TEACHING_PERSONNEL_${user.uid}`;
-                        const cached = localStorage.getItem(CACHE_KEY);
-                        if (cached) {
-                            const dbData = JSON.parse(cached);
-                            setFormData({ ...defaultFormData, ...dbData });
-                            setOriginalData({ ...defaultFormData, ...dbData });
-                            setIsLocked(true);
-                        }
-                    }
-                }
+                };
+
+                performAsyncChecks();
             }
-            setLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -397,7 +392,7 @@ const TeachingPersonnel = () => {
                                     <p className="text-xs text-slate-400 font-medium">Kinder to Grade 6 Faculty</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <TeacherInput label="Kinder" name="teach_kinder" value={formData.teach_kinder} onChange={handleChange} disabled={isLocked || viewOnly} />
                                 <TeacherInput label="Grade 1" name="teach_g1" value={formData.teach_g1} onChange={handleChange} disabled={isLocked || viewOnly} />
                                 <TeacherInput label="Grade 2" name="teach_g2" value={formData.teach_g2} onChange={handleChange} disabled={isLocked || viewOnly} />
@@ -420,7 +415,7 @@ const TeachingPersonnel = () => {
                                     <p className="text-xs text-slate-400 font-medium">Grade 7 to Grade 10 Faculty</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <TeacherInput label="Grade 7" name="teach_g7" value={formData.teach_g7} onChange={handleChange} disabled={isLocked || viewOnly} />
                                 <TeacherInput label="Grade 8" name="teach_g8" value={formData.teach_g8} onChange={handleChange} disabled={isLocked || viewOnly} />
                                 <TeacherInput label="Grade 9" name="teach_g9" value={formData.teach_g9} onChange={handleChange} disabled={isLocked || viewOnly} />
@@ -440,7 +435,7 @@ const TeachingPersonnel = () => {
                                     <p className="text-xs text-slate-400 font-medium">Grade 11 & 12 Faculty</p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <TeacherInput label="Grade 11" name="teach_g11" value={formData.teach_g11} onChange={handleChange} disabled={isLocked || viewOnly} />
                                 <TeacherInput label="Grade 12" name="teach_g12" value={formData.teach_g12} onChange={handleChange} disabled={isLocked || viewOnly} />
                             </div>
@@ -529,36 +524,26 @@ const TeachingPersonnel = () => {
                 </form>
             </div >
 
-            {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button
-                            onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
-                        >
-                            Back to Schools List
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
                         <button
-                            onClick={handleUpdateClick}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            onClick={() => setIsLocked(false)}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            <span>Enable Editing</span>
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            <button
-                                onClick={handleCancelEdit}
-                                className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
-                            >
+                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
                                 Cancel
                             </button>
-                            <button
-                                onClick={() => setShowSaveModal(true)}
-                                disabled={isSaving}
-                                className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all"
-                            >
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
                                 {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>

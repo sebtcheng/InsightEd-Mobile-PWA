@@ -170,6 +170,7 @@ const OrganizedClasses = () => {
                                 setClassSizeData({ ...defaultClassSize, ...p });
 
                                 restored = true;
+                                setIsLocked(false); // Unlocks form for draft editing
                                 setLoading(false);
                             }
                         } catch (e) { console.error("Outbox check failed:", e); }
@@ -298,15 +299,14 @@ const OrganizedClasses = () => {
         <div>
             <label className={labelClass}>{label}</label>
             <input
-                type="text"
+                type="text" // Changed to text to allow handling empty string
                 inputMode="numeric"
-                pattern="[0-9]*"
                 name={name}
-                value={formData[name]}
+                value={formData[name] === 0 ? '' : formData[name]} // Show empty if 0 for cleaner UI, or keep 0
                 onChange={handleChange}
-                disabled={isLocked || viewOnly}
                 className={inputClass}
-                onFocus={(e) => e.target.select()}
+                placeholder="0"
+                disabled={isLocked || viewOnly || isDummy}
             />
         </div>
     );
@@ -508,7 +508,7 @@ const OrganizedClasses = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Grade {g}</td>
                                             <td className="p-1">
                                                 <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
+                                                    type="text" inputMode="numeric"
                                                     name={`cntLessG${g}`}
                                                     value={classSizeData[`cntLessG${g}`]}
                                                     onChange={handleClassSizeChange}
@@ -519,7 +519,7 @@ const OrganizedClasses = () => {
                                             </td>
                                             <td className="p-1">
                                                 <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
+                                                    type="text" inputMode="numeric"
                                                     name={`cntWithinG${g}`}
                                                     value={classSizeData[`cntWithinG${g}`]}
                                                     onChange={handleClassSizeChange}
@@ -530,7 +530,7 @@ const OrganizedClasses = () => {
                                             </td>
                                             <td className="p-1">
                                                 <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
+                                                    type="text" inputMode="numeric"
                                                     name={`cntAboveG${g}`}
                                                     value={classSizeData[`cntAboveG${g}`]}
                                                     onChange={handleClassSizeChange}
@@ -548,22 +548,27 @@ const OrganizedClasses = () => {
                 </form>
             </div>
 
-            {/* --- FLOATING ACTION BAR --- */}
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate('/jurisdiction-schools')} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
-                            <FiArrowLeft /> Back to Schools List
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
-                        <button onClick={handleUpdateClick} className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
-                            <span>✏️</span> UNLOCK EDIT
+                        <button
+                            onClick={() => setIsLocked(false)}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                        >
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            {originalData && <button onClick={handleCancelEdit} className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">Cancel</button>}
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
-                                {isSaving ? "Saving..." : <><FiSave /> Save Changes</>}
+                            <button onClick={() => { setIsLocked(true); setFormData(originalData?.formData || formData); setClassSizeData(originalData?.classSizeData || classSizeData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
+                                Cancel
+                            </button>
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                                {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>
                     )}

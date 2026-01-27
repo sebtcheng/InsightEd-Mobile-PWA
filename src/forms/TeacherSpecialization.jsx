@@ -94,7 +94,7 @@ const TeacherSpecialization = () => {
         }
     };
 
-    // --- FETCH DATA (Refactored for Sync Cache) ---
+    // --- FETCH DATA (Strict Instant Load Strategy) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -102,11 +102,10 @@ const TeacherSpecialization = () => {
                 const storedOffering = localStorage.getItem('schoolOffering');
                 if (storedSchoolId) setSchoolId(storedSchoolId);
 
-                // DEFAULT STATE
+                // STEP 1: PREPARE DEFAULTS
                 const defaultFormData = getInitialFields();
 
-                // STEP 1: LOAD CACHE IMMEDIATELY
-                // Note: Standardizing on 'CACHE_TEACHER_SPEC_' as that was what was being written previously.
+                // STEP 2: IMMEDIATE CACHE LOAD
                 let loadedFromCache = false;
                 const CACHE_KEY = `CACHE_TEACHER_SPEC_${user.uid}`;
                 const cachedData = localStorage.getItem(CACHE_KEY);
@@ -117,7 +116,6 @@ const TeacherSpecialization = () => {
                         setFormData({ ...defaultFormData, ...parsed }); // Merge
                         setOriginalData({ ...defaultFormData, ...parsed });
 
-                        // Lock if data looks valid
                         setIsLocked(true);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
@@ -125,9 +123,11 @@ const TeacherSpecialization = () => {
                     } catch (e) { console.error("Cache parse error", e); }
                 }
 
-                try {
-                    // STEP 2: CHECK OUTBOX
+                // STEP 3: ASYNC OPERATIONS (Outbox & Network)
+                const performAsyncChecks = async () => {
                     let restored = false;
+
+                    // A. Check Outbox
                     if (!viewOnly) {
                         try {
                             const drafts = await getOutbox();
@@ -146,12 +146,12 @@ const TeacherSpecialization = () => {
                                 setLoading(false);
 
                                 getDoc(doc(db, "users", user.uid)).then(s => { if (s.exists()) setUserRole(s.data().role); });
-                                return; // Stop here if draft found
+                                return;
                             }
                         } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // STEP 3: BACKGROUND FETCH
+                    // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/teacher-specialization/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
@@ -161,65 +161,56 @@ const TeacherSpecialization = () => {
                         // Only show loading if we didn't load from cache
                         if (!loadedFromCache) setLoading(true);
 
-                        const [userDoc, apiResult] = await Promise.all([
-                            getDoc(doc(db, "users", user.uid)).catch(e => ({ exists: () => false })),
-                            fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
-                        ]);
+                        try {
+                            const [userDoc, apiResult] = await Promise.all([
+                                getDoc(doc(db, "users", user.uid)).catch(e => ({ exists: () => false })),
+                                fetch(fetchUrl).then(res => res.json()).catch(e => ({ error: e, exists: false }))
+                            ]);
 
-                        if (userDoc.exists()) setUserRole(userDoc.data().role);
+                            if (userDoc.exists()) setUserRole(userDoc.data().role);
 
-                        const json = apiResult;
+                            const json = apiResult;
 
-                        if (json.exists || (viewOnly && schoolIdParam)) {
-                            // Update School ID / Offering
-                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
-                            if (json.school_id || json.schoolId) setSchoolId(json.school_id || json.schoolId);
+                            if (json.exists || (viewOnly && schoolIdParam)) {
+                                // Update School ID / Offering
+                                const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                                if (json.school_id || json.schoolId) setSchoolId(json.school_id || json.schoolId);
 
-                            if (!viewOnly && json.school_id) {
-                                localStorage.setItem('schoolId', json.school_id);
-                                localStorage.setItem('schoolOffering', newOffering);
+                                if (!viewOnly && json.school_id) {
+                                    localStorage.setItem('schoolId', json.school_id);
+                                    localStorage.setItem('schoolOffering', newOffering);
+                                }
+
+                                const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+
+                                // Map DB to Form (using default keys to ensure safe merge)
+                                const loaded = {};
+                                Object.keys(defaultFormData).forEach(key => {
+                                    loaded[key] = dbData[key] !== null && dbData[key] !== undefined ? dbData[key] : 0;
+                                });
+
+                                setFormData(loaded);
+                                setOriginalData(loaded);
+
+                                setIsLocked(true);
+
+                                // UPDATE CACHE
+                                const cachePayload = { ...dbData, curricular_offering: newOffering, schoolId: json.school_id };
+                                localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                             }
-
-                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-
-                            // Map DB to Form (using default keys to ensure safe merge)
-                            const loaded = {};
-                            Object.keys(defaultFormData).forEach(key => {
-                                loaded[key] = dbData[key] !== null && dbData[key] !== undefined ? dbData[key] : 0;
-                            });
-
-                            setFormData(loaded);
-                            setOriginalData(loaded);
-
-                            // Original Locking Logic
-                            if (dbData.spec_math_major > 0 || dbData.spec_guidance > 0 || viewOnly) setIsLocked(true);
-
-                            // UPDATE CACHE
-                            const cachePayload = { ...dbData, curricular_offering: newOffering, schoolId: json.school_id };
-                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
-                        } else {
-                            // If no data on server, and not loaded from cache, we might want to respect that?
-                            // Or keep cache? Usually 'gold standard' syncs to server.
+                        } catch (err) {
+                            console.error("Fetch Error:", err);
+                        } finally {
+                            setLoading(false);
                         }
                     }
-                } catch (error) {
-                    console.error("Fetch Error:", error);
-                    if (!loadedFromCache) {
-                        // Retry cache reading (Redundant if Step 1 works, but safe fallback)
-                        const cached = localStorage.getItem(CACHE_KEY);
-                        if (cached) {
-                            const dbData = JSON.parse(cached);
-                            setFormData({ ...defaultFormData, ...dbData });
-                            setOriginalData({ ...defaultFormData, ...dbData });
-                            setIsLocked(true);
-                        }
-                    }
-                }
+                };
+
+                performAsyncChecks();
             }
-            setLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [viewOnly, schoolIdParam]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -337,39 +328,38 @@ const TeacherSpecialization = () => {
                     </div>
 
                     <div className="space-y-1">
-                        <SubjectRow label="English" id="english" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="Filipino" id="filipino" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="Mathematics" id="math" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="Science" id="science" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="Araling Panlipunan" id="ap" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="MAPEH" id="mapeh" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="EsP" id="esp" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        <SubjectRow label="TLE / TVL" id="tle" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <SubjectRow label="English" id="english" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="Filipino" id="filipino" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="Mathematics" id="math" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="Science" id="science" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="Araling Panlipunan" id="ap" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="MAPEH" id="mapeh" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="Edukasyon sa Pagpapakatao (EsP)" id="esp" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
+                        <SubjectRow label="TLE / TVL / ICT" id="tle" formData={formData} handleChange={handleChange} isLocked={isLocked || viewOnly} />
                     </div>
                 </div>
             </div>
 
-            {/* Floating Action Bar */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button
-                            onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
-                        >
-                            Back to Schools List
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
                         <button
-                            onClick={() => setShowEditModal(true)}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            onClick={() => setIsLocked(false)}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            <span>Enable Editing</span>
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            {originalData && <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>}
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all">
+                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
+                                Cancel
+                            </button>
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
                                 {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>
@@ -388,28 +378,30 @@ const TeacherSpecialization = () => {
                             <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
                         </div>
                     </div>
-                </div>
+                </div >
             )}
 
-            {showSaveModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
-                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
-                            <FiCheckCircle size={24} />
-                        </div>
-                        <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
-                        <p className="text-slate-500 text-center text-sm mb-6">You are about to update the specialization record.</p>
-                        <div className="flex gap-3">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+            {
+                showSaveModal && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                            <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
+                                <FiCheckCircle size={24} />
+                            </div>
+                            <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
+                            <p className="text-slate-500 text-center text-sm mb-6">You are about to update the specialization record.</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                                <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Specialization saved successfully!" />
-        </div>
+        </div >
     );
 };
 

@@ -88,7 +88,7 @@ const SchoolResources = () => {
                 // DEFAULT STATE
                 const defaultFormData = initialFields;
 
-                // 1. SYNC CACHE LOADING
+                // Sync Cache Loading
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
                 if (storedSchoolId) setSchoolId(storedSchoolId);
@@ -210,9 +210,7 @@ const SchoolResources = () => {
                             setFormData(loaded);
                             setOriginalData(loaded);
 
-                            if (loaded.res_internet_type || loaded.res_toilets_male) {
-                                setIsLocked(true);
-                            }
+                            setIsLocked(true);
 
                             // Update Cache
                             localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
@@ -648,27 +646,26 @@ const SchoolResources = () => {
                 </div>
             </div>
 
-            {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button
-                            onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
-                        >
-                            Back to Schools List
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
                         <button
-                            onClick={() => setShowEditModal(true)}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                            onClick={() => setIsLocked(false)}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            <span>Enable Editing</span>
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            {originalData && <button onClick={() => { setFormData(originalData); setIsLocked(true); }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>}
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all">
+                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
+                                Cancel
+                            </button>
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
                                 {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>

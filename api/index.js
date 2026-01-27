@@ -141,13 +141,13 @@ const initOtpTable = async () => {
             ADD COLUMN IF NOT EXISTS office TEXT,
             ADD COLUMN IF NOT EXISTS position TEXT;
         `);
-      console.log('✅ Checked/Extended users table schema');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate users table:', migErr.message);
-    }
-    // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
-    try {
-      await client.query(`
+        console.log('✅ Checked/Extended users table schema');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate users table:', migErr.message);
+      }
+      // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
+      try {
+        await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS sha_category TEXT,
@@ -1015,6 +1015,19 @@ app.get('/api/school-head/:uid', async (req, res) => {
     }
   } catch (err) {
     console.error("Get Head Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// --- 6b. GET: Get Enrolment Data ---
+app.get('/api/enrolment/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, data: result.rows[0], school_id: result.rows[0].school_id, curricular_offering: result.rows[0].curricular_offering });
+  } catch (err) {
+    console.error("Get Enrolment Error:", err);
     res.status(500).json({ error: "Database error" });
   }
 });
