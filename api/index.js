@@ -57,19 +57,19 @@ const initOtpTable = async () => {
   }
 };
 
-pool.connect(async (err, client, release) => {
-  if (err) {
-    console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
-    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
-    isDbConnected = false;
-  } else {
+// --- DATABASE CONNECTION ---
+// Auto-connect and initialize
+(async () => {
+  try {
+    const client = await pool.connect();
     isDbConnected = true;
     console.log('✅ Connected to Neon Database successfully!');
     await initOtpTable();
 
-    // --- INIT NOTIFICATIONS TABLE ---
     try {
-      await client.query(`
+      // --- INIT NOTIFICATIONS TABLE ---
+      try {
+        await client.query(`
             CREATE TABLE IF NOT EXISTS notifications (
                 id SERIAL PRIMARY KEY,
                 recipient_uid TEXT NOT NULL,
@@ -82,36 +82,36 @@ pool.connect(async (err, client, release) => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-      console.log('✅ Notifications Table Initialized');
-    } catch (tableErr) {
-      console.error('❌ Failed to init notifications table:', tableErr.message);
-    }
+        console.log('✅ Notifications Table Initialized');
+      } catch (tableErr) {
+        console.error('❌ Failed to init notifications table:', tableErr.message);
+      }
 
-    // --- MIGRATION: ADD EMAIL TO SCHOOL_PROFILES ---
-    try {
-      await client.query(`
+      // --- MIGRATION: ADD EMAIL TO SCHOOL_PROFILES ---
+      try {
+        await client.query(`
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS email TEXT;
         `);
-      console.log('✅ Checked/Added email column to school_profiles');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate school_profiles:', migErr.message);
-    }
+        console.log('✅ Checked/Added email column to school_profiles');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate school_profiles:', migErr.message);
+      }
 
-    // --- MIGRATION: ADD CURRICULAR OFFERING ---
-    try {
-      await client.query(`
+      // --- MIGRATION: ADD CURRICULAR OFFERING ---
+      try {
+        await client.query(`
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
         `);
-      console.log('✅ Checked/Added curricular_offering column to school_profiles');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate curricular_offering:', migErr.message);
-    }
+        console.log('✅ Checked/Added curricular_offering column to school_profiles');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate curricular_offering:', migErr.message);
+      }
 
-    // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
-    try {
-      await client.query(`
+      // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
+      try {
+        await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 uid TEXT PRIMARY KEY,
                 email TEXT,
@@ -128,8 +128,8 @@ pool.connect(async (err, client, release) => {
                 position TEXT
             );
         `);
-      // If table exists, ensure columns exist
-      await client.query(`
+        // If table exists, ensure columns exist
+        await client.query(`
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS first_name TEXT,
             ADD COLUMN IF NOT EXISTS last_name TEXT,
@@ -153,14 +153,14 @@ pool.connect(async (err, client, release) => {
         ADD COLUMN IF NOT EXISTS sha_category TEXT,
         ADD COLUMN IF NOT EXISTS res_faucets INTEGER DEFAULT 0;
       `);
-      console.log('✅ Checked/Added new School Resources columns');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate resources columns:', migErr.message);
-    }
+        console.log('✅ Checked/Added new School Resources columns');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate resources columns:', migErr.message);
+      }
 
-    // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
-    try {
-      await client.query(`
+      // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
+      try {
+        await client.query(`
         ALTER TABLE school_profiles 
         -- Site & Utils
         ADD COLUMN IF NOT EXISTS res_ownership_type TEXT,
@@ -261,14 +261,14 @@ pool.connect(async (err, client, release) => {
         ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
       `);
-      console.log('✅ Checked/Added ALL missing School Resources & Class Analysis columns');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate extra columns:', migErr.message);
-    }
+        console.log('✅ Checked/Added ALL missing School Resources & Class Analysis columns');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate extra columns:', migErr.message);
+      }
 
-    // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
-    try {
-      await client.query(`
+      // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
+      try {
+        await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS spec_english_major INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_english_teaching INTEGER DEFAULT 0,
@@ -291,14 +291,14 @@ pool.connect(async (err, client, release) => {
         ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0;
       `);
-      console.log('✅ Checked/Added Teacher Specialization columns');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate specialization columns:', migErr.message);
-    }
+        console.log('✅ Checked/Added Teacher Specialization columns');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate specialization columns:', migErr.message);
+      }
 
-    // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
-    try {
-      await client.query(`
+      // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
+      try {
+        await client.query(`
         ALTER TABLE school_profiles 
         -- ARAL (Grades 1-6)
         ADD COLUMN IF NOT EXISTS aral_math_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g1 INTEGER DEFAULT 0,
@@ -321,25 +321,31 @@ pool.connect(async (err, client, release) => {
         ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
       `);
-      console.log('✅ Checked/Added ARAL and Teaching Experience columns');
-    } catch (migErr) {
-      console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
-    }
+        console.log('✅ Checked/Added ARAL and Teaching Experience columns');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
+      }
 
-    // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
-    try {
-      await client.query(`
+      // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
+      try {
+        await client.query(`
         ALTER TABLE school_profiles 
         ALTER COLUMN res_buildable_space TYPE TEXT;
       `);
-      console.log('✅ Ensured res_buildable_space is TEXT');
-    } catch (migErr) {
-      console.log('ℹ️  res_buildable_space type check skipped/validated');
-    }
+        console.log('✅ Ensured res_buildable_space is TEXT');
+      } catch (migErr) {
+        console.log('ℹ️  res_buildable_space type check skipped/validated');
+      }
 
-    release();
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
+    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
+    isDbConnected = false;
   }
-});
+})();
 
 // ==================================================================
 //                        HELPER FUNCTIONS

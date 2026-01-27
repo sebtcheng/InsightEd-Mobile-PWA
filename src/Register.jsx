@@ -53,7 +53,7 @@ const Register = () => {
         email: '',
         password: '',
         confirmPassword: '',
-        role: 'Engineer', // Default
+        role: 'Regional Office', // Default
         // Legacy/Other Role Fields
         bureau: '',
         office: '',
@@ -194,6 +194,15 @@ const Register = () => {
         if (!isOfficeCsvLoaded) return [];
         return [...new Set(officeData
             .filter(row => row['Governance Level'] && row['Governance Level'].includes('Schools Division Office'))
+            .map(row => row['Functional Division'])
+            .filter(Boolean)
+        )].sort();
+    }, [officeData, isOfficeCsvLoaded]);
+
+    const centralOfficeBureaus = useMemo(() => {
+        if (!isOfficeCsvLoaded) return [];
+        return [...new Set(officeData
+            .filter(row => row['Governance Level'] && row['Governance Level'].includes('Central Office'))
             .map(row => row['Functional Division'])
             .filter(Boolean)
         )].sort();
@@ -609,11 +618,12 @@ const Register = () => {
                                         onChange={handleRoleChange}
                                         className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-blue-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
                                     >
-                                        <option value="Engineer">Engineer</option>
-                                        <option value="School Head">School Head</option>
+                                        <option value="Central Office">Central Office</option>
                                         <option value="Regional Office">Regional Office</option>
                                         <option value="School Division Office">School Division Office</option>
-                                        <option value="Admin">Admin</option>
+                                        <option value="School Head">School Head</option>
+                                        <option value="Engineer">Engineer</option>
+                                        {/* <option value="Admin">Admin</option> */}
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">
                                         <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
@@ -788,7 +798,47 @@ const Register = () => {
                                         <input name="lastName" value={formData.lastName} placeholder="Last Name" onChange={handleChange} className="bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
                                     </div>
 
+
                                     <input name="email" type="email" placeholder="DepEd Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required readOnly={isOtpVerified} />
+
+                                    {/* CENTRAL OFFICE FIELDS */}
+                                    {formData.role === 'Central Office' && (
+                                        <div className="space-y-3 p-4 bg-yellow-50 rounded-xl border border-yellow-100">
+                                            <label className="text-xs font-bold text-yellow-700 uppercase">Bureau Assignment</label>
+                                            <div className="space-y-3">
+                                                <select
+                                                    name="office"
+                                                    value={formData.office} // Mapping Bureau to office
+                                                    onChange={handleChange}
+                                                    className="w-full bg-white border border-yellow-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-yellow-500"
+                                                    required
+                                                >
+                                                    <option value="">Select Bureau / Service</option>
+                                                    {centralOfficeBureaus.map((bureau) => (
+                                                        <option key={bureau} value={bureau}>{bureau}</option>
+                                                    ))}
+                                                </select>
+
+                                                <input
+                                                    name="division"
+                                                    value={formData.division} // Mapping Division to division
+                                                    placeholder="Division"
+                                                    onChange={handleChange}
+                                                    className="w-full bg-white border border-yellow-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-yellow-500"
+                                                    required
+                                                />
+
+                                                <input
+                                                    name="position"
+                                                    value={formData.position}
+                                                    placeholder="Position"
+                                                    onChange={handleChange}
+                                                    className="w-full bg-white border border-yellow-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-yellow-500"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* REGIONAL OFFICE FIELDS */}
                                     {formData.role === 'Regional Office' && (
