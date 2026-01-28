@@ -408,10 +408,11 @@ const Register = () => {
 
 
         // STRICT OTP ENFORCEMENT
-        // if (!isOtpVerified) {
-        //     alert("Please verify your email via OTP before registering.");
-        //     return;
-        // }
+        // STRICT OTP ENFORCEMENT
+        if (!isOtpVerified) {
+            alert("Please verify your email via OTP before registering.");
+            return;
+        }
 
         setLoading(true);
 
@@ -977,7 +978,8 @@ const Register = () => {
                             )}
 
                             {/* === 3. EMAIL VERIFICATION & SECURITY (COMMENTED OUT FOR TESTING) === */}
-                            {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
+                            {/* === 3. EMAIL VERIFICATION & SECURITY === */}
+                            <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
                                         {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
@@ -986,13 +988,8 @@ const Register = () => {
                                 </h3>
 
                                 <div className="mb-6 space-y-3">
-                                    {/* If School Head, email is readonly. If Generic, it's editable above. * /}
-                                    {/* We display email here again or just the OTP controls? The generic flow has email field above. The School Head flow has auto-email. * /}
-                                    {/* Let's show the email input here ONLY if School Head (since it was hidden/auto in their block) OR if we want to confirm it. * /}
-                                    {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email * /}
+                                    {/* OTP CONTROLS */}
 
-                                    {/* OTP CONTROLS * /}
-                                    {/* 
                                     <div className="flex flex-col gap-3">
                                         <p className="text-xs text-slate-500">
                                             Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
@@ -1040,8 +1037,9 @@ const Register = () => {
                                                 Email Verified Successfully
                                             </div>
                                         )}
-                                    </div> 
-                                    * /}
+                                    </div>
+                                </div>
+                            </div>
 
 
 
