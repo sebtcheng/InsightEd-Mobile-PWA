@@ -21,6 +21,12 @@ let isDbConnected = false;
 
 const app = express();
 
+// --- DEBUG LOGGER (TEMPORARY) ---
+app.use((req, res, next) => {
+  console.log(`[REQUEST] ${req.method} ${req.url}`);
+  next();
+});
+
 // --- MIDDLEWARE ---
 app.use(cors({
   origin: [
