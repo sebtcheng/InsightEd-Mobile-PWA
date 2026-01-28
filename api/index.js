@@ -90,6 +90,25 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
   }
 });
 
+// --- POST: Save Device Token ---
+app.post('/api/save-token', async (req, res) => {
+  const { uid, token } = req.body;
+  if (!uid || !token) return res.status(400).json({ error: "Missing uid or token" });
+
+  try {
+    await pool.query(`
+            INSERT INTO user_device_tokens (uid, fcm_token, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (uid)
+            DO UPDATE SET fcm_token = $2, updated_at = CURRENT_TIMESTAMP
+        `, [uid, token]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Save Token Error:", err);
+    res.status(500).json({ error: "Failed to save token" });
+  }
+});
+
 // --- FIREBASE ADMIN INIT ---
 if (!admin.apps.length) {
   try {

@@ -14,7 +14,7 @@ const firebaseConfig = {
 };
 
 // 1. SINGLETON CHECK: Only initialize if no app exists
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 // 2. Export Services
 export const auth = getAuth(app);
@@ -25,13 +25,13 @@ export const db = getFirestore(app);
 // We wrap this in a catch block so it doesn't crash your app during reloads
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code === 'failed-precondition') {
-      // Error: Multiple tabs open. Persistence can only be enabled in one tab at a time.
-      console.warn('Firestore persistence enabled in another tab.');
+    // Error: Multiple tabs open. Persistence can only be enabled in one tab at a time.
+    console.warn('Firestore persistence enabled in another tab.');
   } else if (err.code === 'unimplemented') {
-      // Error: The current browser does not support all of the features required.
-      console.warn('Firestore persistence not supported by this browser.');
+    // Error: The current browser does not support all of the features required.
+    console.warn('Firestore persistence not supported by this browser.');
   } else {
-      // This ignores the "already started" error during hot-reloads
-      console.log('Firestore persistence already active.');
+    // This ignores the "already started" error during hot-reloads
+    console.log('Firestore persistence already active.');
   }
 });

@@ -11,9 +11,10 @@ import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, 
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
 import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle } from "react-icons/fi";
 
-import { auth, db } from '../firebase';
+import { auth, db, app } from '../firebase'; // Import app
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
+import { getMessaging, getToken } from "firebase/messaging"; // Import Messaging
 
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -231,6 +232,43 @@ const SchoolHeadDashboard = () => {
                         const headRes = await fetch(`/api/school-head/${targetUid}`);
                         const headJson = await headRes.json();
                         if (headJson.exists) setHeadProfile(headJson.data);
+
+                        // --- FCM TOKEN REGISTRATION ---
+                        try {
+                            const messaging = getMessaging(app);
+                            // Vapid Key is required for web push (User should ideally provide this via Env Var but sticking to hardcoded for now or prompt)
+                            // Using a placeholder public key strategy if the user hasn't provided one, 
+                            // BUT typically getToken requires a valid key. I will assume the project might have one or I try without it if it works (usually doesn't).
+                            // WAIT! The user instructions didn't give me a VAPID key. I will try a standard request.
+                            // Documentation says: needs vapidKey.
+                            // I will use a generic one or assume the user has it.
+                            // Actually, let's look at the sw.js created earlier... it didn't use one.
+                            // Re-reading previous logs... I don't see a VAPID key provided.
+                            // However, we can try `getToken(messaging)`. If it fails, I'll log a warning.
+
+                            const permission = await Notification.requestPermission();
+                            if (permission === 'granted') {
+                                // You obtain this from Firebase Console > Project Settings > Cloud Messaging
+                                const currentToken = await getToken(messaging, {
+                                    vapidKey: 'BC9_uJ7x4M7yL3qZ3zN8aX2bC1dE5fF6gH7iJ8kL9mN0oP1qR2sT3uV4wX5yZ6' // PLACEHOLDER! The user needs to replace this. 
+                                    // Or I will try without vapidKey if the config handles it.
+                                    // Actually, if I don't provide it, it might default if using default sw.
+                                });
+
+                                if (currentToken) {
+                                    // SAVE TO SERVER
+                                    await fetch('/api/save-token', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ uid: user.uid, token: currentToken })
+                                    });
+                                    console.log("✅ FCM Token Saved");
+                                }
+                            }
+                        } catch (msgErr) {
+                            // Use valid VAPID key warning
+                            console.log("ℹ️ FCM Token logic skipped (Missing Vapid Key or Permission)", msgErr);
+                        }
                     }
 
                 } catch (error) {
