@@ -57,8 +57,7 @@ const MonitoringDashboard = () => {
                 const filtered = data.filter(p => {
                     const s = p.status?.toLowerCase() || '';
                     const q = status.toLowerCase();
-                    if (q === 'ongoing') return s === 'ongoing' || s === 'not yet started' || s === 'under procurement';
-                    return s === q;
+                    return s === q; // Strict matching now for all statuses
                 });
                 setProjectListModal(prev => ({ ...prev, projects: filtered, isLoading: false }));
             } else {
@@ -124,8 +123,8 @@ const MonitoringDashboard = () => {
                 fetch(`/api/monitoring/engineer-projects?${params.toString()}`)
             ];
 
-            // Fetch Division Stats only for Regional Office
-            if (currentUserData.role === 'Regional Office') {
+            // Fetch Division Stats for Regional Office OR Central Office (when drilling down to a region)
+            if (currentUserData.role === 'Regional Office' || (currentUserData.role === 'Central Office' && queryRegion && !queryDivision)) {
                 fetchPromises.push(fetch(`/api/monitoring/division-stats?${params.toString()}`));
             }
             
@@ -486,10 +485,11 @@ const MonitoringDashboard = () => {
                                                             <th className="p-5 min-w-[180px] sticky left-0 bg-white dark:bg-slate-800 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Region</th>
                                                             <th className="p-5 text-center min-w-[100px]">Projects</th>
                                                             <th className="p-5 text-center min-w-[140px]">Total Allocation</th>
+                                                            <th className="p-5 text-center text-slate-400 min-w-[100px]">Not Started</th>
+                                                            <th className="p-5 text-center text-orange-400 min-w-[120px]">Under Proc.</th>
                                                             <th className="p-5 text-center text-blue-500 min-w-[100px]">Ongoing</th>
                                                             <th className="p-5 text-center text-emerald-500 min-w-[100px]">Completed</th>
                                                             <th className="p-5 text-center text-rose-500 min-w-[100px]">Delayed</th>
-                                                            <th className="p-5 text-center min-w-[120px]">Progress</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="text-xs font-bold text-slate-600 dark:text-slate-300">
@@ -501,6 +501,22 @@ const MonitoringDashboard = () => {
                                                                 <td className="p-5 text-center text-base">{reg.total_projects}</td>
                                                                 <td className="p-5 text-center font-mono text-slate-500 text-[11px]">
                                                                     ₱{parseInt(reg.total_allocation || 0).toLocaleString()}
+                                                                </td>
+                                                                <td className="p-2 text-center">
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleProjectDrillDown(reg.region, 'Not Yet Started'); }}
+                                                                        className="w-full py-2 px-3 rounded-lg text-slate-500 bg-slate-50/50 hover:bg-slate-100/80 hover:scale-105 active:scale-95 transition-all font-black shadow-sm"
+                                                                    >
+                                                                        {reg.not_yet_started_projects || 0}
+                                                                    </button>
+                                                                </td>
+                                                                <td className="p-2 text-center">
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleProjectDrillDown(reg.region, 'Under Procurement'); }}
+                                                                        className="w-full py-2 px-3 rounded-lg text-orange-500 bg-orange-50/50 hover:bg-orange-100/80 hover:scale-105 active:scale-95 transition-all font-black shadow-sm"
+                                                                    >
+                                                                        {reg.under_procurement_projects || 0}
+                                                                    </button>
                                                                 </td>
                                                                 <td className="p-2 text-center">
                                                                     <button
@@ -525,14 +541,6 @@ const MonitoringDashboard = () => {
                                                                     >
                                                                         {reg.delayed_projects}
                                                                     </button>
-                                                                </td>
-                                                                <td className="p-5">
-                                                                    <div className="flex items-center gap-2 max-w-[100px] mx-auto">
-                                                                        <div className="flex-1 bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden border border-slate-200 dark:border-slate-600">
-                                                                            <div className={`h-full ${reg.avg_accomplishment >= 100 ? 'bg-emerald-400' : 'bg-blue-500'} transition-all duration-1000`} style={{ width: `${reg.avg_accomplishment}%` }}></div>
-                                                                        </div>
-                                                                        <span className="text-[10px] text-slate-400 font-mono">{reg.avg_accomplishment}%</span>
-                                                                    </div>
                                                                 </td>
                                                             </tr>
                                                         ))}
@@ -813,7 +821,7 @@ const MonitoringDashboard = () => {
                             {/* NEW: District Accomplishment Rate for SDO OR Central Office Division View */}
                             {/* SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
                             {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && 
-                             (userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision && !coDistrict)) && (
+                             (userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision)) && (
                                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                     <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per District</h2>
                                     {(() => {

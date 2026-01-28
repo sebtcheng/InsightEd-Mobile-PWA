@@ -1043,13 +1043,7 @@ const Register = () => {
                                     </div> 
                                     */}
 
-                                </div>
 
-                                <div className="space-y-3">
-                                    <input name="password" type="password" placeholder="Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
-                                    <input name="confirmPassword" type="password" placeholder="Confirm Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
-                                </div>
-                            </div> */}
 
                             {/* MOVED PASSWORD FIELDS OUT OF COMMENTED BLOCK */}
                             <div className="space-y-3 pt-4 border-t border-slate-100">

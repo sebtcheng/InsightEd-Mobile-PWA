@@ -2459,10 +2459,12 @@ app.get('/api/monitoring/regions', async (req, res) => {
           COUNT(*) as total_projects,
           COALESCE(SUM(project_allocation), 0) as total_allocation,
           AVG(accomplishment_percentage) as avg_accomplishment,
-          -- Map 'Ongoing' and 'Not Yet Started' (and anything else not Completed/Delayed) to Ongoing/Active
-          COUNT(CASE WHEN status ILIKE 'Ongoing' OR status ILIKE 'Not Yet Started' THEN 1 END) as ongoing_projects,
-          COUNT(CASE WHEN status ILIKE 'Completed' THEN 1 END) as completed_projects,
-          COUNT(CASE WHEN status ILIKE 'Delayed' THEN 1 END) as delayed_projects
+          -- Distinct Counts for New Logic (Robust Matching)
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Ongoing' THEN 1 END) as ongoing_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Not Yet Started' THEN 1 END) as not_yet_started_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE '%Under Procurement%' THEN 1 END) as under_procurement_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Completed' THEN 1 END) as completed_projects,
+          COUNT(CASE WHEN TRIM(status) ILIKE 'Delayed' THEN 1 END) as delayed_projects
         FROM engineer_form
         GROUP BY region
       )
@@ -2477,6 +2479,8 @@ app.get('/api/monitoring/regions', async (req, res) => {
         COALESCE(p.total_allocation, 0) as total_allocation,
         COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment,
         COALESCE(p.ongoing_projects, 0) as ongoing_projects,
+        COALESCE(p.not_yet_started_projects, 0) as not_yet_started_projects,
+        COALESCE(p.under_procurement_projects, 0) as under_procurement_projects,
         COALESCE(p.completed_projects, 0) as completed_projects,
         COALESCE(p.delayed_projects, 0) as delayed_projects
       FROM school_stats s
