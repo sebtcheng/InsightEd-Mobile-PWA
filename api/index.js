@@ -2080,7 +2080,8 @@ app.get('/api/monitoring/engineer-stats', async (req, res) => {
         COUNT(*) as total_projects,
         AVG(e.accomplishment_percentage):: NUMERIC(10, 2) as avg_progress,
         COUNT(CASE WHEN e.status = 'Completed' THEN 1 END) as completed_count,
-        COUNT(CASE WHEN e.status = 'Ongoing' THEN 1 END) as ongoing_count
+        COUNT(CASE WHEN e.status = 'Ongoing' THEN 1 END) as ongoing_count,
+        COUNT(CASE WHEN e.status = 'Delayed' THEN 1 END) as delayed_count
       FROM engineer_form e
       JOIN school_profiles sp ON e.school_id = sp.school_id
       WHERE TRIM(sp.region) = TRIM($1)
@@ -2112,7 +2113,7 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
     let query = `
       SELECT
         e.project_id as id, e.project_name as "projectName", e.school_id as "schoolId", e.school_name as "schoolName",
-        e.accomplishment_percentage as "accomplishmentPercentage", e.status,
+        e.accomplishment_percentage as "accomplishmentPercentage", e.status, e.project_allocation as "projectAllocation",
         e.validation_status as "validation_status", e.status_as_of as "statusAsOfDate"
       FROM engineer_form e
       JOIN school_profiles sp ON e.school_id = sp.school_id
@@ -2254,6 +2255,7 @@ app.get('/api/monitoring/regions', async (req, res) => {
         SELECT 
           region,
           COUNT(*) as total_projects,
+          COALESCE(SUM(project_allocation), 0) as total_allocation,
           AVG(accomplishment_percentage) as avg_accomplishment,
           -- Map 'Ongoing' and 'Not Yet Started' (and anything else not Completed/Delayed) to Ongoing/Active
           COUNT(CASE WHEN status ILIKE 'Ongoing' OR status ILIKE 'Not Yet Started' THEN 1 END) as ongoing_projects,
@@ -2270,6 +2272,7 @@ app.get('/api/monitoring/regions', async (req, res) => {
         COALESCE(s.completed_schools, 0) as completed_schools,
         
         COALESCE(p.total_projects, 0) as total_projects,
+        COALESCE(p.total_allocation, 0) as total_allocation,
         COALESCE(p.avg_accomplishment, 0)::NUMERIC(10,1) as avg_accomplishment,
         COALESCE(p.ongoing_projects, 0) as ongoing_projects,
         COALESCE(p.completed_projects, 0) as completed_projects,

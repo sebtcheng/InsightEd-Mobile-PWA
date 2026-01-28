@@ -408,10 +408,12 @@ const Register = () => {
 
 
         // STRICT OTP ENFORCEMENT
+        /*
         if (!isOtpVerified) {
             alert("Please verify your email via OTP before registering.");
             return;
         }
+        */
 
         setLoading(true);
 
@@ -993,6 +995,7 @@ const Register = () => {
                                     {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
 
                                     {/* OTP CONTROLS */}
+                                    {/* 
                                     <div className="flex flex-col gap-3">
                                         <p className="text-xs text-slate-500">
                                             Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
@@ -1009,7 +1012,6 @@ const Register = () => {
                                             </button>
                                         )}
 
-                                        {/* OTP INPUTS */}
                                         {isOtpSent && !isOtpVerified && (
                                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Enter Code</label>
@@ -1041,7 +1043,8 @@ const Register = () => {
                                                 Email Verified Successfully
                                             </div>
                                         )}
-                                    </div>
+                                    </div> 
+                                    */}
 
                                 </div>
 

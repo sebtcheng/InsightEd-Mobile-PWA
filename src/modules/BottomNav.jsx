@@ -52,8 +52,8 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Central Office': [
-             { label: 'Home', path: '/monitoring-dashboard', icon: TbHomeEdit },
-             { label: 'Schools', path: '/jurisdiction-schools', icon: TbClipboardList },
+             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
+             { label: 'Infra Projects', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
              { label: 'Settings', path: '/profile', icon: FiSettings },
         ]
     };

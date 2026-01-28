@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft } from 'react-icons/fi';
-import { TbTrophy } from 'react-icons/tb';
+import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2 } from 'react-icons/fi';
+import { TbTrophy, TbSchool } from 'react-icons/tb';
 
 import Papa from 'papaparse';
 
@@ -17,7 +17,7 @@ const MonitoringDashboard = () => {
     const [engStats, setEngStats] = useState(null);
     const [jurisdictionProjects, setJurisdictionProjects] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('home');
+    const [activeTab, setActiveTab] = useState('accomplishment'); // Default to InsightED Accomplishment
 
     // State for Central Office Filters
     const [coRegion, setCoRegion] = useState('');
@@ -35,7 +35,46 @@ const MonitoringDashboard = () => {
     const [districtSchools, setDistrictSchools] = useState([]); // Schools for Drill-down
     const [loadingDistrict, setLoadingDistrict] = useState(false);
 
-    const fetchData = async (overrideRegion, overrideDivision) => {
+    // NEW: Store Aggregated CSV Totals
+    const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
+
+    const [projectListModal, setProjectListModal] = useState({ isOpen: false, title: '', projects: [], isLoading: false });
+
+    // --- EFFECT: DATA FETCHING ---
+    useEffect(() => {
+        if (userData) {
+           fetchData(userData.region || '', userData.division || '');
+        }
+    }, [userData]);
+
+    const fetchProjectList = async (region, status) => {
+        setProjectListModal({ isOpen: true, title: `${status} Projects in ${region}`, projects: [], isLoading: true });
+        try {
+            const res = await fetch(`/api/monitoring/engineer-projects?region=${encodeURIComponent(region)}`);
+            if (res.ok) {
+                const data = await res.json();
+                // Filter by status on client side
+                const filtered = data.filter(p => {
+                    const s = p.status?.toLowerCase() || '';
+                    const q = status.toLowerCase();
+                    if (q === 'ongoing') return s === 'ongoing' || s === 'not yet started' || s === 'under procurement';
+                    return s === q;
+                });
+                setProjectListModal(prev => ({ ...prev, projects: filtered, isLoading: false }));
+            } else {
+                 setProjectListModal(prev => ({ ...prev, isLoading: false }));
+            }
+        } catch (err) {
+            console.error(err);
+             setProjectListModal(prev => ({ ...prev, isLoading: false }));
+        }
+    };
+
+    const handleProjectDrillDown = (region, status) => {
+        fetchProjectList(region, status);
+    };
+
+    const fetchData = async (region, division) => {
         const user = auth.currentUser;
         if (!user) return;
         
@@ -54,16 +93,16 @@ const MonitoringDashboard = () => {
 
         try {
             // Determine params based on Role
-            let queryRegion = currentUserData.region;
-            let queryDivision = currentUserData.division;
+            let queryRegion = region;
+            let queryDivision = division;
 
             if (currentUserData.role === 'Central Office') {
                 // If in National View (no region selected), fetch Regional Overview
                 // However, we only need to fetch detailed stats if a region IS selected.
                 
-                if (overrideRegion || coRegion) {
-                     queryRegion = overrideRegion !== undefined ? overrideRegion : coRegion;
-                     queryDivision = overrideDivision !== undefined ? overrideDivision : (coDivision || '');
+                if (region || coRegion) {
+                     queryRegion = region !== undefined ? region : coRegion;
+                     queryDivision = division !== undefined ? division : (coDivision || '');
                 } else {
                     // NATIONAL VIEW: Fetch Regional Stats
                     const regionRes = await fetch('/api/monitoring/regions');
@@ -114,12 +153,9 @@ const MonitoringDashboard = () => {
         }
     };
 
-    // NEW: Store Aggregated CSV Totals
-    const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
-
     useEffect(() => {
         fetchData();
-        
+
         // Load Location Data for filters
         import('../locations.json').then(module => {
             const data = module.default;
@@ -153,8 +189,14 @@ const MonitoringDashboard = () => {
     useEffect(() => {
         if (location.state?.activeTab) {
             setActiveTab(location.state.activeTab);
-            // Optional: Clear state so it doesn't persist on refresh if undesirable, 
-            // but for now keeping it is fine.
+
+            if (location.state.resetFilters) {
+                setCoRegion('');
+                setCoDivision('');
+                setCoDistrict('');
+                // Fetch Data for National View (empty params)
+                fetchData('', '');
+            }
         }
     }, [location.state]);
 
@@ -232,9 +274,9 @@ const MonitoringDashboard = () => {
     // Better: Add useEffect for Filters
     useEffect(() => {
         if(userData?.role === 'Central Office' && (coDistrict || coDivision || coRegion)) {
-             fetchData();
+             fetchData(coRegion, coDivision);
         }
-    }, [coDistrict]); // Only trigger when district changes for now to avoid loops with other handlers
+    }, [coDistrict, coDivision, coRegion]); // Only trigger when district changes for now to avoid loops with other handlers
 
     const StatCard = ({ title, value, total, color, icon: Icon }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
@@ -261,7 +303,7 @@ const MonitoringDashboard = () => {
     };
 
     // NEW: Calculate Jurisdiction Total (Memoized for reuse)
-    const jurisdictionTotal = React.useMemo(() => {
+    const jurisdictionTotal = useMemo(() => {
         let total = 0;
         if (schoolData.length > 0 && userData) {
             const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
@@ -300,7 +342,9 @@ const MonitoringDashboard = () => {
                             <div className="flex justify-between items-end mb-6">
                                 <div>
                                     <h1 className="text-4xl font-black tracking-tighter">{userData.bureau || 'Central Office'}</h1>
-                                    <p className="text-blue-200 text-lg font-medium mt-1">National Overview & Strategic Monitoring</p>
+                                    <p className="text-blue-200 text-lg font-medium mt-1">
+                                        {activeTab === 'infra' ? 'Infrastructure Project Monitoring' : 'National Accomplishment Overview'}
+                                    </p>
                                 </div>
                                 <div className="hidden md:block text-right">
                                     <p className="text-blue-300 text-xs font-bold uppercase tracking-widest">Current Scope</p>
@@ -310,41 +354,55 @@ const MonitoringDashboard = () => {
 
                             {/* Global Quick Stats */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                                    <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Total Schools</p>
-                                    <p className="text-3xl font-black mt-1">
-                                        {/* Sum of CSV Totals if available, else backend stats */}
-                                        {Object.values(csvRegionalTotals).length > 0 
-                                            ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0).toLocaleString()
-                                            : regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0).toLocaleString()
-                                        }
-                                    </p>
-                                </div>
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                                    <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Forms Completed</p>
-                                    {/* Show Percentage */}
-                                    {(() => {
-                                        const totalSchools = Object.values(csvRegionalTotals).length > 0 
-                                            ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0)
-                                            : regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
-                                        const completed = regionalStats.reduce((acc, curr) => acc + parseInt(curr.completed_schools || 0), 0);
-                                        const pct = totalSchools > 0 ? ((completed / totalSchools) * 100).toFixed(1) : 0;
-                                        return (
-                                             <div>
-                                                <p className="text-3xl font-black mt-1">{pct}%</p>
-                                                <p className="text-[10px] opacity-70">{completed.toLocaleString()} / {totalSchools.toLocaleString()}</p>
-                                             </div>
-                                        );
-                                    })()}
-                                </div>
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                                    <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Total Projects</p>
-                                    <p className="text-3xl font-black mt-1">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_projects || 0), 0).toLocaleString()}</p>
-                                </div>
-                                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                                    <p className="text-emerald-300 text-xs font-bold uppercase tracking-wider">Active Projects</p>
-                                    <p className="text-3xl font-black mt-1 text-emerald-300">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.ongoing_projects || 0), 0).toLocaleString()}</p>
-                                </div>
+                                
+                                {/* 1. InsightED Stats (Accomplishment Tab) */}
+                                {activeTab === 'accomplishment' && (
+                                    <>
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 col-span-2">
+                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">National Accomplishment Rate</p>
+                                            {/* Show Percentage */}
+                                            {(() => {
+                                                const totalSchools = Object.values(csvRegionalTotals).length > 0 
+                                                    ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0)
+                                                    : regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
+                                                const completed = regionalStats.reduce((acc, curr) => acc + parseInt(curr.completed_schools || 0), 0);
+                                                const pct = totalSchools > 0 ? ((completed / totalSchools) * 100).toFixed(1) : 0;
+                                                return (
+                                                    <div className="flex items-end gap-3">
+                                                        <p className="text-4xl font-black mt-1">{pct}%</p>
+                                                        <p className="text-sm opacity-70 mb-1 font-medium">{completed.toLocaleString()} of {totalSchools.toLocaleString()} Schools Complete</p>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* 2. Infra Stats (Infra Tab) */}
+                                {activeTab === 'infra' && (
+                                    <>
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Total Projects</p>
+                                            <p className="text-3xl font-black mt-1">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_projects || 0), 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Ongoing Projects</p>
+                                            <p className="text-3xl font-black mt-1 text-blue-400">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.ongoing_projects || 0), 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Completed</p>
+                                            <p className="text-3xl font-black mt-1 text-emerald-400">{regionalStats.reduce((acc, curr) => acc + parseInt(curr.completed_projects || 0), 0).toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                                            <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">Delayed</p>
+                                            <p className="text-3xl font-black mt-1 text-rose-400">
+                                                {regionalStats && regionalStats.length > 0
+                                                    ? regionalStats.reduce((acc, curr) => acc + parseInt(curr.delayed_projects || 0), 0).toLocaleString() 
+                                                    : (engStats?.delayed_count || 0)}
+                                            </p>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -354,98 +412,198 @@ const MonitoringDashboard = () => {
                             <div className="bg-white p-8 rounded-3xl text-center text-slate-400">Loading regional stats...</div>
                          ) : (
                             <>
-                                {/* SECTION 1: REGIONAL PERFORMANCE (SCHOOL DATA) */}
-                                <div>
-                                    <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                                        <FiCheckCircle className="text-blue-500" /> Regional Compliance Performance
-                                    </h2>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {regionalStats.map((reg, idx) => {
-                                            // Ensure we use the CSV Total if available
-                                            const totalSchools = csvRegionalTotals[reg.region] || reg.total_schools || 0;
-                                            const completedCount = reg.completed_schools || 0;
-                                            
-                                            // Handle edge case where backend total is 0 but we want to show 0/CSV_Total
-                                            const completionRate = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
-                                            
-                                            return (
-                                                <div 
-                                                    key={idx}
-                                                    onClick={() => handleFilterChange(reg.region)}
-                                                    className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all group relative overflow-hidden"
-                                                >
-                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 dark:bg-blue-900/20 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
-                                                    
-                                                    <div className="relative z-10">
-                                                        <div className="flex justify-between items-start mb-6">
-                                                            <div>
-                                                                <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors">{reg.region}</h2>
-                                                                <p className="text-xs font-bold text-slate-400 uppercase mt-1">{totalSchools.toLocaleString()} Schools</p>
-                                                            </div>
-                                                            <div className={`flex items-center justify-center w-12 h-12 rounded-full font-black text-sm border-4 ${completionRate >= 100 ? 'border-emerald-500 text-emerald-600 bg-emerald-50' : (completionRate >= 50 ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-orange-500 text-orange-600 bg-orange-50')}`}>
-                                                                {completionRate}%
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="space-y-3">
-                                                            <div>
-                                                                <div className="flex justify-between text-xs font-bold mb-1">
-                                                                    <span className="text-slate-500">Form Completion</span>
-                                                                    <span className="text-slate-700 dark:text-slate-300">{completedCount} / {totalSchools.toLocaleString()}</span>
+                                {/* SECTION 1: REGIONAL PERFORMANCE (SCHOOL DATA) - INSIGHTED TAB */}
+                                {activeTab === 'accomplishment' && (
+                                    <div>
+                                        <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                            <FiCheckCircle className="text-blue-500" /> Regional Compliance Performance
+                                        </h2>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {regionalStats.map((reg, idx) => {
+                                                // Ensure we use the CSV Total if available
+                                                const totalSchools = csvRegionalTotals[reg.region] || reg.total_schools || 0;
+                                                const completedCount = reg.completed_schools || 0;
+                                                
+                                                // Handle edge case where backend total is 0 but we want to show 0/CSV_Total
+                                                const completionRate = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
+                                                
+                                                return (
+                                                    <div 
+                                                        key={idx}
+                                                        onClick={() => handleFilterChange(reg.region)}
+                                                        className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:shadow-2xl hover:-translate-y-1 transition-all group relative overflow-hidden"
+                                                    >
+                                                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 dark:bg-blue-900/20 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
+                                                        
+                                                        <div className="relative z-10">
+                                                            <div className="flex justify-between items-start mb-6">
+                                                                <div>
+                                                                    <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors">{reg.region}</h2>
+                                                                    {/* REMOVED: Total Schools sub-label if desired, but user said remove "Total Schools" metric. 
+                                                                        Does that mean remove it from cards too? 
+                                                                        "InsightED Accomplishment page should only feature (1) National Accomplishment Rate (2) Regional and division breakdown".
+                                                                        Usually breakdown implies visualizing the counts or rate. I will keep the rate prominent.
+                                                                        I will Hide the "X Schools" label if strictly interpreted, but it's useful context. 
+                                                                        Let's keep the percentage prominent.
+                                                                     */}
+                                                                    <p className="text-xs font-bold text-slate-400 uppercase mt-1">Status Report</p>
                                                                 </div>
-                                                                <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                                                                    <div className={`h-full rounded-full ${completionRate >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${completionRate}%`}}></div>
+                                                                <div className={`flex items-center justify-center w-12 h-12 rounded-full font-black text-sm border-4 ${completionRate >= 100 ? 'border-emerald-500 text-emerald-600 bg-emerald-50' : (completionRate >= 50 ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-orange-500 text-orange-600 bg-orange-50')}`}>
+                                                                    {completionRate}%
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="space-y-3">
+                                                                <div>
+                                                                    <div className="flex justify-between text-xs font-bold mb-1">
+                                                                        <span className="text-slate-500">Form Completion</span>
+                                                                        <span className="text-slate-700 dark:text-slate-300">{completedCount} / {totalSchools.toLocaleString()}</span>
+                                                                    </div>
+                                                                    <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                        <div className={`h-full rounded-full ${completionRate >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${completionRate}%`}}></div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* SECTION 2: INFRASTRUCTURE PROJECTS MATRIX */}
-                                <div>
-                                    <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                                        <FiTrendingUp className="text-emerald-500" /> Infrastructure Projects Matrix
-                                    </h2>
-                                    <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left border-collapse">
-                                                <thead>
-                                                    <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
-                                                        <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-wider">Region</th>
-                                                        <th className="p-6 text-xs font-black text-slate-400 uppercase tracking-wider text-center">Total Projects</th>
-                                                        <th className="p-6 text-xs font-black text-blue-500 uppercase tracking-wider text-center bg-blue-50/50 dark:bg-blue-900/10">Ongoing</th>
-                                                        <th className="p-6 text-xs font-black text-emerald-500 uppercase tracking-wider text-center bg-emerald-50/50 dark:bg-emerald-900/10">Completed</th>
-                                                        <th className="p-6 text-xs font-black text-red-500 uppercase tracking-wider text-center bg-red-50/50 dark:bg-red-900/10">Delayed</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                                    {regionalStats.map((reg, idx) => (
-                                                        <tr 
-                                                            key={idx} 
-                                                            onClick={() => handleFilterChange(reg.region)}
-                                                            className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 cursor-pointer transition-colors"
-                                                        >
-                                                            <td className="p-6 font-bold text-slate-700 dark:text-slate-200">{reg.region}</td>
-                                                            <td className="p-6 text-center font-bold text-slate-800 dark:text-white text-lg">{reg.total_projects}</td>
-                                                            <td className="p-6 text-center font-bold text-blue-600 dark:text-blue-400 bg-blue-50/30 dark:bg-blue-900/5">{reg.ongoing_projects}</td>
-                                                            <td className="p-6 text-center font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/5">{reg.completed_projects}</td>
-                                                            <td className="p-6 text-center font-bold text-red-600 dark:text-red-400 bg-red-50/30 dark:bg-red-900/5">{reg.delayed_projects}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                </div>
+                                )}
+
+                                {/* SECTION 2: INFRASTRUCTURE PROJECTS MATRIX - INFRA TAB */}
+                                {activeTab === 'infra' && (
+                                    <div>
+                                        <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                            <FiTrendingUp className="text-emerald-500" /> Infrastructure Projects Matrix
+                                        </h2>
+                                        <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden relative">
+                                            <div className="overflow-x-auto custom-scrollbar">
+                                                <table className="w-full text-left border-collapse min-w-[800px]">
+                                                    <thead>
+                                                        <tr className="text-[10px] uppercase font-black text-slate-400 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
+                                                            <th className="p-5 min-w-[180px] sticky left-0 bg-white dark:bg-slate-800 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Region</th>
+                                                            <th className="p-5 text-center min-w-[100px]">Projects</th>
+                                                            <th className="p-5 text-center min-w-[140px]">Total Allocation</th>
+                                                            <th className="p-5 text-center text-blue-500 min-w-[100px]">Ongoing</th>
+                                                            <th className="p-5 text-center text-emerald-500 min-w-[100px]">Completed</th>
+                                                            <th className="p-5 text-center text-rose-500 min-w-[100px]">Delayed</th>
+                                                            <th className="p-5 text-center min-w-[120px]">Progress</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                        {regionalStats.map((reg, idx) => (
+                                                            <tr key={idx} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/20 transition-colors border-b border-slate-50 dark:border-slate-800 group">
+                                                                <td className="p-5 sticky left-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 transition-colors z-10 border-r border-slate-50 dark:border-slate-700 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-slate-700 dark:text-slate-100 font-extrabold">
+                                                                    {reg.region}
+                                                                </td>
+                                                                <td className="p-5 text-center text-base">{reg.total_projects}</td>
+                                                                <td className="p-5 text-center font-mono text-slate-500 text-[11px]">
+                                                                    ₱{parseInt(reg.total_allocation || 0).toLocaleString()}
+                                                                </td>
+                                                                <td className="p-2 text-center">
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleProjectDrillDown(reg.region, 'Ongoing'); }}
+                                                                        className="w-full py-2 px-3 rounded-lg text-blue-600 bg-blue-50/50 hover:bg-blue-100/80 hover:scale-105 active:scale-95 transition-all font-black shadow-sm"
+                                                                    >
+                                                                        {reg.ongoing_projects}
+                                                                    </button>
+                                                                </td>
+                                                                <td className="p-2 text-center">
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleProjectDrillDown(reg.region, 'Completed'); }}
+                                                                        className="w-full py-2 px-3 rounded-lg text-emerald-600 bg-emerald-50/50 hover:bg-emerald-100/80 hover:scale-105 active:scale-95 transition-all font-black shadow-sm"
+                                                                    >
+                                                                        {reg.completed_projects}
+                                                                    </button>
+                                                                </td>
+                                                                <td className="p-2 text-center">
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); handleProjectDrillDown(reg.region, 'Delayed'); }}
+                                                                        className="w-full py-2 px-3 rounded-lg text-rose-500 bg-rose-50/50 hover:bg-rose-100/80 hover:scale-105 active:scale-95 transition-all font-black shadow-sm"
+                                                                    >
+                                                                        {reg.delayed_projects}
+                                                                    </button>
+                                                                </td>
+                                                                <td className="p-5">
+                                                                    <div className="flex items-center gap-2 max-w-[100px] mx-auto">
+                                                                        <div className="flex-1 bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden border border-slate-200 dark:border-slate-600">
+                                                                            <div className={`h-full ${reg.avg_accomplishment >= 100 ? 'bg-emerald-400' : 'bg-blue-500'} transition-all duration-1000`} style={{ width: `${reg.avg_accomplishment}%` }}></div>
+                                                                        </div>
+                                                                        <span className="text-[10px] text-slate-400 font-mono">{reg.avg_accomplishment}%</span>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </>
                          )}
                     </div>
                      <BottomNav userRole={userData?.role} />
                 </div>
+                {/* PROJECT LIST MODAL (NATIONAL VIEW) */}
+                {projectListModal.isOpen && (
+                    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
+                            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-800 dark:text-white">{projectListModal.title}</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{projectListModal.projects.length} Projects Found</p>
+                                </div>
+                                <button 
+                                    onClick={() => setProjectListModal(prev => ({ ...prev, isOpen: false }))}
+                                    className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors"
+                                >
+                                    <FiX />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                                {projectListModal.isLoading ? (
+                                    <div className="flex justify-center py-10">
+                                        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {projectListModal.projects.map((p) => (
+                                            <div key={p.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{p.schoolName}</h4>
+                                                    <p className="text-xs text-slate-500 italic">{p.projectName}</p>
+                                                    {p.projectAllocation && (
+                                                         <p className="text-[10px] font-mono text-slate-400 mt-1">
+                                                            Alloc: ₱{Number(p.projectAllocation).toLocaleString()}
+                                                         </p>
+                                                    )}
+                                                </div>
+                                                <div className="text-right">
+                                                     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase mb-1 ${
+                                                         p.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' :
+                                                         p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
+                                                         'bg-blue-100 text-blue-600'
+                                                     }`}>
+                                                        {p.status}
+                                                     </span>
+                                                     <div className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                                        {p.accomplishmentPercentage}%
+                                                     </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {projectListModal.projects.length === 0 && (
+                                            <p className="text-center text-slate-400 italic py-10">No projects found for this category.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </PageTransition>
         );
     }
@@ -507,8 +665,8 @@ const MonitoringDashboard = () => {
                         )}
                     </div>
 
-                    {/* Tabs - Hidden for SDO AND RO as they use Bottom Nav */}
-                    {userData?.role !== 'School Division Office' && userData?.role !== 'Regional Office' && (
+                    {/* Tabs - Hidden for SDO AND RO as they use Bottom Nav. Also hidden for Central Office when drilling down to a region. */}
+                    {userData?.role !== 'School Division Office' && userData?.role !== 'Regional Office' && !(userData?.role === 'Central Office' && coRegion) && (
                         <div className="flex gap-2 mt-8 relative z-10">
                             {['all', 'school', 'engineer'].map(tab => (
                                 <button
@@ -527,55 +685,65 @@ const MonitoringDashboard = () => {
                 </div>
 
                 <div className="px-5 -mt-10 space-y-6 relative z-20">
-                    {/* HOME TAB (Previously ALL) */}
-                    {(activeTab === 'all' || activeTab === 'home') && (
+                    {/* HOME TAB (Previously ALL) - NOW SHARED FOR REGIONAL/DIVISION VIEWS */}
+                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment' || activeTab === 'infra') && (
                         <>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
-                                        {(() => {
-                                            // Use Memoized Jurisdiction Total
-                                            const displayTotal = jurisdictionTotal;
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
+                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl ${activeTab === 'accomplishment' ? 'col-span-2' : ''}`}>
+                                            {(() => {
+                                                // Use Memoized Jurisdiction Total
+                                                const displayTotal = jurisdictionTotal;
 
-                                            // Get Completed Schools Count (from API Update)
-                                            const completedCount = parseInt(stats?.completed_schools_count || 0);
+                                                // Get Completed Schools Count (from API Update)
+                                                const completedCount = parseInt(stats?.completed_schools_count || 0);
 
-                                            // Calculate Percentage
-                                            const percentage = displayTotal > 0 ? ((completedCount / displayTotal) * 100).toFixed(1) : 0;
+                                                // Calculate Percentage
+                                                const percentage = displayTotal > 0 ? ((completedCount / displayTotal) * 100).toFixed(1) : 0;
 
-                                            return (
-                                                <>
-                                                    <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">
-                                                        {percentage}%
-                                                    </span>
-                                                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
-                                                        Completed Forms <br/>
-                                                        <span className="text-[#004A99] dark:text-blue-300">({completedCount} / {displayTotal})</span>
-                                                    </p>
-                                                </>
-                                            );
-                                        })()}
-                                    </div>
-                                    <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl">
-                                        <div className="flex flex-col h-full justify-center">
-                                            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
-                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">Infra Projects</p>
-                                            
-                                            {/* Completed Projects % */}
-                                            {engStats?.total_projects > 0 && (
-                                                <div className="mt-2 text-[10px] font-bold text-emerald-700/70 dark:text-emerald-300/70">
-                                                    {Math.round(((engStats.completed_count || 0) / engStats.total_projects) * 100)}% Completed
-                                                </div>
-                                            )}
+                                                return (
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                             <span className="text-3xl font-black text-[#004A99] dark:text-blue-400">
+                                                                {percentage}%
+                                                            </span>
+                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
+                                                                Completed Forms <br/>
+                                                                <span className="text-[#004A99] dark:text-blue-300">({completedCount} / {displayTotal})</span>
+                                                            </p>
+                                                        </div>
+                                                        {activeTab === 'accomplishment' && <TbTrophy size={40} className="text-blue-200" />}
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
-                                    </div>
+                                    )}
+                                    
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'infra') && (
+                                        <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl ${activeTab === 'infra' ? 'col-span-2' : ''}`}>
+                                            <div className="flex flex-col h-full justify-center">
+                                                <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
+                                                <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">Infra Projects</p>
+                                                
+                                                {/* Completed Projects % */}
+                                                {engStats?.total_projects > 0 && (
+                                                    <div className="mt-2 text-[10px] font-bold text-emerald-700/70 dark:text-emerald-300/70">
+                                                        {Math.round(((engStats.completed_count || 0) / engStats.total_projects) * 100)}% Completed
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Accomplishment Rate per School Division (Regional Office Only OR Central Office Regional View) */}
-                            {(userData?.role === 'Regional Office' || (userData?.role === 'Central Office' && coRegion && !coDivision)) && (
-                                <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
+                            {/* ONLY SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
+                            {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && 
+                             (userData?.role === 'Regional Office' || (userData?.role === 'Central Office' && coRegion && !coDivision)) && (
+                                <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                     <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
                                     {(() => {
                                         // 1. Get List of Divisions for Current Region from CSV Data
@@ -643,7 +811,9 @@ const MonitoringDashboard = () => {
                             )}
                         
                             {/* NEW: District Accomplishment Rate for SDO OR Central Office Division View */}
-                            {(userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision && !coDistrict)) && (
+                            {/* SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
+                            {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && 
+                             (userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision && !coDistrict)) && (
                                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                     <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per District</h2>
                                     {(() => {
@@ -979,6 +1149,65 @@ const MonitoringDashboard = () => {
 
                 <BottomNav userRole={userData?.role} />
             </div>
+            {/* PROJECT LIST MODAL */}
+            {projectListModal.isOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1100] p-4">
+                    <div className="bg-white dark:bg-slate-800 w-full max-w-2xl max-h-[80vh] flex flex-col rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800 dark:text-white">{projectListModal.title}</h3>
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                                    {projectListModal.projects.length} Projects Found
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setProjectListModal(prev => ({ ...prev, isOpen: false }))}
+                                className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors"
+                            >
+                                <FiX />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                            {projectListModal.isLoading ? (
+                                <div className="flex justify-center py-10">
+                                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {projectListModal.projects.map((p) => (
+                                        <div key={p.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
+                                            <div>
+                                                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{p.schoolName}</h4>
+                                                <p className="text-xs text-slate-500 italic">{p.projectName}</p>
+                                                {p.projectAllocation && (
+                                                     <p className="text-[10px] font-mono text-slate-400 mt-1">
+                                                        Alloc: ₱{Number(p.projectAllocation).toLocaleString()}
+                                                     </p>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                 <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase mb-1 ${
+                                                     p.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' :
+                                                     p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
+                                                     'bg-blue-100 text-blue-600'
+                                                 }`}>
+                                                    {p.status}
+                                                 </span>
+                                                 <div className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                                    {p.accomplishmentPercentage}%
+                                                 </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {projectListModal.projects.length === 0 && (
+                                        <p className="text-center text-slate-400 italic py-10">No projects found for this category.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </PageTransition>
     );
 };
