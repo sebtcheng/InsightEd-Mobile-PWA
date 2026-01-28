@@ -2879,7 +2879,8 @@ if (isMainModule || process.env.START_SERVER === 'true') {
   // --- SCHEDULER: DEADLINE REMINDERS ---
   // Runs every day at 6:00 AM
   // --- VERCEL CRON ENDPOINT ---
-  app.get('/api/cron/check-deadline', async (req, res) => {
+  // Support both /api/cron... (Local) and /cron... (Vercel sometimes strips /api on rewrite)
+  app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
     // 1. Security Check
     const authHeader = req.headers.authorization;
     if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
