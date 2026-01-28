@@ -91,9 +91,13 @@ const SchoolHeadDashboard = () => {
     };
 
     // ... [Keep your useEffects for Stats/Auth exactly as they were] ...
+    const [completedItems, setCompletedItems] = useState([]);
+
     useEffect(() => {
         if (!schoolProfile) return;
-        let completed = 0;
+
+        const completedList = [];
+
         // Helper to check if any field with prefix has value > 0
         const hasData = (prefix, type = 'number') => {
             return Object.keys(schoolProfile).some(key => {
@@ -104,40 +108,41 @@ const SchoolHeadDashboard = () => {
             });
         };
 
-        if (schoolProfile.school_id) completed++; // 1. Profile
-        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completed++; // 2. Head Info
-        if (schoolProfile.total_enrollment > 0) completed++; // 3. Enrollment
+        if (schoolProfile.school_id) completedList.push("School Profile"); // 1. Profile
+        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completedList.push("School Head Info"); // 2. Head Info
+        if (schoolProfile.total_enrollment > 0) completedList.push("Enrollment"); // 3. Enrollment
 
         // 4. Classes
         const totalClasses = (schoolProfile.classes_kinder || 0) + (schoolProfile.classes_grade_1 || 0) + (schoolProfile.classes_grade_6 || 0) + (schoolProfile.classes_grade_10 || 0) + (schoolProfile.classes_grade_12 || 0);
-        if (totalClasses > 0) completed++;
+        if (totalClasses > 0) completedList.push("Organized Classes");
 
         // 5. Learner Stats
-        if (hasData('stat_', 'number')) completed++;
+        if (hasData('stat_', 'number')) completedList.push("Learner Statistics");
 
         // 6. Shifting
         const hasShift = (schoolProfile.shift_kinder || schoolProfile.shift_g1) || (schoolProfile.adm_mdl || schoolProfile.adm_odl);
-        if (hasShift) completed++;
+        if (hasShift) completedList.push("Shifting & Modality");
 
         // 7. Teaching Personnel
         const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
-        if (totalTeachers > 0) completed++;
+        if (totalTeachers > 0) completedList.push("Teaching Personnel");
 
         // 8. Specialization
-        if (hasData('spec_', 'number')) completed++;
+        if (hasData('spec_', 'number')) completedList.push("Specialization");
 
         // 9. Resources
         const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
-        if (hasResources) completed++;
+        if (hasResources) completedList.push("School Resources");
 
         // 10. Physical Facilities
-        if (hasData('build_', 'number') || hasData('pf_', 'number')) completed++;
+        if (hasData('build_', 'number') || hasData('pf_', 'number')) completedList.push("Physical Facilities");
 
         setStats(prev => ({
             ...prev,
-            completedForms: completed,
+            completedForms: completedList.length,
             enrollment: schoolProfile.total_enrollment || 0
         }));
+        setCompletedItems(completedList);
     }, [schoolProfile]);
 
     const [searchParams] = useSearchParams(); // Get query params
@@ -517,7 +522,7 @@ const SchoolHeadDashboard = () => {
                                 <button onClick={() => navigate('/school-forms')} className="text-[#004A99] dark:text-blue-400 text-xs font-semibold">View All</button>
                             </div>
                             <div className="grid grid-cols-4 gap-3">
-                                {SEARCHABLE_ITEMS.map((item, index) => (
+                                {SEARCHABLE_ITEMS.filter(item => !completedItems.includes(item.name)).map((item, index) => (
                                     <button
                                         key={index}
                                         onClick={() => navigate(item.route)}
