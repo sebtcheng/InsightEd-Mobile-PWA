@@ -259,12 +259,17 @@ const SchoolHeadDashboard = () => {
                                         body: JSON.stringify({ uid: user.uid, token: currentToken })
                                     });
                                     console.log("✅ FCM Token Sent to Server");
+                                    // alert("Debug: Token Saved! " + currentToken.slice(0, 5)); // Uncomment for heavy debugging
                                 } else {
                                     console.warn("⚠️ No registration token available. Request permission to generate one.");
+                                    // alert("Debug: No Token Available");
                                 }
+                            } else {
+                                // alert("Debug: Permission not granted: " + permission);
                             }
                         } catch (msgErr) {
                             console.log("ℹ️ FCM Token Logic Error:", msgErr);
+                            // alert("Debug Error: " + msgErr.message); 
                         }
                     }
 
