@@ -4,12 +4,12 @@ importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-comp
 
 // --- PLACEHOLDER CONFIG (User must replace this) ---
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "your-project.firebaseapp.com",
-    projectId: "your-project-id",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyDKbjlnMauvdUZS4S8V6FkNaWAEXFQ1fFs",
+    authDomain: "insighted-6ba10.firebaseapp.com",
+    projectId: "insighted-6ba10",
+    storageBucket: "insighted-6ba10.firebasestorage.app",
+    messagingSenderId: "945568231794",
+    appId: "1:945568231794:web:5a3c1688c1ddfa8dd7edeb"
 };
 
 firebase.initializeApp(firebaseConfig);
