@@ -84,7 +84,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
         };
 
         try {
-          const response = await admin.messaging().sendMulticast(message);
+          const response = await admin.messaging().sendEachForMulticast(message);
           console.log(`🚀 Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
           if (response.failureCount > 0) {
             console.log("Failed details:", JSON.stringify(response.responses));
