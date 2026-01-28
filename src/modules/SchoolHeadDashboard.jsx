@@ -14,7 +14,7 @@ import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle } from "react-i
 import { auth, db, app } from '../firebase'; // Import app
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from "firebase/auth";
-import { getMessaging, getToken } from "firebase/messaging"; // Import Messaging
+import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Import Messaging
 
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
@@ -160,7 +160,12 @@ const SchoolHeadDashboard = () => {
                     if (diffDays <= 3) {
                         // TRIGGER MODAL if 0-3 days (inclusive)
                         if (diffDays >= 0) {
-                            setShowDeadlineAlert(true);
+                            // Check previous session flag
+                            const hasShown = sessionStorage.getItem('deadlineAlertShown');
+                            if (!hasShown) {
+                                setShowDeadlineAlert(true);
+                                sessionStorage.setItem('deadlineAlertShown', 'true');
+                            }
                         }
 
                         // Request permission and show notification
@@ -259,18 +264,27 @@ const SchoolHeadDashboard = () => {
                                         body: JSON.stringify({ uid: user.uid, token: currentToken })
                                     });
                                     console.log("✅ FCM Token Sent to Server");
-                                    alert("Debug: Token Saved! " + currentToken.slice(0, 5)); // Uncomment for heavy debugging
+                                    // Debug removed for production clarity
                                 } else {
                                     console.warn("⚠️ No registration token available. Request permission to generate one.");
-                                    alert("Debug: No Token Available");
                                 }
                             } else {
-                                alert("Debug: Permission not granted: " + permission);
+                                // Permission not granted, do nothing or log
                             }
                         } catch (msgErr) {
                             console.log("ℹ️ FCM Token Logic Error:", msgErr);
-                            alert("Debug Error: " + msgErr.message);
                         }
+
+                        // --- FOREGROUND LISTENER ---
+                        // Triggers if notification arrives while app is OPEN
+                        onMessage(messaging, (payload) => {
+                            console.log('🔔 Foreground Message:', payload);
+                            const { title, body } = payload.notification;
+
+                            // You can replace this with a nice custom toast/modal
+                            // For now, simpler is better to prove it works
+                            new Notification(title, { body, icon: '/pwa-192x192.png' });
+                        });
                     }
 
                 } catch (error) {
