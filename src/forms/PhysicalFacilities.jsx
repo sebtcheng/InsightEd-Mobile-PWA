@@ -5,7 +5,7 @@ import { auth, db } from '../firebase';
 import { addToOutbox, getOutbox } from '../db';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
-import { FiBox, FiArrowLeft, FiCheckCircle } from 'react-icons/fi';
+import { FiBox, FiArrowLeft, FiCheckCircle, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -21,16 +21,19 @@ const InputCard = ({ label, name, icon, color, value, onChange, disabled }) => (
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Classrooms</p>
             </div>
         </div>
-        <input
-            type="number" inputMode="numeric" pattern="[0-9]*"
-            name={name}
-            value={value}
-            onChange={onChange}
-            disabled={disabled}
-            onWheel={(e) => e.target.blur()}
-            className="w-24 text-center font-black text-xl bg-slate-50 border border-slate-200 rounded-xl py-3 focus:ring-4 focus:ring-blue-100 outline-none disabled:bg-transparent disabled:border-transparent text-slate-800"
-            onFocus={(e) => e.target.select()}
-        />
+        <div>
+            <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
+            <input
+                type="number" inputMode="numeric" pattern="[0-9]*"
+                name={name}
+                value={value}
+                onChange={onChange}
+                disabled={disabled}
+                onWheel={(e) => e.target.blur()}
+                className="w-24 text-center font-black text-xl bg-slate-50 border border-slate-200 rounded-xl py-3 focus:ring-4 focus:ring-blue-100 outline-none disabled:bg-transparent disabled:border-transparent text-slate-800"
+                onFocus={(e) => e.target.select()}
+            />
+        </div>
     </div>
 );
 
@@ -48,6 +51,7 @@ const PhysicalFacilities = () => {
     const [showEditModal, setShowEditModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
@@ -255,18 +259,23 @@ const PhysicalFacilities = () => {
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Physical Facilities</h1>
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Physical Facilities</h1>
+                            </div>
+                            <p className="text-blue-100 text-xs font-medium mt-1">
+                                Q: What is the current condition and total number of instructional classrooms?
+                            </p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">
-                            {viewOnly ? "Monitor View (Read-Only)" : "Classroom Inventory"}
-                        </p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -309,7 +318,7 @@ const PhysicalFacilities = () => {
                             onClick={() => setShowEditModal(true)}
                             className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                         >
-                            <span>Enable Editing</span>
+                            <span>🔓 Unlock to Edit Data</span>
                         </button>
                     ) : (
                         <>
@@ -359,6 +368,19 @@ const PhysicalFacilities = () => {
                             <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
                             <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showInfoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the current condition and total number of instructional classrooms?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>
             )}

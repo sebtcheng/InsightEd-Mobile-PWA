@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TbTrophy, TbArrowLeft, TbBuildingSkyscraper, TbMap2, TbMedal, TbSearch } from "react-icons/tb";
+import { TbTrophy, TbArrowLeft, TbMap2, TbMedal, TbSearch } from "react-icons/tb";
 import { auth } from '../firebase';
 import PageTransition from '../components/PageTransition';
+import MyRankFooter from './MyRankFooter';
 
 const Leaderboard = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('schools'); // 'schools' or 'divisions'
-    const [data, setData] = useState({ schools: [], divisions: [] });
-    const [userRole, setUserRole] = useState(null);
-    const [userScope, setUserScope] = useState(null); // The region or division name
+
+    // 1. CHANGED: Default tab is now 'divisions'
+    const [activeTab, setActiveTab] = useState('divisions');
+    const [data, setData] = useState({ divisions: [], regions: [] });
+    const [userScope, setUserScope] = useState(null);
     const [currentUserRegion, setCurrentUserRegion] = useState(null);
     const [currentUserDivision, setCurrentUserDivision] = useState(null);
+    const [currentSchoolId, setCurrentSchoolId] = useState(null); // To highlight current user
+    const [myRankData, setMyRankData] = useState(null); // Store user's rank info
+    const [showStickyFooter, setShowStickyFooter] = useState(false); // Toggle footer visibility
+
+    // 2. CHANGED: Search now filters divisions/regions
     const [search, setSearch] = useState('');
 
     useEffect(() => {
@@ -20,57 +27,30 @@ const Leaderboard = () => {
             const user = auth.currentUser;
             if (!user) return;
 
-            // Determine Scope based on functionality context (simulated here since we don't have a rigid role context provider yet)
-            // We'll fetch the user's profile to see their assigned region/division
             try {
-                // Try School Head profile first
+                // Fetch basic user context to know their region
                 const headRes = await fetch(`/api/school-head/${user.uid}`);
                 const headJson = await headRes.json();
 
-                let scope = '';
-                let filter = '';
-                let role = 'School Head';
+                let regionFilter = 'Region VIII'; // Default fallback
 
                 if (headJson.exists) {
-                    // School Head -> View their Division
-                    scope = 'division';
-                    filter = headJson.data.division; // Assuming head_division exists from schema
-                    setUserScope(filter);
+                    setCurrentUserRegion(headJson.data.region);
+                    // Store division if school head to restrict view
+                    setCurrentUserDivision(headJson.data.division);
+                    setCurrentSchoolId(headJson.data.school_id); // Save ID for highlighting
+                    regionFilter = headJson.data.region;
                 } else {
-                    // Try to infer from localStorage or simplified logic for RO/SDO
                     const savedRole = localStorage.getItem('userRole');
-                    role = savedRole;
-                    // For demo/hackathon purposes, we might need to fetch the specific RO/SDO profile
-                    // But for now, let's assume if role is 'Regional Office', we show Region VIII
                     if (savedRole === 'Regional Office') {
-                        scope = 'region';
-                        filter = 'Region VIII'; // Hardcoded for this region as per context likely
-                        setUserScope(filter);
-                    } else if (savedRole === 'School Division Office') {
-                        scope = 'division';
-                        // Ideally strictly fetched, but for now we might need to ask or default
-                        filter = 'Leyte'; // Placeholder default or fetch from separate profile table if exists
-                        setUserScope(filter);
+                        regionFilter = 'Region VIII';
                     }
                 }
 
-                if (headJson.exists) {
-                    setCurrentUserRegion(headJson.data.region || 'Region VIII');
-                    setCurrentUserDivision(headJson.data.division || 'Leyte');
-                } else {
-                    // Defaults for demo
-                    setCurrentUserRegion('Region VIII');
-                    setCurrentUserDivision('Leyte');
-                }
+                setCurrentUserRegion(regionFilter);
 
-                setUserRole(role);
-
-                // Fetch Leaderboard Data
-                if (filter) {
-                    const res = await fetch(`/api/leaderboard?scope=${scope}&filter=${encodeURIComponent(filter)}`);
-                    const json = await res.json();
-                    setData(json);
-                }
+                // Initial Fetch: Divisions (Default)
+                await fetchTab('divisions', regionFilter);
 
             } catch (err) {
                 console.error("Leaderboard init error:", err);
@@ -83,35 +63,55 @@ const Leaderboard = () => {
 
     const handleTabChange = async (tab) => {
         setActiveTab(tab);
+        setSearch(''); // Clear search on tab switch
+        // If switching back to divisions/regions, clear specific school data to save memory/avoid confusion
+        if (tab !== 'schools') {
+            await fetchTab(tab, currentUserRegion);
+        }
+    };
+
+    const handleDivisionClick = async (divisionName) => {
+        setActiveTab('schools');
+        setSearch('');
+        setLoading(true);
+        try {
+            const url = `/api/leaderboard?scope=division&filter=${encodeURIComponent(divisionName)}`;
+            setUserScope(`${divisionName} Schools`);
+            const res = await fetch(url);
+            const json = await res.json();
+            setData(prev => ({ ...prev, schools: json.schools })); // Keep others? actually maybe just overwrite or separate
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchTab = async (tab, regionOverride) => {
         setLoading(true);
         try {
             let url = '';
+            const region = regionOverride || currentUserRegion || 'Region VIII';
+
             if (tab === 'regions') {
+                // National View: Fetch all regions
                 url = `/api/leaderboard?scope=national`;
                 setUserScope('National');
-            } else if (tab === 'divisions') {
-                url = `/api/leaderboard?scope=region&filter=${encodeURIComponent(currentUserRegion || 'Region VIII')}`;
-                setUserScope(currentUserRegion || 'Region VIII');
             } else {
-                // Schools - default to division view for School Heads, but let's allow Region view for RO
-                if (userRole === 'Regional Office') {
-                    url = `/api/leaderboard?scope=region&filter=${encodeURIComponent(currentUserRegion || 'Region VIII')}`;
-                    setUserScope(currentUserRegion || 'Region VIII');
-                } else {
-                    url = `/api/leaderboard?scope=division&filter=${encodeURIComponent(currentUserDivision || 'Leyte')}`;
-                    setUserScope(currentUserDivision || 'Leyte');
-                }
+                // Divisions View: Fetch ALL divisions
+                url = `/api/leaderboard?scope=national_divisions`;
+                setUserScope('National');
             }
 
             const res = await fetch(url);
             const json = await res.json();
             setData(json);
-        } catch (err) {
-            console.error("Tab switch error:", err);
+        } catch (e) {
+            console.error("Fetch tab error:", e);
         } finally {
             setLoading(false);
         }
-    };
+    }
 
     const getMedalColor = (index) => {
         if (index === 0) return 'text-yellow-500';
@@ -120,13 +120,74 @@ const Leaderboard = () => {
         return 'text-slate-300 opacity-50';
     };
 
-    const sortedSchools = data.schools ? data.schools.filter(s => s.school_name.toLowerCase().includes(search.toLowerCase())) : [];
+    // 3. CHANGED: Generic filtering logic
+    const getFilteredList = () => {
+        if (activeTab === 'schools') {
+            return (data.schools || []).filter(s => s.school_name.toLowerCase().includes(search.toLowerCase()));
+        }
+
+        let list = activeTab === 'divisions' ? data.divisions : data.regions;
+        if (!list) return [];
+
+        // RESTRICTION: If user is a School Head (has currentUserDivision) and looking at divisions,
+        // ONLY show their division.
+        if (activeTab === 'divisions' && currentUserDivision) {
+            list = list.filter(d => d.name === currentUserDivision);
+        }
+
+        return list.filter(item =>
+            (item.name || '').toLowerCase().includes(search.toLowerCase())
+        );
+    };
+
+    const displayList = getFilteredList();
+
+    // Intersection Observer for Sticky Footer
+    // We want to verify if the user's row is visible. 
+    // Effect to update MyRankData when data changes
+    useEffect(() => {
+        const schools = data.schools || [];
+        if (currentSchoolId && schools.length > 0) {
+            const index = schools.findIndex(s => s.school_id === currentSchoolId);
+            if (index !== -1) {
+                setMyRankData({
+                    rank: index + 1,
+                    ...schools[index]
+                });
+            } else {
+                setMyRankData(null);
+            }
+        }
+    }, [data.schools, currentSchoolId]);
+
+    // Ref for the user's row
+    const userRowRef = React.useRef(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                // If user row is NOT intersecting (not visible), show sticky footer
+                setShowStickyFooter(!entry.isIntersecting);
+            },
+            { threshold: 0.1 } // Trigger as soon as 10% is visible
+        );
+
+        if (userRowRef.current) {
+            observer.observe(userRowRef.current);
+        } else {
+            if (myRankData) setShowStickyFooter(true);
+        }
+
+        return () => {
+            if (userRowRef.current) observer.unobserve(userRowRef.current);
+        };
+    }, [data.schools, myRankData, activeTab]);
 
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 relative pb-20">
                 {/* Header */}
-                <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                <div className="bg-[#004A99] px-6 pt-12 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="relative z-10">
                         <div className="flex items-center justify-between text-white mb-2">
@@ -137,34 +198,28 @@ const Leaderboard = () => {
                                 <TbTrophy size={18} className="text-yellow-400" />
                                 <span className="text-xs font-bold tracking-wide uppercase">Leaderboard</span>
                             </div>
-                            <div className="w-8"></div> {/* Spacer */}
+                            <div className="w-8"></div>
                         </div>
                         <h1 className="text-2xl font-bold text-white text-center mt-2">Top Performers</h1>
-                        <p className="text-blue-200 text-center text-xs opacity-80 mb-6">{userScope ? `${userScope} Rankings` : 'Loading scope...'}</p>
+                        <p className="text-blue-200 text-center text-xs opacity-80 mb-6">{userScope || 'Loading...'}</p>
 
-                        {/* Search */}
-                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2 flex items-center border border-white/10">
-                            <TbSearch className="text-blue-200 ml-2" size={20} />
+                        {/* Search Bar */}
+                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2.5 flex items-center border border-white/10 shadow-inner shadow-black/10 max-w-sm mx-auto">
+                            <TbSearch className="text-blue-200 ml-1" size={18} />
                             <input
                                 type="text"
-                                placeholder="Search schools..."
+                                placeholder={`Search ${activeTab}...`}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                className="bg-transparent border-none text-white placeholder-blue-200/50 text-sm w-full focus:outline-none px-3"
+                                className="bg-transparent border-none text-white placeholder-blue-200/50 text-sm w-full focus:outline-none px-3 font-medium"
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* Scope Tabs (Visible for everyone now to allow National View) */}
+                {/* Tabs - Reduced to 2 */}
                 <div className="flex justify-center -mt-8 relative z-20 px-4 mb-6">
-                    <div className="bg-white p-1 rounded-full shadow-lg flex w-full max-w-sm overflow-x-auto">
-                        <button
-                            onClick={() => handleTabChange('schools')}
-                            className={`flex-1 py-2 px-2 rounded-full text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'schools' ? 'bg-[#004A99] text-white shadow-md' : 'text-slate-500'}`}
-                        >
-                            Schools
-                        </button>
+                    <div className="bg-white p-1 rounded-full shadow-lg flex w-full max-w-[200px]">
                         <button
                             onClick={() => handleTabChange('divisions')}
                             className={`flex-1 py-2 px-2 rounded-full text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'divisions' ? 'bg-[#004A99] text-white shadow-md' : 'text-slate-500'}`}
@@ -181,90 +236,103 @@ const Leaderboard = () => {
                 </div>
 
                 {/* List Content */}
-                <div className={`px-5 relative z-10 ${userRole !== 'Regional Office' ? '-mt-12' : ''} space-y-4`}>
+                <div className="px-5 relative z-10 space-y-4">
                     {loading ? (
                         <div className="text-center py-10 text-slate-400 text-sm">Loading rankings...</div>
                     ) : (
                         <>
-                            {activeTab === 'schools' && sortedSchools.map((item, index) => (
-                                <div key={item.school_id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden">
-                                    {/* Rank Badge */}
-                                    <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
-                                        {index + 1}
-                                    </div>
+                            {activeTab === 'schools' ? (
+                                /* SCHOOLS RENDER LOGIC */
+                                displayList.length > 0 ? displayList.map((item, index) => {
+                                    const isMe = item.school_id === currentSchoolId; // logic for highlight
+                                    return (
+                                        <div
+                                            key={item.school_id}
+                                            ref={isMe ? userRowRef : null}
+                                            className={`bg-white p-4 rounded-2xl shadow-sm border flex items-center gap-4 relative overflow-hidden transition-all ${isMe ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 z-10 scale-[1.01]' : 'border-slate-100'}`}
+                                        >
+                                            <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
+                                                {index + 1}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-start">
+                                                    <h3 className={`font-bold text-sm truncate pr-2 ${isMe ? 'text-blue-800' : 'text-slate-800'}`}>
+                                                        {item.school_name} {isMe && <span className="ml-1 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full uppercase align-middle">You</span>}
+                                                    </h3>
+                                                    <span className="font-bold text-[#004A99] text-sm">{Math.round(item.completion_rate)}%</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
+                                                    <TbMap2 size={12} />
+                                                    {item.division}
+                                                </div>
+                                                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                                                    <div
+                                                        className="bg-gradient-to-r from-blue-400 to-[#004A99] h-full rounded-full"
+                                                        style={{ width: `${item.completion_rate}%` }}
+                                                    ></div>
+                                                </div>
+                                            </div>
+                                            {index < 3 && (
+                                                <div className="absolute -top-1 -right-1">
+                                                    <TbMedal className={`${getMedalColor(index)} opacity-20 rotate-12`} size={40} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                }) : <div className="text-center text-slate-400 py-10">No schools found</div>
+                            ) : (
+                                /* DIVISIONS / REGIONS RENDER LOGIC */
+                                displayList.length > 0 ? displayList.map((item, index) => (
+                                    <div
+                                        key={item.name}
+                                        onClick={() => activeTab === 'divisions' ? handleDivisionClick(item.name) : null}
+                                        className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group hover:border-blue-200 transition-colors ${activeTab === 'divisions' ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+                                    >
+                                        {/* Rank Number */}
+                                        <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
+                                            {index + 1}
+                                        </div>
 
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <h3 className="font-bold text-slate-800 text-sm truncate pr-2">{item.school_name}</h3>
-                                            <span className="font-bold text-[#004A99] text-sm">{Math.round(item.completion_rate)}%</span>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
-                                            <TbMap2 size={12} />
-                                            {item.division}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h3 className="font-bold text-slate-800 text-sm truncate pr-2">{item.name}</h3>
+                                                <span className={`px-2 py-0.5 rounded-lg text-xs font-black border ${activeTab === 'regions' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                                                    {item.avg_completion}%
+                                                </span>
+                                            </div>
+
+                                            {/* Progress Bar */}
+                                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full bg-gradient-to-r ${activeTab === 'regions' ? 'from-emerald-400 to-teal-600' : 'from-blue-400 to-indigo-600'}`}
+                                                    style={{ width: `${item.avg_completion}%` }}
+                                                ></div>
+                                            </div>
                                         </div>
 
-                                        {/* Progress Bar */}
-                                        <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                                            <div
-                                                className="bg-gradient-to-r from-blue-400 to-[#004A99] h-full rounded-full"
-                                                style={{ width: `${item.completion_rate}%` }}
-                                            ></div>
-                                        </div>
+                                        {/* Medal Icon for Top 3 */}
+                                        {index < 3 && (
+                                            <TbMedal className={`${getMedalColor(index)} opacity-10 absolute -right-4 -top-2 rotate-12`} size={80} />
+                                        )}
                                     </div>
-
-                                    {index < 3 && (
-                                        <div className="absolute -top-1 -right-1">
-                                            <TbMedal className={`${getMedalColor(index)} opacity-20 rotate-12`} size={40} />
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-
-                            {activeTab === 'divisions' && data.divisions && data.divisions.map((item, index) => (
-                                <div key={item.name} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                                    <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
-                                        {index + 1}
+                                )) : (
+                                    <div className="text-center py-10 text-slate-400 text-xs">
+                                        No {activeTab} found matching "{search}"
                                     </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between">
-                                            <h3 className="font-bold text-slate-800">{item.name}</h3>
-                                            <span className="font-bold text-[#004A99]">{item.avg_completion}%</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">Average Completion Rate</p>
-                                        <div className="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden">
-                                            <div
-                                                className="bg-gradient-to-r from-purple-500 to-blue-600 h-full rounded-full"
-                                                style={{ width: `${item.avg_completion}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-
-
-                            {activeTab === 'regions' && data.regions && data.regions.map((item, index) => (
-                                <div key={item.name} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                                    <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
-                                        {index + 1}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between">
-                                            <h3 className="font-bold text-slate-800">{item.name}</h3>
-                                            <span className="font-bold text-[#004A99]">{item.avg_completion}%</span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">Average Completion Rate</p>
-                                        <div className="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden">
-                                            <div
-                                                className="bg-gradient-to-r from-emerald-500 to-teal-600 h-full rounded-full"
-                                                style={{ width: `${item.avg_completion}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
                         </>
                     )}
                 </div>
+
+                {/* Sticky "My Rank" Footer */}
+                {activeTab === 'schools' && myRankData && showStickyFooter && (
+                    <MyRankFooter
+                        rank={myRankData.rank}
+                        schoolName={myRankData.school_name}
+                        score={myRankData.completion_rate}
+                        medalColor={getMedalColor(myRankData.rank - 1)}
+                    />
+                )}
             </div>
         </PageTransition >
     );

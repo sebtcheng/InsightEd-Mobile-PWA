@@ -408,12 +408,10 @@ const Register = () => {
 
 
         // STRICT OTP ENFORCEMENT
-        /*
-        if (!isOtpVerified) {
-            alert("Please verify your email via OTP before registering.");
-            return;
-        }
-        */
+        // if (!isOtpVerified) {
+        //     alert("Please verify your email via OTP before registering.");
+        //     return;
+        // }
 
         setLoading(true);
 
@@ -978,8 +976,8 @@ const Register = () => {
                                 </div>
                             )}
 
-                            {/* === 3. EMAIL VERIFICATION & SECURITY === */}
-                            <div className="pt-2 border-t border-slate-100 animate-in fade-in">
+                            {/* === 3. EMAIL VERIFICATION & SECURITY (COMMENTED OUT FOR TESTING) === */}
+                            {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
                                         {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
@@ -987,7 +985,6 @@ const Register = () => {
                                     Account Security
                                 </h3>
 
-                                {/* OTP SECTION */}
                                 <div className="mb-6 space-y-3">
                                     {/* If School Head, email is readonly. If Generic, it's editable above. */}
                                     {/* We display email here again or just the OTP controls? The generic flow has email field above. The School Head flow has auto-email. */}
@@ -1052,6 +1049,13 @@ const Register = () => {
                                     <input name="password" type="password" placeholder="Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
                                     <input name="confirmPassword" type="password" placeholder="Confirm Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
                                 </div>
+                            </div> */}
+
+                            {/* MOVED PASSWORD FIELDS OUT OF COMMENTED BLOCK */}
+                            <div className="space-y-3 pt-4 border-t border-slate-100">
+                                <h3 className="text-sm font-bold text-slate-800 mb-2">Create Password</h3>
+                                <input name="password" type="password" placeholder="Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
+                                <input name="confirmPassword" type="password" placeholder="Confirm Password" onChange={handleChange} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:border-blue-500" required />
                             </div>
 
                             {/* SUBMIT BUTTON */}

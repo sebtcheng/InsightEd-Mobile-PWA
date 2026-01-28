@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FiSave, FiUsers, FiArrowLeft, FiGrid } from 'react-icons/fi';
+import { FiSave, FiUsers, FiArrowLeft, FiGrid, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbActivity } from 'react-icons/tb';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
@@ -89,6 +89,7 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
                     return (
                         <div key={g} className="text-center group">
                             <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors">{g === 'k' ? 'Kinder' : g.toUpperCase()}</label>
+                            <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                             <input
                                 type="text" inputMode="numeric" pattern="[0-9]*"
                                 value={getGridValue(category, g)}
@@ -118,6 +119,7 @@ const LearnerStatistics = () => {
     const [isLocked, setIsLocked] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
 
     // Core Form Data + JSONB Grids
     const [formData, setFormData] = useState({
@@ -187,7 +189,8 @@ const LearnerStatistics = () => {
                     // Check logic: setFormData(parsed);
                     setFormData(prev => ({ ...prev, ...parsed }));
 
-                    setIsLocked(true);
+                    const hasCachedData = Object.entries(parsed).some(([k, v]) => k.startsWith('stat_') && Number(v) > 0);
+                    setIsLocked(hasCachedData);
                     setLoading(false); // CRITICAL: Instant Load
                     console.log("Loaded cached Learner Stats data (Instant Load)");
                 } catch (e) { console.error("Cache parse error", e); }
@@ -265,7 +268,8 @@ const LearnerStatistics = () => {
                         };
 
                         setFormData(prev => ({ ...prev, ...loadedData }));
-                        setIsLocked(true);
+                        const hasLoadedData = Object.entries(loadedData).some(([k, v]) => k.startsWith('stat_') && Number(v) > 0);
+                        setIsLocked(hasLoadedData);
 
                         // CACHE DATA
                         const CACHE_KEY = `CACHE_LEARNER_STATS_${user.uid}`;
@@ -304,7 +308,8 @@ const LearnerStatistics = () => {
                         curricular_offering: fallbackOffering,
                         learner_stats_grids: dbData.learner_stats_grids || {}
                     }));
-                    setIsLocked(true); // Read-Only
+                    const hasOfflineData = Object.entries(dbData).some(([k, v]) => k.startsWith('stat_') && Number(v) > 0);
+                    setIsLocked(hasOfflineData); // Read-Only if data exists
                 } else if (storedOffering) {
                     setFormData(prev => ({ ...prev, curricular_offering: storedOffering }));
                 }
@@ -441,21 +446,26 @@ const LearnerStatistics = () => {
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Learner Statistics</h1>
-                            {formData.curricular_offering && (
-                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                    {formData.curricular_offering}
-                                </span>
-                            )}
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Learner Statistics</h1>
+                                {formData.curricular_offering && (
+                                    <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                        {formData.curricular_offering}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the breakdown of learners by specific programs (IP, Muslim, etc.) and categories per grade level?</p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">Detailed Demographics & Breakdown</p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -558,7 +568,7 @@ const LearnerStatistics = () => {
                             onClick={() => setIsLocked(false)}
                             className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                         >
-                            <TbActivity /> Edit Statistics
+                            <TbActivity /> 🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <button
@@ -571,6 +581,19 @@ const LearnerStatistics = () => {
                     )}
                 </div>
             </div>
+
+            {showInfoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the breakdown of learners by specific programs (IP, Muslim, etc.) and categories per grade level?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
+                    </div>
+                </div>
+            )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Statistic saved successfully!" />

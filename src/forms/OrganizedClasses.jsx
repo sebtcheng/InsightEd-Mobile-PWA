@@ -1,4 +1,4 @@
-// src/forms/OrganizedClasses.jsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
@@ -8,13 +8,33 @@ import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
-import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, FiBarChart2 } from 'react-icons/fi';
+import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, FiBarChart2, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 
-// --- STYLES ---
-const inputClass = "w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#004A99] outline-none text-sm transition-all hover:border-blue-200 disabled:bg-slate-100 disabled:text-slate-400";
-const labelClass = "text-[9px] font-bold text-slate-400 uppercase mb-1 block text-center";
-const sectionClass = "bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-6";
+// --- SUB-COMPONENT: Generic Grid Section (Matched from Enrolment.jsx) ---
+const GridSection = ({ label, icon, color, children, totalLabel, totalValue }) => (
+    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 mb-4 transition-all hover:border-blue-100">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-50">
+            <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl ${color} bg-opacity-10 flex items-center justify-center text-xl`}>
+                    {icon}
+                </div>
+                <div>
+                    <h2 className="text-base font-bold text-slate-800">{label}</h2>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Per Grade Level</p>
+                </div>
+            </div>
+            {/* Live Total Badge */}
+            {totalValue !== undefined && (
+                <div className="px-3 py-1 rounded-lg bg-blue-50 border border-blue-100 text-center min-w-[70px]">
+                    <span className="block text-[9px] text-blue-400 font-bold uppercase">{totalLabel || 'Total'}</span>
+                    <span className="text-sm font-black text-blue-700">{totalValue}</span>
+                </div>
+            )}
+        </div>
+        {children}
+    </div>
+);
 
 const OrganizedClasses = () => {
     const navigate = useNavigate();
@@ -35,6 +55,7 @@ const OrganizedClasses = () => {
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
 
     // Data
@@ -112,7 +133,6 @@ const OrganizedClasses = () => {
                     try {
                         const parsed = JSON.parse(cachedData);
 
-                        // Smart Restore: Handle both Flat (Old) and Structured (New) Cache
                         let restoredForm = {};
                         let restoredSize = {};
 
@@ -130,8 +150,6 @@ const OrganizedClasses = () => {
                                 g9: parsed.classes_grade_9 ?? parsed.grade_9 ?? 0, g10: parsed.classes_grade_10 ?? parsed.grade_10 ?? 0,
                                 g11: parsed.classes_grade_11 ?? parsed.grade_11 ?? 0, g12: parsed.classes_grade_12 ?? parsed.grade_12 ?? 0
                             };
-                            // NOTE: We don't map flat class size here extensively to keep code clean, assuming newly cached data is structured
-                            // or relied on network for deep legacy fix unless critical.
                         }
 
                         // MERGE to ensure no undefineds (Fix Uncontrolled Input)
@@ -143,7 +161,7 @@ const OrganizedClasses = () => {
                         const cacheOff = parsed.curricular_offering || parsed.offering || (parsed.formData ? parsed.formData.offering : '') || storedOffering;
                         if (cacheOff) setOffering(cacheOff);
 
-                        setIsLocked(true);
+                        setIsLocked(Object.values(restoredForm).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Organized Classes data (Instant Load)");
@@ -170,6 +188,7 @@ const OrganizedClasses = () => {
                                 setClassSizeData({ ...defaultClassSize, ...p });
 
                                 restored = true;
+                                setIsLocked(false); // Unlocks form for draft editing
                                 setLoading(false);
                             }
                         } catch (e) { console.error("Outbox check failed:", e); }
@@ -244,7 +263,7 @@ const OrganizedClasses = () => {
                             };
                             localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                             setOriginalData(cachePayload);
-                            setIsLocked(true);
+                            setIsLocked(Object.values(newFormData).reduce((a, b) => a + (parseInt(b) || 0), 0) > 0);
                         }
                     }
                 } catch (error) {
@@ -270,16 +289,26 @@ const OrganizedClasses = () => {
         return () => unsubscribe();
     }, []);
 
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = sessionStorage.getItem('hasSeenOrganizedClassesInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            sessionStorage.setItem('hasSeenOrganizedClassesInfo', 'true');
+        }
+    }, []);
+
     // --- HELPERS ---
     const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
     const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
     const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
     const getTotalClasses = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0);
+    const getElemTotal = () => (formData.kinder || 0) + (formData.g1 || 0) + (formData.g2 || 0) + (formData.g3 || 0) + (formData.g4 || 0) + (formData.g5 || 0) + (formData.g6 || 0);
+    const getJHSTotal = () => (formData.g7 || 0) + (formData.g8 || 0) + (formData.g9 || 0) + (formData.g10 || 0);
+    const getSHSTotal = () => (formData.g11 || 0) + (formData.g12 || 0);
 
     // --- HANDLER FIXES ---
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        // Limit to 2 digits
+    const handleChange = (name, value) => {
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
@@ -287,45 +316,16 @@ const OrganizedClasses = () => {
 
     const handleClassSizeChange = (e) => {
         const { name, value } = e.target;
-        // Limit to 2 digits
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
         const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
         setClassSizeData(prev => ({ ...prev, [name]: intValue }));
     };
 
-    // --- RENDER HELPER ---
-    const renderClassInput = (label, name) => (
-        <div>
-            <label className={labelClass}>{label}</label>
-            <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                name={name}
-                value={formData[name]}
-                onChange={handleChange}
-                disabled={isLocked || viewOnly}
-                className={inputClass}
-                onFocus={(e) => e.target.select()}
-            />
-        </div>
-    );
-
     // --- ACTIONS ---
-    const handleUpdateClick = () => setShowEditModal(true);
-
     const handleConfirmEdit = () => {
         setOriginalData({ ...formData, classSize: { ...classSizeData } });
         setIsLocked(false);
         setShowEditModal(false);
-    };
-
-    const handleCancelEdit = () => {
-        if (originalData) {
-            setFormData(originalData);
-            if (originalData.classSize) setClassSizeData(originalData.classSize);
-        }
-        setIsLocked(true);
     };
 
     const confirmSave = async () => {
@@ -365,108 +365,123 @@ const OrganizedClasses = () => {
                 setIsLocked(true);
             } else { throw new Error("Server Error"); }
         } catch (err) {
-            // Fallback logic
+            await addToOutbox({
+                type: 'ORGANIZED_CLASSES', label: 'Organized Classes', url: '/api/save-organized-classes', payload
+            });
+            setShowOfflineModal(true);
+            setIsLocked(true);
         } finally { setIsSaving(false); }
     };
 
+    if (loading) return <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-slate-900"><div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div></div>;
+
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-40">
-            {/* --- PREMIUM BLUE HEADER --- */}
+            {/* --- PREMIUM BLUE HEADER (Question Format) --- */}
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
                             <h1 className="text-2xl font-bold text-white tracking-tight">Organized Classes</h1>
-                            {offering && (
-                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                    {offering}
-                                </span>
-                            )}
+                            <p className="text-blue-100 text-xs font-medium mt-1">Q: How many sections are there per grade level?</p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Official Section Counts"}</p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
-            <div className="px-5 -mt-10 relative z-20 space-y-5">
+            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-5">
 
-                {/* TOTAL BANNER */}
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center relative overflow-hidden">
-                    <div className="absolute right-0 top-0 h-full w-24 bg-gradient-to-l from-blue-50 to-transparent"></div>
+                {/* TOTAL BANNER MATCHING ENROLMENT */}
+                <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-blue-900/5 border border-slate-100 flex items-center justify-between">
                     <div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Total Organized Classes</p>
-                        <h2 className="text-3xl font-black text-[#004A99]">{getTotalClasses()}</h2>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Classes</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Grand Total (ES + JHS + SHS)</p>
                     </div>
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#004A99] flex items-center justify-center text-2xl z-10">
-                        <FiLayers />
-                    </div>
+                    <div className="text-5xl font-black text-[#004A99] tracking-tighter">{getTotalClasses()}</div>
                 </div>
 
                 <form onSubmit={(e) => e.preventDefault()}>
+                    {/* --- ELEMENTARY --- */}
                     {showElem() && (
-                        <div className={sectionClass}>
-                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                                <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl">
-                                    <TbSchool />
-                                </div>
-                                <div>
-                                    <h2 className="text-base font-bold text-slate-800">Elementary</h2>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Kinder to Grade 6</p>
-                                </div>
+                        <GridSection label="Elementary" icon={<TbSchool />} color="text-orange-600 bg-orange-500" totalLabel="Sections" totalValue={getElemTotal()}>
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                                {[
+                                    { l: 'Kinder', k: 'kinder' },
+                                    { l: 'Grade 1', k: 'g1' }, { l: 'Grade 2', k: 'g2' }, { l: 'Grade 3', k: 'g3' },
+                                    { l: 'Grade 4', k: 'g4' }, { l: 'Grade 5', k: 'g5' }, { l: 'Grade 6', k: 'g6' }
+                                ].map((item) => (
+                                    <div key={item.k} className="text-center group">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
+                                        <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
+                                        <input
+                                            type="number"
+                                            value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                            onChange={(e) => handleChange(item.k, e.target.value)}
+                                            disabled={isLocked || viewOnly}
+                                            placeholder="0"
+                                            className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                        />
+                                    </div>
+                                ))}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {renderClassInput("Kinder", "kinder")}
-                                {renderClassInput("Grade 1", "g1")}
-                                {renderClassInput("Grade 2", "g2")}
-                                {renderClassInput("Grade 3", "g3")}
-                                {renderClassInput("Grade 4", "g4")}
-                                {renderClassInput("Grade 5", "g5")}
-                                {renderClassInput("Grade 6", "g6")}
-                            </div>
-                        </div>
+                        </GridSection>
                     )}
 
+                    {/* --- JHS --- */}
                     {showJHS() && (
-                        <div className={sectionClass}>
-                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl">
-                                    <FiGrid />
-                                </div>
-                                <div>
-                                    <h2 className="text-base font-bold text-slate-800">Junior High School</h2>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Grade 7 to Grade 10</p>
-                                </div>
+                        <GridSection label="Junior High" icon={<FiGrid />} color="text-indigo-600 bg-indigo-500" totalLabel="Sections" totalValue={getJHSTotal()}>
+                            <div className="grid grid-cols-4 gap-2 max-w-lg mx-auto">
+                                {[
+                                    { l: 'Grade 7', k: 'g7' }, { l: 'Grade 8', k: 'g8' },
+                                    { l: 'Grade 9', k: 'g9' }, { l: 'Grade 10', k: 'g10' }
+                                ].map((item) => (
+                                    <div key={item.k} className="text-center group">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
+                                        <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
+                                        <input
+                                            type="number"
+                                            value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                            onChange={(e) => handleChange(item.k, e.target.value)}
+                                            disabled={isLocked || viewOnly}
+                                            placeholder="0"
+                                            className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                        />
+                                    </div>
+                                ))}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {renderClassInput("Grade 7", "g7")}
-                                {renderClassInput("Grade 8", "g8")}
-                                {renderClassInput("Grade 9", "g9")}
-                                {renderClassInput("Grade 10", "g10")}
-                            </div>
-                        </div>
+                        </GridSection>
                     )}
 
+                    {/* --- SHS --- */}
                     {showSHS() && (
-                        <div className={sectionClass}>
-                            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
-                                <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
-                                    <FiLayers />
-                                </div>
-                                <div>
-                                    <h2 className="text-base font-bold text-slate-800">Senior High School</h2>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Grade 11 & 12</p>
-                                </div>
+                        <GridSection label="Senior High" icon={<FiLayers />} color="text-purple-600 bg-purple-500" totalLabel="Sections" totalValue={getSHSTotal()}>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-sm mx-auto">
+                                {[
+                                    { l: 'Grade 11', k: 'g11' }, { l: 'Grade 12', k: 'g12' }
+                                ].map((item) => (
+                                    <div key={item.k} className="text-center group">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
+                                        <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
+                                        <input
+                                            type="number"
+                                            value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                            onChange={(e) => handleChange(item.k, e.target.value)}
+                                            disabled={isLocked || viewOnly}
+                                            placeholder="0"
+                                            className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                        />
+                                    </div>
+                                ))}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {renderClassInput("Grade 11", "g11")}
-                                {renderClassInput("Grade 12", "g12")}
-                            </div>
-                        </div>
+                        </GridSection>
                     )}
 
                     {!showElem() && !showJHS() && !showSHS() && (
@@ -476,8 +491,8 @@ const OrganizedClasses = () => {
                         </div>
                     )}
 
-                    {/* --- RESTORED CLASS SIZE STANDARD TABLE --- */}
-                    <div className={sectionClass}>
+                    {/* --- CLASS SIZE STANDARD TABLE (Restored & Styled) --- */}
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-6">
                         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
                             <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-xl">
                                 <FiBarChart2 />
@@ -507,8 +522,9 @@ const OrganizedClasses = () => {
                                         <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Grade {g}</td>
                                             <td className="p-1">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
                                                 <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
+                                                    type="text" inputMode="numeric"
                                                     name={`cntLessG${g}`}
                                                     value={classSizeData[`cntLessG${g}`]}
                                                     onChange={handleClassSizeChange}
@@ -518,8 +534,9 @@ const OrganizedClasses = () => {
                                                 />
                                             </td>
                                             <td className="p-1">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
                                                 <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
+                                                    type="text" inputMode="numeric"
                                                     name={`cntWithinG${g}`}
                                                     value={classSizeData[`cntWithinG${g}`]}
                                                     onChange={handleClassSizeChange}
@@ -529,8 +546,9 @@ const OrganizedClasses = () => {
                                                 />
                                             </td>
                                             <td className="p-1">
+                                                <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
                                                 <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
+                                                    type="text" inputMode="numeric"
                                                     name={`cntAboveG${g}`}
                                                     value={classSizeData[`cntAboveG${g}`]}
                                                     onChange={handleClassSizeChange}
@@ -548,22 +566,27 @@ const OrganizedClasses = () => {
                 </form>
             </div>
 
-            {/* --- FLOATING ACTION BAR --- */}
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate('/jurisdiction-schools')} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
-                            <FiArrowLeft /> Back to Schools List
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
-                        <button onClick={handleUpdateClick} className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
-                            <span>✏️</span> UNLOCK EDIT
+                        <button
+                            onClick={() => setShowEditModal(true)}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                        >
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            {originalData && <button onClick={handleCancelEdit} className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">Cancel</button>}
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
-                                {isSaving ? "Saving..." : <><FiSave /> Save Changes</>}
+                            <button onClick={() => { setIsLocked(true); setFormData(originalData?.formData || formData); setClassSizeData(originalData?.classSizeData || classSizeData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
+                                Cancel
+                            </button>
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                                {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>
                     )}
@@ -599,6 +622,19 @@ const OrganizedClasses = () => {
                             <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
                             <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800">Confirm</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showInfoModal && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'How many sections are there per grade level?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>
             )}

@@ -7,7 +7,7 @@ import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
-import { FiArrowLeft, FiCalendar, FiClock, FiWifi, FiCheckCircle, FiSave, FiAlertCircle, FiBookOpen } from 'react-icons/fi';
+import { FiArrowLeft, FiCalendar, FiClock, FiWifi, FiCheckCircle, FiSave, FiAlertCircle, FiBookOpen, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbSchool } from 'react-icons/tb';
 
 // --- SUB-COMPONENT (Moved Outside) ---
@@ -18,6 +18,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
         </div>
         <div>
             <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Shifting Strategy</label>
+            <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Select Dominant Mode</p>
             <div className="relative">
                 <select
                     value={shifts[`shift_${lvl}`] || ''}
@@ -37,6 +38,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
         </div>
         <div>
             <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Learning Delivery</label>
+            <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Select Dominant Mode</p>
             <div className="relative">
                 <select
                     value={modes[`mode_${lvl}`] || ''}
@@ -75,6 +77,7 @@ const ShiftingModalities = () => {
     const [hasSavedData, setHasSavedData] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showInfoModal, setShowInfoModal] = useState(false);
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -98,18 +101,30 @@ const ShiftingModalities = () => {
     };
 
     // --- FETCH DATA (With Offline Offering Recovery) ---
-    // --- FETCH DATA (Refactored for Sync Cache) ---
+    // --- FETCH DATA (Strict Instant Load Strategy) ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // STEP 1: PREPARE DEFAULTS
+                const LEVELS = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+                const defaultShifts = {};
+                const defaultModes = {};
+                LEVELS.forEach(lvl => {
+                    defaultShifts[`shift_${lvl}`] = '';
+                    defaultModes[`mode_${lvl}`] = '';
+                });
+
+                const defaultAdms = {
+                    adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false, adm_others: ''
+                };
+
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
 
                 if (storedSchoolId) setSchoolId(storedSchoolId);
                 if (storedOffering) setOffering(storedOffering);
 
-                // STEP 1: LOAD CACHE IMMEDIATELY
-                // Fix: Standardizing on CACHE_SHIFTING_ to match write key
+                // STEP 2: IMMEDIATE CACHE LOAD
                 let loadedFromCache = false;
                 const CACHE_KEY = `CACHE_SHIFTING_${user.uid}`;
                 const cachedData = localStorage.getItem(CACHE_KEY);
@@ -117,22 +132,27 @@ const ShiftingModalities = () => {
                 if (cachedData) {
                     try {
                         const parsed = JSON.parse(cachedData);
-                        if (parsed.shifts) setShifts(parsed.shifts);
-                        if (parsed.modes) setModes(parsed.modes);
-                        if (parsed.adms) setAdms(parsed.adms);
-                        // Also restore offering if in cache, as it controls visibility
+
+                        // Merge with defaults for safety
+                        setShifts({ ...defaultShifts, ...(parsed.shifts || {}) });
+                        setModes({ ...defaultModes, ...(parsed.modes || {}) });
+                        setAdms({ ...defaultAdms, ...(parsed.adms || {}) });
+
                         if (parsed.curricular_offering) setOffering(parsed.curricular_offering);
 
-                        setIsLocked(true);
+                        const hasData = Object.values(parsed.shifts || {}).some(v => v) || Object.values(parsed.modes || {}).some(v => v) || (parsed.adms && (parsed.adms.adm_mdl || parsed.adms.adm_odl || parsed.adms.adm_tvi || parsed.adms.adm_blended));
+                        setIsLocked(hasData);
                         setLoading(false); // CRITICAL: Instant Load
                         loadedFromCache = true;
                         console.log("Loaded cached Shifting Modalities (Instant Load)");
                     } catch (e) { console.error("Cache parse error", e); }
                 }
 
-                try {
-                    // STEP 2: CHECK OUTBOX
+                // STEP 3: ASYNC OPERATIONS (Outbox & Network)
+                const performAsyncChecks = async () => {
                     let restored = false;
+
+                    // A. Check Outbox
                     if (!viewOnly) {
                         try {
                             const drafts = await getOutbox();
@@ -150,22 +170,23 @@ const ShiftingModalities = () => {
                                 // Map Draft to State
                                 const loadedShifts = {};
                                 const loadedModes = {};
-                                const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-                                levels.forEach(lvl => {
+                                LEVELS.forEach(lvl => {
                                     loadedShifts[`shift_${lvl}`] = p[`shift_${lvl}`] || '';
                                     loadedModes[`mode_${lvl}`] = p[`mode_${lvl}`] || '';
                                 });
-                                const loadedAdms = {
-                                    adm_mdl: p.adm_mdl || false,
-                                    adm_odl: p.adm_odl || false,
-                                    adm_tvi: p.adm_tvi || false,
-                                    adm_blended: p.adm_blended || false,
-                                    adm_others: p.adm_others || ''
-                                };
+                                // Merge draft specifically
+                                setShifts({ ...defaultShifts, ...loadedShifts });
+                                setModes({ ...defaultModes, ...loadedModes });
 
-                                setShifts(loadedShifts);
-                                setModes(loadedModes);
-                                setAdms(loadedAdms);
+                                setAdms({
+                                    ...defaultAdms, ...{
+                                        adm_mdl: p.adm_mdl || false,
+                                        adm_odl: p.adm_odl || false,
+                                        adm_tvi: p.adm_tvi || false,
+                                        adm_blended: p.adm_blended || false,
+                                        adm_others: p.adm_others || ''
+                                    }
+                                });
 
                                 setIsLocked(false);
                                 restored = true;
@@ -175,7 +196,7 @@ const ShiftingModalities = () => {
                         } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
-                    // STEP 3: BACKGROUND FETCH
+                    // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/learning-modalities/${user.uid}`;
                         if (viewOnly && schoolIdParam) {
@@ -185,81 +206,76 @@ const ShiftingModalities = () => {
                         // Only show loading if we didn't load from cache
                         if (!loadedFromCache) setLoading(true);
 
-                        const res = await fetch(fetchUrl);
-                        const json = await res.json();
+                        try {
+                            const res = await fetch(fetchUrl);
+                            const json = await res.json();
 
-                        if (json.exists || (viewOnly && schoolIdParam)) {
-                            // Update IDs
-                            setSchoolId(json.school_id || json.schoolId || storedSchoolId);
-                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
-                            setOffering(newOffering);
+                            if (json.exists || (viewOnly && schoolIdParam)) {
+                                // Update IDs
+                                setSchoolId(json.school_id || json.schoolId || storedSchoolId);
+                                const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                                setOffering(newOffering);
 
-                            if (!viewOnly && json.school_id) {
-                                localStorage.setItem('schoolId', json.school_id || json.schoolId || storedSchoolId);
-                                localStorage.setItem('schoolOffering', newOffering);
+                                if (!viewOnly && json.school_id) {
+                                    localStorage.setItem('schoolId', json.school_id || json.schoolId || storedSchoolId);
+                                    localStorage.setItem('schoolOffering', newOffering);
+                                }
+
+                                const data = (viewOnly && schoolIdParam) ? (json.data || json) : (json.data || {});
+
+                                // Map DB -> State
+                                const loadedShifts = {};
+                                const loadedModes = {};
+                                LEVELS.forEach(lvl => {
+                                    loadedShifts[`shift_${lvl}`] = data[`shift_${lvl}`] || '';
+                                    loadedModes[`mode_${lvl}`] = data[`mode_${lvl}`] || '';
+                                });
+
+                                setShifts({ ...defaultShifts, ...loadedShifts });
+                                setModes({ ...defaultModes, ...loadedModes });
+                                setAdms({
+                                    ...defaultAdms, ...{
+                                        adm_mdl: data.adm_mdl || false,
+                                        adm_odl: data.adm_odl || false,
+                                        adm_tvi: data.adm_tvi || false,
+                                        adm_blended: data.adm_blended || false,
+                                        adm_others: data.adm_others || ''
+                                    }
+                                });
+
+                                const hasData = Object.values(loadedShifts).some(v => v) || Object.values(loadedModes).some(v => v) || (data.adm_mdl || data.adm_odl || data.adm_tvi || data.adm_blended);
+                                setIsLocked(hasData);
+
+                                // Cache It
+                                const cachePayload = {
+                                    shifts: loadedShifts,
+                                    modes: loadedModes,
+                                    adms: {
+                                        adm_mdl: data.adm_mdl || false,
+                                        adm_odl: data.adm_odl || false,
+                                        adm_tvi: data.adm_tvi || false,
+                                        adm_blended: data.adm_blended || false,
+                                        adm_others: data.adm_others || ''
+                                    },
+                                    curricular_offering: newOffering
+                                };
+                                localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
                             }
-
-                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
-
-                            // Map DB to State
-                            const loadedShifts = {};
-                            const loadedModes = {};
-                            const levels = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
-                            levels.forEach(lvl => {
-                                loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
-                                loadedModes[`mode_${lvl}`] = dbData[`mode_${lvl}`] || '';
-                            });
-
-                            const loadedAdms = {
-                                adm_mdl: dbData.adm_mdl || false,
-                                adm_odl: dbData.adm_odl || false,
-                                adm_tvi: dbData.adm_tvi || false,
-                                adm_blended: dbData.adm_blended || false,
-                                adm_others: dbData.adm_others || ''
-                            };
-
-                            setShifts(loadedShifts);
-                            setModes(loadedModes);
-                            setAdms(loadedAdms);
-                            setOriginalData({ shifts: loadedShifts, modes: loadedModes, adms: loadedAdms });
-
-                            // Check Content for Lock
-                            const hasContent = Object.values(loadedShifts).some(v => v) ||
-                                Object.values(loadedModes).some(v => v) ||
-                                loadedAdms.adm_mdl || loadedAdms.adm_odl ||
-                                loadedAdms.adm_tvi || loadedAdms.adm_blended || loadedAdms.adm_others;
-
-                            if (hasContent) {
-                                setIsLocked(true);
-                                setHasSavedData(true);
-                            }
-
-                            // UPDATE CACHE
-                            const cachePayload = { shifts: loadedShifts, modes: loadedModes, adms: loadedAdms, schoolId: dbData.school_id, curricular_offering: newOffering };
-                            localStorage.setItem(CACHE_KEY, JSON.stringify(cachePayload));
+                        } catch (err) {
+                            console.error("Fetch Error:", err);
+                        } finally {
+                            setLoading(false);
                         }
                     }
-                } catch (error) {
-                    console.error("Fetch Error:", error);
-                    if (!loadedFromCache) {
-                        // Fallback: Retry cache
-                        const CACHE_KEY = `CACHE_SHIFTING_${user.uid}`;
-                        const cached = localStorage.getItem(CACHE_KEY);
-                        if (cached) {
-                            const data = JSON.parse(cached);
-                            setShifts(data.shifts);
-                            setModes(data.modes);
-                            setAdms(data.adms);
-                            setOriginalData(data);
-                            setIsLocked(true);
-                        }
-                    }
-                }
+                };
+
+                performAsyncChecks();
             }
-            setLoading(false);
         });
         return () => unsubscribe();
-    }, []);
+    }, [viewOnly, schoolIdParam]);
+
+
 
 
     // --- VISIBILITY HELPERS (Uses 'offering' which is now offline-available) ---
@@ -350,21 +366,26 @@ const ShiftingModalities = () => {
             <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
                 <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center gap-4">
-                    <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiArrowLeft size={24} />
-                    </button>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
-                            {offering && (
-                                <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                    {offering}
-                                </span>
-                            )}
+                <div className="relative z-10 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiArrowLeft size={24} />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
+                                {offering && (
+                                    <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                        {offering}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the shifting schedule and learning delivery mode adopted by each grade level?</p>
                         </div>
-                        <p className="text-blue-100 text-xs font-medium mt-1">{viewOnly ? "Monitor View (Read-Only)" : "Manage schedules and delivery modes"}</p>
                     </div>
+                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <FiHelpCircle size={24} />
+                    </button>
                 </div>
             </div>
 
@@ -436,50 +457,50 @@ const ShiftingModalities = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                        {['adm_mdl', 'adm_odl', 'adm_tvi', 'adm_blended'].map(adm => (
-                            <label key={adm} className="group flex items-center gap-3 p-4 border border-slate-100 rounded-2xl hover:bg-slate-50 cursor-pointer transition-all border-l-4 border-l-transparent hover:border-l-blue-500">
-                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${adms[adm] ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-300 bg-slate-50'}`}>
-                                    {adms[adm] && <FiCheckCircle size={12} />}
-                                    <input type="checkbox" name={adm} checked={adms[adm]} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="hidden" />
-                                </div>
-
-                                <span className="text-xs font-bold text-slate-600 uppercase group-hover:text-blue-700 transition-colors">
-                                    {adm === 'adm_mdl' ? 'Modular' : adm === 'adm_odl' ? 'Online' : adm === 'adm_tvi' ? 'TV/Radio' : 'Blended'}
-                                </span>
-                            </label>
-                        ))}
-                    </div>
-                    <div>
-                        <label className="text-[9px] font-bold text-slate-400 uppercase mb-2 block ml-1">Other Strategies</label>
-                        <textarea
-                            value={adms.adm_others} onChange={handleAdmText} disabled={isLocked || viewOnly}
-                            placeholder="Specify other modes..."
-                            className="w-full p-4 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none" rows="2"
-                        />
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input type="checkbox" name="adm_mdl" checked={adms.adm_mdl} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm font-bold text-slate-700">Modular Distance Learning (MDL)</span>
+                    </label>
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input type="checkbox" name="adm_odl" checked={adms.adm_odl} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm font-bold text-slate-700">Online Distance Learning (ODL)</span>
+                    </label>
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input type="checkbox" name="adm_tvi" checked={adms.adm_tvi} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm font-bold text-slate-700">TV-Based Instruction (TVI/RBI)</span>
+                    </label>
+                    <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                        <input type="checkbox" name="adm_blended" checked={adms.adm_blended} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <span className="text-sm font-bold text-slate-700">Blended Learning</span>
+                    </label>
+                    <div className="mt-4">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Others (Please Specify)</label>
+                        <input type="text" value={adms.adm_others} onChange={handleAdmText} disabled={isLocked || viewOnly} className="w-full p-4 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="e.g. Homeschooling" />
                     </div>
                 </div>
             </div>
 
-            {/* --- FLOATING ACTION BAR --- */}
+            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button
-                            onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2"
-                        >
-                            <FiArrowLeft /> Back to Schools List
+                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                            Back to List
                         </button>
                     ) : isLocked ? (
-                        <button onClick={handleUpdateClick} className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
-                            <span>✏️</span> UNLOCK EDIT
+                        <button
+                            onClick={() => setIsLocked(false)}
+                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                        >
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
                         <>
-                            {originalData && hasSavedData && <button onClick={handleCancelEdit} className="w-1/3 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-colors">Cancel</button>}
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="w-2/3 py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
-                                {isSaving ? "Saving..." : (hasSavedData ? <><FiSave /> Update Changes</> : <><FiSave /> Save Settings</>)}
+                            <button onClick={() => { setIsLocked(true); setShifts(originalData?.shifts || shifts); setModes(originalData?.modes || modes); setAdms(originalData?.adms || adms); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
+                                Cancel
+                            </button>
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
+                                {isSaving ? "Saving..." : "Save Changes"}
                             </button>
                         </>
                     )}
@@ -487,41 +508,58 @@ const ShiftingModalities = () => {
             </div>
 
             {/* --- MODALS --- */}
-            {showEditModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-                        <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
-                            <FiAlertCircle />
-                        </div>
-                        <h3 className="font-bold text-lg text-slate-800">Edit Modalities?</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6">You are to update shifting schedules. Proceed carefully.</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
-                            <button onClick={handleConfirmEdit} className="flex-1 py-3 rounded-xl bg-amber-500 text-white font-bold shadow-sm hover:bg-amber-600">Unlock</button>
+            {
+                showEditModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4 text-amber-500 text-2xl">
+                                <FiAlertCircle />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800">Edit Modalities?</h3>
+                            <p className="text-sm text-slate-500 mt-2 mb-6">You are to update shifting schedules. Proceed carefully.</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                                <button onClick={handleConfirmEdit} className="flex-1 py-3 rounded-xl bg-amber-500 text-white font-bold shadow-sm hover:bg-amber-600">Unlock</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showSaveModal && (
+            {
+                showSaveModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
+                                <FiCheckCircle />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800">{hasSavedData ? "Confirm Update?" : "Confirm Save?"}</h3>
+                            <p className="text-sm text-slate-500 mt-2 mb-6">Are you sure you want to save these modality settings?</p>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
+                                <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800">Confirm</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {showInfoModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4 text-blue-600 text-2xl">
-                            <FiCheckCircle />
+                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                            <FiInfo />
                         </div>
-                        <h3 className="font-bold text-lg text-slate-800">{hasSavedData ? "Confirm Update?" : "Confirm Save?"}</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6">Are you sure you want to save these modality settings?</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500">Cancel</button>
-                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800">Confirm</button>
-                        </div>
+                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the shifting schedule and learning delivery mode adopted by each grade level?'</b></p>
+                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>
             )}
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message={hasSavedData ? 'Settings Updated!' : 'Settings Saved!'} />
-        </div>
+        </div >
     );
 };
 

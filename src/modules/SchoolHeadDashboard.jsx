@@ -7,9 +7,9 @@ import "swiper/css";
 import "swiper/css/pagination";
 
 // Icons (Using the libraries you already have installed)
-import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy } from "react-icons/tb";
+import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy, TbReportAnalytics } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
-import { FiUser } from "react-icons/fi";
+import { FiUser, FiBox, FiLayers } from "react-icons/fi";
 
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -31,7 +31,7 @@ const SchoolHeadDashboard = () => {
     // Stats State
     const [stats, setStats] = useState({
         completedForms: 0,
-        totalForms: 8,
+        totalForms: 10,
         enrollment: 0,
         teachers: 0
     });
@@ -40,26 +40,29 @@ const SchoolHeadDashboard = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState([]);
 
+    // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
     const SEARCHABLE_ITEMS = [
+        // IDENTITY
         { name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600" },
+        { name: "School Head Info", route: "/school-information", icon: FiUser, color: "bg-indigo-100 text-indigo-600" },
+
+        // LEARNERS
         { name: "Enrollment", route: "/enrolment", icon: TbUsers, color: "bg-orange-100 text-orange-600" },
-        { name: "Resources", route: "/school-resources", icon: TbBooks, color: "bg-emerald-100 text-emerald-600" },
-        { name: "Classes", route: "/organized-classes", icon: LuLayoutDashboard, color: "bg-purple-100 text-purple-600" },
-        { name: "Validate Projects", route: "/project-validation", icon: TbSchool, color: "bg-red-100 text-red-600" },
+        { name: "Organized Classes", route: "/organized-classes", icon: FiLayers, color: "bg-purple-100 text-purple-600" },
+        { name: "Learner Statistics", route: "/learner-statistics", icon: TbActivity, color: "bg-pink-100 text-pink-600" },
+        { name: "Shifting & Modality", route: "/shifting-modalities", icon: TbReportAnalytics, color: "bg-cyan-100 text-cyan-600" },
+
+        // FACULTY
+        { name: "Teaching Personnel", route: "/teaching-personnel", icon: FiUser, color: "bg-teal-100 text-teal-600" },
+        { name: "Specialization", route: "/teacher-specialization", icon: FiLayers, color: "bg-lime-100 text-lime-600" },
+
+        // ASSETS
+        { name: "School Resources", route: "/school-resources", icon: FiBox, color: "bg-emerald-100 text-emerald-600" },
+        { name: "Physical Facilities", route: "/physical-facilities", icon: FiLayers, color: "bg-amber-100 text-amber-600" },
     ];
 
-    // Full list for search logic
-    const ALL_ITEMS = [
-        { name: "School Profile", route: "/school-profile" },
-        { name: "School Information (Head)", route: "/school-information" },
-        { name: "Enrollment per Grade Level", route: "/enrolment" },
-        { name: "Organized Classes", route: "/organized-classes" },
-        { name: "Teaching Personnel", route: "/teaching-personnel" },
-        { name: "Shifting & Modality", route: "/shifting-modalities" },
-        { name: "School Resources", route: "/school-resources" },
-        { name: "Teacher Specialization", route: "/teacher-specialization" },
-        { name: "Validate Projects", route: "/project-validation" },
-    ];
+    // Reuse SEARCHABLE_ITEMS for search logic to keep them in sync
+    const ALL_ITEMS = SEARCHABLE_ITEMS;
 
     const handleSearch = (e) => {
         const query = e.target.value;
@@ -90,15 +93,34 @@ const SchoolHeadDashboard = () => {
             });
         };
 
-        if (schoolProfile.school_id) completed++;
-        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completed++;
-        if (schoolProfile.total_enrollment > 0) completed++;
-        if (hasData('classes_', 'number')) completed++;
-        if (hasData('teach_', 'number')) completed++;
-        if (hasData('shift_', 'string') || hasData('mode_', 'string')) completed++;
+        if (schoolProfile.school_id) completed++; // 1. Profile
+        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completed++; // 2. Head Info
+        if (schoolProfile.total_enrollment > 0) completed++; // 3. Enrollment
+
+        // 4. Classes
+        const totalClasses = (schoolProfile.classes_kinder || 0) + (schoolProfile.classes_grade_1 || 0) + (schoolProfile.classes_grade_6 || 0) + (schoolProfile.classes_grade_10 || 0) + (schoolProfile.classes_grade_12 || 0);
+        if (totalClasses > 0) completed++;
+
+        // 5. Learner Stats
+        if (hasData('stat_', 'number')) completed++;
+
+        // 6. Shifting
+        const hasShift = (schoolProfile.shift_kinder || schoolProfile.shift_g1) || (schoolProfile.adm_mdl || schoolProfile.adm_odl);
+        if (hasShift) completed++;
+
+        // 7. Teaching Personnel
+        const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
+        if (totalTeachers > 0) completed++;
+
+        // 8. Specialization
+        if (hasData('spec_', 'number')) completed++;
+
+        // 9. Resources
         const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
         if (hasResources) completed++;
-        if (hasData('spec_', 'number')) completed++;
+
+        // 10. Physical Facilities
+        if (hasData('build_', 'number') || hasData('pf_', 'number')) completed++;
 
         setStats(prev => ({
             ...prev,
@@ -122,8 +144,8 @@ const SchoolHeadDashboard = () => {
                         let targetUid = user.uid;
                         // Impersonation Logic
                         if (userData.role === 'Super User' && impersonatedUid) {
-                             targetUid = impersonatedUid;
-                             setUserName(`Super User (Viewing: ${targetUid.slice(0,5)}...)`); // Optional: indicate view mode
+                            targetUid = impersonatedUid;
+                            setUserName(`Super User (Viewing: ${targetUid.slice(0, 5)}...)`); // Optional: indicate view mode
                         }
 
                         const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
@@ -158,8 +180,8 @@ const SchoolHeadDashboard = () => {
                     {/* --- HEADER SECTION --- */}
                     <div className="relative bg-[#004A99] pt-14 pb-20 px-6 rounded-b-[3rem] shadow-2xl z-0 overflow-hidden">
                         {impersonatedUid && (
-                             <div className="absolute top-6 right-6 z-50">
-                                <button 
+                            <div className="absolute top-6 right-6 z-50">
+                                <button
                                     onClick={() => navigate('/super-admin')}
                                     className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white transition"
                                 >
@@ -176,14 +198,16 @@ const SchoolHeadDashboard = () => {
                                 <div className="inline-flex items-center gap-2 bg-blue-800/50 px-3 py-1 rounded-full border border-blue-400/20 backdrop-blur-sm mb-3">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
                                     <p className="text-blue-100 text-[10px] font-bold tracking-wider uppercase">
-                                        {schoolProfile ? `ID: ${schoolProfile.school_id}` : 'Sync Active'}
+                                        {(headProfile?.head_first_name || headProfile?.first_name) ? 'School Head' : userName}
                                     </p>
                                 </div>
                                 <h1 className="text-3xl font-bold text-white tracking-tight">
-                                    {userName}
+                                    {(headProfile?.head_first_name || headProfile?.first_name) || (schoolProfile ? schoolProfile.school_id : '---')}
                                 </h1>
                                 <p className="text-blue-200 text-sm mt-1 opacity-90">
-                                    {schoolProfile ? schoolProfile.school_name : 'School Principal'}
+                                    {(headProfile?.head_first_name || headProfile?.first_name) && schoolProfile
+                                        ? `${schoolProfile.school_id} • ${schoolProfile.school_name}`
+                                        : (schoolProfile ? schoolProfile.school_name : 'School Principal')}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">

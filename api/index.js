@@ -326,6 +326,63 @@ const initOtpTable = async () => {
         console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
       }
 
+
+      // --- MIGRATION: DETAILED ENROLLMENT COLUMNS ---
+      try {
+        await client.query(`
+        ALTER TABLE school_profiles 
+        -- Elementary
+        ADD COLUMN IF NOT EXISTS grade_kinder INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_1 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_2 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_3 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_4 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_5 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_6 INTEGER DEFAULT 0,
+
+        -- JHS
+        ADD COLUMN IF NOT EXISTS grade_7 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_8 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_9 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_10 INTEGER DEFAULT 0,
+
+        -- SHS Grade 11
+        ADD COLUMN IF NOT EXISTS abm_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS stem_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS humss_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS gas_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_ict_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_he_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_ia_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_afa_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS arts_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS sports_11 INTEGER DEFAULT 0,
+
+        -- SHS Grade 12
+        ADD COLUMN IF NOT EXISTS abm_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS stem_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS humss_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS gas_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_ict_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_he_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_ia_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS tvl_afa_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS arts_12 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS sports_12 INTEGER DEFAULT 0,
+
+        -- Totals
+        ADD COLUMN IF NOT EXISTS es_enrollment INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS jhs_enrollment INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS shs_enrollment INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS total_enrollment INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_11 INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS grade_12 INTEGER DEFAULT 0;
+      `);
+        console.log('✅ Checked/Added Detailed Enrollment columns');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate enrollment columns:', migErr.message);
+      }
+
       // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
       try {
         await client.query(`
@@ -1019,16 +1076,119 @@ app.get('/api/school-head/:uid', async (req, res) => {
   }
 });
 
+// --- 6b. GET: Get Enrolment Data ---
+app.get('/api/enrolment/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({ exists: true, data: result.rows[0], school_id: result.rows[0].school_id, curricular_offering: result.rows[0].curricular_offering });
+  } catch (err) {
+    console.error("Get Enrolment Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+
+
+
+
+// --- 5. POST: Save Enrolment ---
 // --- 7. POST: Save Enrolment ---
 app.post('/api/save-enrolment', async (req, res) => {
   const data = req.body;
+  console.log('📥 RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
+  const newLogEntry = { timestamp: new Date().toISOString(), user: data.submittedBy, action: 'Enrolment Update', offering: data.curricularOffering };
 
-  console.log("📥 RECEIVED ENROLMENT DATA:", JSON.stringify(data, null, 2));
+  try {
+    const query = ` UPDATE school_profiles SET curricular_offering = $2, es_enrollment = $3, jhs_enrollment = $4, shs_enrollment = $5, total_enrollment = $6, grade_kinder = $7, grade_1 = $8, grade_2 = $9, grade_3 = $10, grade_4 = $11, grade_5 = $12, grade_6 = $13, grade_7 = $14, grade_8 = $15, grade_9 = $16, grade_10 = $17, grade_11 = $18, grade_12 = $19, abm_11=$20, abm_12=$21, stem_11=$22, stem_12=$23, humss_11=$24, humss_12=$25, gas_11=$26, gas_12=$27, tvl_ict_11=$28, tvl_ict_12=$29, tvl_he_11=$30, tvl_he_12=$31, tvl_ia_11=$32, tvl_ia_12=$33, tvl_afa_11=$34, tvl_afa_12=$35, arts_11=$36, arts_12=$37, sports_11=$38, sports_12=$39,
+
+    -- ARAL Fields
+    aral_math_g1=$41, aral_read_g1=$42, aral_sci_g1=$43,
+    aral_math_g2=$44, aral_read_g2=$45, aral_sci_g2=$46,
+    aral_math_g3=$47, aral_read_g3=$48, aral_sci_g3=$49,
+    aral_math_g4=$50, aral_read_g4=$51, aral_sci_g4=$52,
+    aral_math_g5=$53, aral_read_g5=$54, aral_sci_g5=$55,
+    aral_math_g6=$56, aral_read_g6=$57, aral_sci_g6=$58,
+    aral_total=$59,
+    submitted_at = CURRENT_TIMESTAMP,
+    history_logs = history_logs || $40::jsonb
+  WHERE school_id = $1;
+`;
+    const values = [
+      data.schoolId, data.curricularOffering,
+      data.esTotal, data.jhsTotal, data.shsTotal, data.grandTotal,
+
+      // Elementary (Corrected to use snake_case)
+      data.grade_kinder, data.grade_1, data.grade_2, data.grade_3,
+      data.grade_4, data.grade_5, data.grade_6,
+
+      // JHS (Corrected)
+      data.grade_7, data.grade_8, data.grade_9, data.grade_10,
+
+      // SHS (Corrected)
+      data.grade_11, data.grade_12,
+      data.abm_11, data.abm_12, data.stem_11, data.stem_12,
+      data.humss_11, data.humss_12, data.gas_11, data.gas_12,
+      data.tvl_ict_11, data.tvl_ict_12, data.tvl_he_11, data.tvl_he_12,
+      data.tvl_ia_11, data.tvl_ia_12, data.tvl_afa_11, data.tvl_afa_12,
+      data.arts_11, data.arts_12, data.sports_11, data.sports_12,
+
+      JSON.stringify(newLogEntry),
+      // ARAL Values
+      data.aral_math_g1 || 0, data.aral_read_g1 || 0, data.aral_sci_g1 || 0,
+      data.aral_math_g2 || 0, data.aral_read_g2 || 0, data.aral_sci_g2 || 0,
+      data.aral_math_g3 || 0, data.aral_read_g3 || 0, data.aral_sci_g3 || 0,
+      data.aral_math_g4 || 0, data.aral_read_g4 || 0, data.aral_sci_g4 || 0,
+      data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0,
+      data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,
+      data.aral_total || 0
+    ];
+    const result = await pool.query(query, values);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "School Profile not found." });
+    }
+    await logActivity(
+      data.submittedBy,
+      'School Head',
+      'School Head',
+      'UPDATE',
+      `Enrolment Data: ${data.schoolId}`,
+      `Updated enrolment (Total: ${data.grandTotal})`
+    );
+    res.status(200).json({ message: "Enrolment updated successfully!" });
+  } catch (err) { console.error("Enrolment Save Error:", err); res.status(500).json({ message: "Database error", error: err.message }); }
+});
+
+// --- 6. GET: Fetch Enrolment ---
+app.get('/api/enrolment/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length > 0) {
+      res.json({ exists: true, data: result.rows[0] });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error("Fetch Enrolment Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// ==================================================================
+//                    ENGINEER FORMS ROUTES
+// ==================================================================
+
+// --- 7. POST: Save Enrolment (Fixed with snake_case and null safety) ---
+app.post('/api/save-enrolment', async (req, res) => {
+  const data = req.body;
+  console.log('📥 RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
 
   const newLogEntry = {
     timestamp: new Date().toISOString(),
     user: data.submittedBy,
-    action: "Enrolment Update",
+    action: 'Enrolment Update',
     offering: data.curricularOffering
   };
 
@@ -1065,56 +1225,63 @@ app.post('/api/save-enrolment', async (req, res) => {
 
     const values = [
       data.schoolId, data.curricularOffering,
-      data.esTotal, data.jhsTotal, data.shsTotal, data.grandTotal,
-      data.gradeKinder, data.grade1, data.grade2, data.grade3,
-      data.grade4, data.grade5, data.grade6,
-      data.grade7, data.grade8, data.grade9, data.grade10,
-      data.grade11, data.grade12,
-      data.abm11, data.abm12, data.stem11, data.stem12,
-      data.humss11, data.humss12, data.gas11, data.gas12,
-      data.ict11, data.ict12, data.he11, data.he12,
-      data.ia11, data.ia12, data.afa11, data.afa12,
-      data.arts11, data.arts12, data.sports11, data.sports12,
+      data.esTotal || 0, data.jhsTotal || 0, data.shsTotal || 0, data.grandTotal || 0,
+
+      // Elementary (Corrected to use snake_case + null safety)
+      data.grade_kinder || 0, data.grade_1 || 0, data.grade_2 || 0, data.grade_3 || 0,
+      data.grade_4 || 0, data.grade_5 || 0, data.grade_6 || 0,
+
+      // JHS (Corrected)
+      data.grade_7 || 0, data.grade_8 || 0, data.grade_9 || 0, data.grade_10 || 0,
+
+      // SHS (Corrected)
+      data.grade_11 || 0, data.grade_12 || 0,
+      data.abm_11 || 0, data.abm_12 || 0, data.stem_11 || 0, data.stem_12 || 0,
+      data.humss_11 || 0, data.humss_12 || 0, data.gas_11 || 0, data.gas_12 || 0,
+      data.tvl_ict_11 || 0, data.tvl_ict_12 || 0, data.tvl_he_11 || 0, data.tvl_he_12 || 0,
+      data.tvl_ia_11 || 0, data.tvl_ia_12 || 0, data.tvl_afa_11 || 0, data.tvl_afa_12 || 0,
+      data.arts_11 || 0, data.arts_12 || 0, data.sports_11 || 0, data.sports_12 || 0,
+
       JSON.stringify(newLogEntry),
 
-      // ARAL Values (41-58)
-      data.aral_math_g1 || 0, data.aral_read_g1 || 0, data.aral_sci_g1 || 0, // 41-43
-      data.aral_math_g2 || 0, data.aral_read_g2 || 0, data.aral_sci_g2 || 0, // 44-46
-      data.aral_math_g3 || 0, data.aral_read_g3 || 0, data.aral_sci_g3 || 0, // 47-49
-      data.aral_math_g4 || 0, data.aral_read_g4 || 0, data.aral_sci_g4 || 0, // 50-52
-      data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0, // 53-55
-      data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,  // 56-58
-      data.aral_total || 0 // 59
+      // ARAL Values
+      data.aral_math_g1 || 0, data.aral_read_g1 || 0, data.aral_sci_g1 || 0,
+      data.aral_math_g2 || 0, data.aral_read_g2 || 0, data.aral_sci_g2 || 0,
+      data.aral_math_g3 || 0, data.aral_read_g3 || 0, data.aral_sci_g3 || 0,
+      data.aral_math_g4 || 0, data.aral_read_g4 || 0, data.aral_sci_g4 || 0,
+      data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0,
+      data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,
+      data.aral_total || 0
     ];
 
     const result = await pool.query(query, values);
 
     if (result.rowCount === 0) {
+      console.error("❌ School Profile not found for ID:", data.schoolId);
       return res.status(404).json({ message: "School Profile not found." });
     }
 
-    // --- CENTRALIZED AUDIT LOG ---
+    // DEBUG: Immediate Verification
+    const verify = await pool.query("SELECT grade_kinder, es_enrollment FROM school_profiles WHERE school_id = $1", [data.schoolId]);
+    if (verify.rows.length > 0) {
+      console.log("✅ DB VERIFY: grade_kinder =", verify.rows[0].grade_kinder);
+    }
+
     await logActivity(
-      data.submittedBy,
-      'School Head',
-      'School Head',
-      'UPDATE',
+      data.submittedBy, 'School Head', 'School Head', 'UPDATE',
       `Enrolment Data: ${data.schoolId}`,
       `Updated enrolment (Total: ${data.grandTotal})`
     );
 
+    console.log("✅ Enrolment updated successfully!");
     res.status(200).json({ message: "Enrolment updated successfully!" });
 
   } catch (err) {
-    console.error("Enrolment Save Error:", err);
+    console.error("❌ Enrolment Save Error:", err);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 });
 
-
-// ==================================================================
-//                    ENGINEER FORMS ROUTES
-// ==================================================================
 
 // --- 8. POST: Save New Project (Updated for Images & Transactions) ---
 app.post('/api/save-project', async (req, res) => {
@@ -2182,43 +2349,78 @@ app.get('/api/leaderboard', async (req, res) => {
       params.push(filter);
     }
 
-    const query = `
-SELECT
-school_id, school_name, division, region,
-
-  --Calculate Completion Percentage(Simple Weighting)
+    const calculation = `
     (
       (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + --Basic Profile
         (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + --Enrollment
           (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + --School Head
-            (CASE WHEN res_toilets_male > 0 OR res_armchairs_good > 0 THEN 1 ELSE 0 END) + --Resources(Basic Check)
-              (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Classes
-                (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
-                  (CASE WHEN spec_math_major > 0 OR spec_english_major > 0 THEN 1 ELSE 0 END) --Specialization
-                ) * 100.0 / 7.0 as completion_rate,
+            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Classes
+              (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
+                (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
+                  (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
+                    (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
+                      (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
+                        (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
+                ) * 100.0 / 10.0`;
 
-  updated_at
-            FROM school_profiles
-            ${whereClause}
-            ORDER BY completion_rate DESC, updated_at DESC
-  `;
+    let query = '';
+
+    if (scope === 'national') {
+      // Aggregate by Region
+      query = `
+        SELECT region as name,
+        CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
+        FROM school_profiles
+        WHERE region IS NOT NULL
+        GROUP BY region
+        ORDER BY avg_completion DESC
+      `;
+    } else if (scope === 'national_divisions') {
+      // Aggregate by Division (National)
+      query = `
+        SELECT division as name, region,
+        CAST(AVG(${calculation}) AS DECIMAL(10,1)) as avg_completion
+        FROM school_profiles
+        WHERE division IS NOT NULL
+        GROUP BY division, region
+        ORDER BY avg_completion DESC
+      `;
+    } else {
+      // School Level List (Division or Region Scope)
+      query = `
+        SELECT
+        school_id, school_name, division, region,
+        ${calculation} as completion_rate,
+        updated_at
+        FROM school_profiles
+        ${whereClause}
+        ORDER BY completion_rate DESC, updated_at DESC
+      `;
+    }
 
     const result = await pool.query(query, params);
 
-    // Calculate Division Averages if requesting Regional View
-    let responseData = { schools: result.rows };
+    let responseData = {};
 
-    if (scope === 'region') {
-      const divMap = {};
-      result.rows.forEach(s => {
-        if (!divMap[s.division]) divMap[s.division] = { name: s.division, total: 0, count: 0 };
-        divMap[s.division].total += parseFloat(s.completion_rate);
-        divMap[s.division].count++;
-      });
-      responseData.divisions = Object.values(divMap).map(d => ({
-        name: d.name,
-        avg_completion: (d.total / d.count).toFixed(1)
-      })).sort((a, b) => b.avg_completion - a.avg_completion);
+    if (scope === 'national') {
+      responseData = { regions: result.rows };
+    } else if (scope === 'national_divisions') {
+      responseData = { divisions: result.rows };
+    } else {
+      responseData = { schools: result.rows };
+      // Calculate Division Averages if requesting Regional View
+      if (scope === 'region') {
+        const divMap = {};
+        result.rows.forEach(s => {
+          if (!divMap[s.division]) divMap[s.division] = { name: s.division, total: 0, count: 0 };
+          divMap[s.division].total += parseFloat(s.completion_rate);
+          divMap[s.division].count++;
+        });
+        responseData.divisions = Object.values(divMap).map(d => ({
+          name: d.name,
+          avg_completion: (d.total / d.count).toFixed(1)
+        })).sort((a, b) => b.avg_completion - a.avg_completion);
+      }
     }
 
     res.json(responseData);
