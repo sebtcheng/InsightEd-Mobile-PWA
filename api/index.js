@@ -2335,11 +2335,14 @@ app.get('/api/monitoring/stats', async (req, res) => {
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 7 THEN 1 ELSE 0 END) as completed_schools_count
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+        ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
     `;
@@ -2377,11 +2380,14 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 7 THEN 1 ELSE 0 END) as completed_schools
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+        ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1)
       GROUP BY division
@@ -2410,11 +2416,14 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-           (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
-        ) = 7 THEN 1 ELSE 0 END) as completed_schools
+           (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+           (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+        ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
       WHERE TRIM(region) = TRIM($1) AND TRIM(division) = TRIM($2)
       GROUP BY district
@@ -2446,7 +2455,9 @@ app.get('/api/monitoring/schools', async (req, res) => {
         (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
           (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
             (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-              (CASE WHEN sp.res_armchairs_good > 0 OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+              (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+              (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
+              (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
                 sp.submitted_by
       FROM school_profiles sp
       WHERE TRIM(sp.region) = TRIM($1)
@@ -2679,11 +2690,14 @@ app.get('/api/monitoring/regions', async (req, res) => {
             (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
             (CASE WHEN head_last_name IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN res_toilets_male IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN classes_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
-            (CASE WHEN spec_math_major IS NOT NULL THEN 1 ELSE 0 END)
-          ) = 7 THEN 1 ELSE 0 END) as completed_schools
+            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
+          ) = 10 THEN 1 ELSE 0 END) as completed_schools
         FROM school_profiles
         GROUP BY region
       ),
