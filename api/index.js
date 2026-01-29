@@ -561,7 +561,7 @@ const initOtpTable = async () => {
 //                        HELPER FUNCTIONS
 // ==================================================================
 
-const valueOrNull = (value) => (value === '' ? null : value);
+const valueOrNull = (value) => (value === '' || value === undefined ? null : value);
 
 const parseNumberOrNull = (value) => {
   if (value === '' || value === null || value === undefined) return null;
@@ -1604,14 +1604,16 @@ app.put('/api/update-project/:id', async (req, res) => {
 
   const query = `
     UPDATE "engineer_form"
-    SET status = $1, accomplishment_percentage = $2, status_as_of = $3, other_remarks = $4
-    WHERE project_id = $5
+    SET status = $1, accomplishment_percentage = $2, status_as_of = $3, other_remarks = $4, actual_completion_date = $5
+    WHERE project_id = $6
     RETURNING *;
   `;
 
   const values = [
     data.status, parseIntOrNull(data.accomplishmentPercentage),
-    valueOrNull(data.statusAsOfDate), valueOrNull(data.otherRemarks), id
+    valueOrNull(data.statusAsOfDate), valueOrNull(data.otherRemarks),
+    valueOrNull(data.actualCompletionDate),
+    id
   ];
 
   try {
@@ -2529,8 +2531,8 @@ app.get('/api/monitoring/engineer-projects', async (req, res) => {
         e.accomplishment_percentage as "accomplishmentPercentage", e.status, e.project_allocation as "projectAllocation",
         e.validation_status as "validation_status", e.status_as_of as "statusAsOfDate"
       FROM engineer_form e
-      JOIN school_profiles sp ON e.school_id = sp.school_id
-      WHERE TRIM(sp.region) = TRIM($1)
+      LEFT JOIN school_profiles sp ON e.school_id = sp.school_id
+      WHERE TRIM(e.region) = TRIM($1)
     `;
     let params = [region];
 

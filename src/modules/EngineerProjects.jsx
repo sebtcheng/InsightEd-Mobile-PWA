@@ -140,7 +140,13 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                     {(p.status === ProjectStatus.Ongoing || p.status === ProjectStatus.Completed || progress > 0) ? (
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
-                          <span>PROGRESS</span>
+                          <div className="flex items-center gap-1">
+                             <span>PROGRESS</span>
+                             {/* LATE BADGE */ }
+                             {p.status === ProjectStatus.Completed && p.actualCompletionDate && p.targetCompletionDate && new Date(p.actualCompletionDate) > new Date(p.targetCompletionDate) && (
+                                <span className="text-[7px] bg-red-100 text-red-600 px-1 py-0.5 rounded border border-red-200">LATE</span>
+                             )}
+                          </div>
                           <span className={progress === 100 ? "text-emerald-500 dark:text-emerald-400" : "text-[#004A99] dark:text-blue-400"}>
                             {progress}%
                           </span>
@@ -372,6 +378,34 @@ const EditProjectModal = ({
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
+
+          {/* CHECK: Conditional Actual Completion Date for Completed Status */}
+          {formData.status === ProjectStatus.Completed && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
+               <div className="flex justify-between items-center ml-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actual Completion Date</label>
+                  {formData.actualCompletionDate && formData.targetCompletionDate && new Date(formData.actualCompletionDate) > new Date(formData.targetCompletionDate) && (
+                      <span className="text-[9px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 uppercase tracking-widest animate-pulse">
+                         ⚠️ Late Completion
+                      </span>
+                  )}
+               </div>
+               <input
+                type="date"
+                name="actualCompletionDate"
+                value={formData.actualCompletionDate || ""}
+                onChange={handleChange}
+                className={`w-full p-3 border rounded-2xl text-sm font-bold shadow-sm transition-all outline-none ${
+                    formData.actualCompletionDate && formData.targetCompletionDate && new Date(formData.actualCompletionDate) > new Date(formData.targetCompletionDate)
+                    ? "bg-red-50 border-red-200 text-red-700 focus:ring-2 focus:ring-red-200"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-700 focus:ring-2 focus:ring-emerald-200"
+                }`}
+              />
+              <p className="text-[9px] text-slate-400 ml-1 italic">
+                 Target was: {formatDateShort(formData.targetCompletionDate)}
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Engineering Remarks</label>

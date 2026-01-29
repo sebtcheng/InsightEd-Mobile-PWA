@@ -4,7 +4,7 @@ import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse'; 
 import { auth } from '../firebase'; 
 // --- IMPORT NEW DB LOGIC ---
-import { addEngineerToOutbox } from '../db';
+import { addEngineerToOutbox, getCachedProjects } from '../db';
 import { compressImage } from '../utils/imageCompression';
 
 // Helper component for Section Headers
@@ -30,8 +30,9 @@ const NewProjects = () => {
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]); 
 
-    // --- 1. LOAD CSV DATA ON MOUNT ---
+    // --- 1. LOAD CSV DATA & CHECK PROJECT LIMIT ON MOUNT ---
     useEffect(() => {
+        // A. Load CSV
         Papa.parse('/schools.csv', {
             download: true,
             header: true, 
@@ -44,7 +45,47 @@ const NewProjects = () => {
                 console.error("Error loading CSV:", err);
             }
         });
-    }, []);
+
+        // B. Check Project Limit (Max 3)
+        const checkProjectLimit = async () => {
+            if (isDummy) return; // Skip check for dummy/preview
+            
+            const user = auth.currentUser;
+            if (!user) return;
+
+            try {
+                let count = 0;
+                // 1. Online Check
+                if (navigator.onLine) {
+                     const response = await fetch(`/api/projects?engineer_id=${user.uid}`);
+                     if (response.ok) {
+                         const projects = await response.json();
+                         count = projects.length;
+                     } else {
+                         throw new Error("API check failed, falling back to cache");
+                     }
+                } else {
+                    // 2. Offline Fallback
+                    const cached = await getCachedProjects();
+                    count = cached.length;
+                }
+
+                if (count >= 3) {
+                    alert("⚠️ PREVIEW LIMIT REACHED\n\nYou have reached the limit of 3 projects for this account.\nPlease contact admin or update your existing projects.");
+                    navigate('/engineer-dashboard');
+                }
+            } catch (err) {
+                console.warn("Limit check failed, falling back to cache:", err);
+                const cached = await getCachedProjects();
+                if (cached.length >= 3) {
+                    alert("⚠️ PREVIEW LIMIT REACHED\n\nYou have reached the limit of 3 projects for this account.\nPlease contact admin or update your existing projects.");
+                    navigate('/engineer-dashboard');
+                }
+            }
+        };
+
+        checkProjectLimit();
+    }, [isDummy, navigate]);
 
     // --- PRE-FILL DUMMY DATA ---
     useEffect(() => {

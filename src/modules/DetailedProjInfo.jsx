@@ -33,7 +33,7 @@ const DetailedProjInfo = () => {
 
             // 2. Network Request (Background Sync)
             try {
-                const response = await fetch(`/api/projects/${id}`);
+                const response = await fetch(`/api/projects/${id}?_t=${Date.now()}`);
                 if (!response.ok) throw new Error("Project not found");
                 const data = await response.json();
                 setProject(data);
@@ -147,7 +147,24 @@ const DetailedProjInfo = () => {
                         <div className="grid grid-cols-2 gap-3">
                             <DetailItem label="Notice to Proceed" value={project.noticeToProceed} />
                             <DetailItem label="Target Completion" value={project.targetCompletionDate} />
-                            <DetailItem label="Actual Completion" value={project.actualCompletionDate} />
+                            
+                            {/* Actual Completion with Late Logic */}
+                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
+                                <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Actual Completion</p>
+                                <p className={`text-sm font-semibold ${
+                                    project.actualCompletionDate && project.targetCompletionDate && new Date(project.actualCompletionDate) > new Date(project.targetCompletionDate)
+                                    ? "text-red-600"
+                                    : "text-slate-800"
+                                }`}>
+                                    {project.actualCompletionDate || 'N/A'}
+                                </p>
+                                {project.actualCompletionDate && project.targetCompletionDate && new Date(project.actualCompletionDate) > new Date(project.targetCompletionDate) && (
+                                    <div className="absolute top-0 right-0 bg-red-100 text-red-600 text-[9px] font-bold px-2 py-1 rounded-bl-lg">
+                                        LATE
+                                    </div>
+                                )}
+                            </div>
+
                             <DetailItem label="Status As Of" value={project.statusAsOfDate} />
                         </div>
                     </div>

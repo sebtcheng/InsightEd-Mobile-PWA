@@ -67,9 +67,15 @@ const MonitoringDashboard = () => {
                 const data = await res.json();
                 // Filter by status on client side
                 const filtered = data.filter(p => {
-                    const s = p.status?.toLowerCase() || '';
-                    const q = status.toLowerCase();
-                    return s === q; // Strict matching now for all statuses
+                    const s = p.status?.toString().toLowerCase().trim() || '';
+                    const q = status.toString().toLowerCase().trim();
+
+                    // Robust matching to align with backend "ILIKE %...%" for procurement
+                    if (q.includes('under procurement')) {
+                        return s.includes('under procurement');
+                    }
+
+                    return s === q; 
                 });
                 setProjectListModal(prev => ({ ...prev, projects: filtered, isLoading: false }));
             } else {
