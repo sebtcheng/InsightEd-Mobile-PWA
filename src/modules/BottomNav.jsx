@@ -40,14 +40,14 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Regional Office': [
-            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
-            { label: 'Engineer', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             // { label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
-            { label: 'Home', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
-            { label: 'Engineer', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
+            { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
             //{ label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare }, 
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],

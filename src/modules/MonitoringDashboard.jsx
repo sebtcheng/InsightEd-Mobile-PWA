@@ -9,6 +9,17 @@ import { TbTrophy, TbSchool } from 'react-icons/tb';
 
 import Papa from 'papaparse';
 
+
+// Helper for robust name matching (ignoring "Division", "District" suffixes)
+const normalizeLocationName = (name) => {
+    return name?.toString().toLowerCase().trim()
+        .replace(/\s+division$/, '')
+        .replace(/\s+district$/, '')
+        .replace(/^division\s+of\s+/, '')
+        .replace(/^district\s+of\s+/, '')
+        .trim() || '';
+};
+
 const MonitoringDashboard = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -34,6 +45,7 @@ const MonitoringDashboard = () => {
     const [districtStats, setDistrictStats] = useState([]); // Per-district stats for SDO
     const [districtSchools, setDistrictSchools] = useState([]); // Schools for Drill-down
     const [loadingDistrict, setLoadingDistrict] = useState(false);
+    const [schoolSort, setSchoolSort] = useState('pct-desc'); // Sort state for schools
 
     // NEW: Store Aggregated CSV Totals
     const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
@@ -109,6 +121,11 @@ const MonitoringDashboard = () => {
                     setLoading(false);
                     return; // Stop here, don't fetch detailed stats yet
                 }
+            } else {
+                // For Regional Office and School Division Office, ALWAYS use their assigned jurisdiction
+                // if not explicitly overridden (though they usually can't override)
+                queryRegion = currentUserData.region;
+                queryDivision = currentUserData.division;
             }
 
             const params = new URLSearchParams({
@@ -700,7 +717,7 @@ const MonitoringDashboard = () => {
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
                                 <div className="grid grid-cols-2 gap-4">
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl ${activeTab === 'accomplishment' ? 'col-span-2' : ''}`}>
+                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl ${(activeTab === 'accomplishment' || activeTab === 'all' || activeTab === 'home') ? 'col-span-2' : ''}`}>
                                             {(() => {
                                                 // Use Memoized Jurisdiction Total
                                                 const displayTotal = jurisdictionTotal;
@@ -722,14 +739,14 @@ const MonitoringDashboard = () => {
                                                                 <span className="text-[#004A99] dark:text-blue-300">({completedCount} / {displayTotal})</span>
                                                             </p>
                                                         </div>
-                                                        {activeTab === 'accomplishment' && <TbTrophy size={40} className="text-blue-200" />}
+                                                        {(activeTab === 'accomplishment' || activeTab === 'all' || activeTab === 'home') && <TbTrophy size={40} className="text-blue-200" />}
                                                     </div>
                                                 );
                                             })()}
                                         </div>
                                     )}
                                     
-                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'infra') && (
+                                    {(activeTab === 'infra') && (
                                         <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl ${activeTab === 'infra' ? 'col-span-2' : ''}`}>
                                             <div className="flex flex-col h-full justify-center">
                                                 <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{engStats?.total_projects || 0}</span>
@@ -777,8 +794,8 @@ const MonitoringDashboard = () => {
                                                     ).length;
 
                                                     // 3. Get Completed Count from Backend Stats
-                                                    // Find the matching entry in divisionStats array (Case Insensitive Match)
-                                                    const startStat = divisionStats.find(d => d.division?.trim().toLowerCase() === divName?.trim().toLowerCase());
+                                                    // Find the matching entry in divisionStats array (Robust Matching)
+                                                    const startStat = divisionStats.find(d => normalizeLocationName(d.division) === normalizeLocationName(divName));
                                                     const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
 
                                                     // 4. Calculate Percentage
@@ -834,95 +851,135 @@ const MonitoringDashboard = () => {
                                                 return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
                                             }
 
-                                            // Categorize Schools
-                                            // Completed = All 7 flags are true
-                                            const completedSchools = districtSchools.filter(s => 
-                                                s.profile_status && s.head_status && s.enrollment_status && 
-                                                s.classes_status && s.personnel_status && 
-                                                s.specialization_status && s.resources_status
-                                            );
+                                            // Calculate Accomplishment Percentage for ALL Schools
+                                            const schoolsWithStats = districtSchools.map(s => {
+                                                const checks = [
+                                                    s.profile_status, s.head_status, s.enrollment_status,
+                                                    s.classes_status, s.personnel_status, s.specialization_status,
+                                                    s.resources_status, s.shifting_status, s.learner_stats_status,
+                                                    s.facilities_status
+                                                ];
+                                                const completedCount = checks.filter(Boolean).length;
+                                                const totalChecks = 10;
+                                                const percentage = Math.round((completedCount / totalChecks) * 100);
+                                                
+                                                // Identify missing for tooltip/subtitle if needed
+                                                const missing = [];
+                                                if (!s.profile_status) missing.push("Profile");
+                                                if (!s.head_status) missing.push("School Head");
+                                                if (!s.enrollment_status) missing.push("Enrollment");
+                                                if (!s.classes_status) missing.push("Classes");
+                                                if (!s.personnel_status) missing.push("Personnel");
+                                                if (!s.specialization_status) missing.push("Specialization");
+                                                if (!s.resources_status) missing.push("Resources");
+                                                if (!s.shifting_status) missing.push("Modalities");
+                                                if (!s.learner_stats_status) missing.push("Learner Stats");
+                                                if (!s.facilities_status) missing.push("Facilities");
+
+                                                return { ...s, percentage, missing };
+                                            });
+
+                                            // Sort State (Local to this block? No, better to be at component level, but for now lets default and allow toggle)
+                                            // Since we are inside a render function (bad practice usually, but following existing pattern), 
+                                            // we will use a simple sort based on a variable we can't easily change via state without moving specific state up.
+                                            // Ideally, `sortOption` should be a state variable in the main component. 
+                                            // I'll add `sortOption` to the main component state in a separate edit if needed, 
+                                            // but to be safe and clean, I should declare `sortOption` at the top. 
+                                            // FOR NOW: I'll assume I can add the state in the next step or use a default sort here and add UI controls.
+                                            // Actually, the user asked for a sort feature. I must add state.
+                                            // I will use a ref or just hardcode a default for this step and then add the state variable in `MonitoringDashboard` top level.
                                             
-                                            // Incomplete = Any flag is false
-                                            const incompleteSchools = districtSchools.filter(s => 
-                                                !(s.profile_status && s.head_status && s.enrollment_status && 
-                                                s.classes_status && s.personnel_status && 
-                                                s.specialization_status && s.resources_status)
-                                            );
+                                            // Let's modify the code to assume `schoolSort` state exists. I will add it in a subsequent tool call.
+                                            const sortedSchools = [...schoolsWithStats].sort((a, b) => {
+                                                 if (schoolSort === 'name-asc') return a.school_name.localeCompare(b.school_name);
+                                                 if (schoolSort === 'pct-desc') return b.percentage - a.percentage;
+                                                 if (schoolSort === 'pct-asc') return a.percentage - b.percentage;
+                                                 return 0;
+                                            });
 
                                             return (
                                                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                                                     {/* Header with Back Button */}
-                                                    <div className="flex items-center gap-3">
-                                                        <button 
-                                                            onClick={() => handleDistrictChange('')}
-                                                            className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
-                                                        >
-                                                            <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
-                                                        </button>
-                                                        <div>
-                                                            <h3 className="font-black text-xl text-slate-800 dark:text-white">{coDistrict}</h3>
-                                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Submission Status</p>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-3">
+                                                            <button 
+                                                                onClick={() => handleDistrictChange('')}
+                                                                className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
+                                                            >
+                                                                <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
+                                                            </button>
+                                                            <div>
+                                                                <h3 className="font-black text-xl text-slate-800 dark:text-white">{coDistrict}</h3>
+                                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">School List</p>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Sort Controls */}
+                                                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                                                            <button 
+                                                                onClick={() => setSchoolSort('name-asc')}
+                                                                className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'name-asc' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}
+                                                                title="Sort A-Z"
+                                                            >
+                                                                A-Z
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setSchoolSort('pct-desc')}
+                                                                className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-desc' ? 'bg-white dark:bg-slate-600 shadow text-emerald-600 dark:text-emerald-300' : 'text-slate-400'}`}
+                                                                title="Sort % High-Low"
+                                                            >
+                                                                % High
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setSchoolSort('pct-asc')}
+                                                                className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-asc' ? 'bg-white dark:bg-slate-600 shadow text-rose-600 dark:text-rose-300' : 'text-slate-400'}`}
+                                                                title="Sort % Low-High"
+                                                            >
+                                                                % Low
+                                                            </button>
                                                         </div>
                                                     </div>
 
-                                                    {/* COMPLETED SCHOOLS */}
-                                                    <div className="bg-emerald-50/50 dark:bg-emerald-900/10 p-5 rounded-2xl border border-emerald-100 dark:border-emerald-800/30">
-                                                        <div className="flex items-center gap-2 mb-4">
-                                                            <FiCheckCircle className="text-emerald-500" size={20} />
-                                                            <h4 className="font-black text-emerald-700 dark:text-emerald-400 text-sm uppercase tracking-wider">Completed All Forms ({completedSchools.length})</h4>
-                                                        </div>
-                                                        {completedSchools.length === 0 ? (
-                                                            <p className="text-xs text-emerald-600/60 italic">No schools have completed all forms yet.</p>
-                                                        ) : (
-                                                            <div className="space-y-2">
-                                                                {completedSchools.map((s) => (
-                                                                    <div key={s.school_id} className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm flex justify-between items-center border border-emerald-100 dark:border-emerald-900/30">
-                                                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{s.school_name}</span>
-                                                                        <TbTrophy className="text-emerald-500" />
+                                                    {/* Unified School List */}
+                                                    <div className="space-y-3">
+                                                        {sortedSchools.map((s) => (
+                                                            <div key={s.school_id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group">
+                                                                <div className="flex-1">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{s.school_name}</h4>
+                                                                        {s.percentage === 100 && <FiCheckCircle className="text-emerald-500" size={14} />}
+                                                                        {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase">No Data</span>}
                                                                     </div>
-                                                                ))}
+                                                                    
+                                                                    <div className="mt-2 w-full max-w-[200px] h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                         <div 
+                                                                            className={`h-full rounded-full transition-all duration-500 ${
+                                                                                s.percentage === 100 ? 'bg-emerald-500' : 
+                                                                                s.percentage >= 50 ? 'bg-blue-500' : 
+                                                                                s.percentage > 0 ? 'bg-amber-500' : 'bg-slate-300'
+                                                                            }`} 
+                                                                            style={{ width: `${s.percentage}%` }}
+                                                                         ></div>
+                                                                    </div>
+                                                                    
+                                                                    {s.missing.length > 0 && s.missing.length < 10 && (
+                                                                        <p className="text-[10px] text-slate-400 mt-1 truncate max-w-xs">
+                                                                            Missing: {s.missing.join(', ')}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                                
+                                                                <div className="text-right">
+                                                                    <span className={`text-xl font-black ${
+                                                                        s.percentage === 100 ? 'text-emerald-500' : 
+                                                                        s.percentage >= 50 ? 'text-blue-500' : 
+                                                                        s.percentage > 0 ? 'text-amber-500' : 'text-slate-300'
+                                                                    }`}>
+                                                                        {s.percentage}%
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* INCOMPLETE SCHOOLS */}
-                                                    <div className="bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-700">
-                                                        <div className="flex items-center gap-2 mb-4">
-                                                            <FiClock className="text-slate-400" size={20} />
-                                                            <h4 className="font-black text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider">Incomplete ({incompleteSchools.length})</h4>
-                                                        </div>
-                                                        {incompleteSchools.length === 0 ? (
-                                                            <p className="text-xs text-slate-400 italic">All schools have completed their submissions!</p>
-                                                        ) : (
-                                                            <div className="space-y-2">
-                                                                {incompleteSchools.map((s) => {
-                                                                    const missing = [];
-                                                                    if (!s.profile_status) missing.push("Profile");
-                                                                    if (!s.head_status) missing.push("School Head");
-                                                                    if (!s.enrollment_status) missing.push("Enrollment");
-                                                                    if (!s.classes_status) missing.push("Classes");
-                                                                    if (!s.personnel_status) missing.push("Personnel");
-                                                                    if (!s.specialization_status) missing.push("Specialization");
-                                                                    if (!s.resources_status) missing.push("Resources");
-
-                                                                    return (
-                                                                        <div key={s.school_id} className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 opacity-80">
-                                                                            <div className="flex justify-between items-start">
-                                                                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{s.school_name}</span>
-                                                                                <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-2 py-0.5 rounded-full border border-rose-100 dark:border-rose-900/30 whitespace-nowrap">
-                                                                                    {missing.length} Missing
-                                                                                </span>
-                                                                            </div>
-                                                                            {missing.length > 0 && (
-                                                                                <p className="text-[10px] text-rose-400 mt-1 pl-0.5">
-                                                                                    Missing: {missing.join(", ")}
-                                                                                </p>
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
+                                                        ))}
                                                     </div>
                                                 </div>
                                             );
@@ -950,7 +1007,19 @@ const MonitoringDashboard = () => {
                                                     ).length;
 
                                                     // 3. Count Completed from DB Stats
-                                                    const startStat = districtStats.find(d => d.district?.trim().toLowerCase() === distName?.trim().toLowerCase());
+                                                    const startStat = districtStats.find(d => {
+                                                        const match = normalizeLocationName(d.district) === normalizeLocationName(distName);
+                                                        // Debug logging for the problematic district
+                                                        if (distName.includes('Adams')) {
+                                                            console.log(`[Dashboard Debug] Matching: '${distName}' -> '${normalizeLocationName(distName)}' vs API: '${d.district}' -> '${normalizeLocationName(d.district)}' = ${match}`);
+                                                        }
+                                                        return match;
+                                                    });
+                                                    
+                                                    if (distName.includes('Adams') && !startStat) {
+                                                        console.log("[Dashboard Debug] Failed to find stat match for:", distName, "Available Stats:", districtStats);
+                                                    }
+
                                                     const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
 
                                                     const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
