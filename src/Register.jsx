@@ -276,8 +276,8 @@ const Register = () => {
             const data = await res.json();
             if (data.success) {
                 setIsOtpSent(true);
-                setCanResend(false);
-                setTimer(90);
+                // setCanResend(false);
+                // setTimer(90);
                 alert(data.message); // Show actual message from server (might contain fallback info)
             } else {
                 alert(data.message || "Failed to send OTP");
@@ -408,10 +408,10 @@ const Register = () => {
 
 
         // STRICT OTP ENFORCEMENT
-        // if (!isOtpVerified) {
-        //     alert("Please verify your email via OTP before registering.");
-        //     return;
-        // }
+        if (!isOtpVerified) {
+            alert("Please verify your email via OTP before registering.");
+            return;
+        }
 
         setLoading(true);
 
@@ -977,7 +977,7 @@ const Register = () => {
                             )}
 
                             {/* === 3. EMAIL VERIFICATION & SECURITY (COMMENTED OUT FOR TESTING) === */}
-                            {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
+                            <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
                                         {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
@@ -992,7 +992,7 @@ const Register = () => {
                                     {/* Actually better to keep email input in the respective sections and just have OTP controls here targeting formData.email */}
 
                                     {/* OTP CONTROLS */}
-                                    {/* 
+                                    
                                     <div className="flex flex-col gap-3">
                                         <p className="text-xs text-slate-500">
                                             Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
@@ -1041,7 +1041,9 @@ const Register = () => {
                                             </div>
                                         )}
                                     </div> 
-                                    */}
+                                    
+                                </div>
+                            </div>
 
 
 
