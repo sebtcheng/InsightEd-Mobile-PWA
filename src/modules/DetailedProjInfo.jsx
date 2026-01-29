@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition'; // Assuming you have this
+import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
 
 import { TbPhoto } from "react-icons/tb";
 
@@ -16,16 +17,45 @@ const DetailedProjInfo = () => {
 
     useEffect(() => {
         const fetchProjectDetails = async () => {
+            // Stale-While-Revalidate Strategy
+            
+            // 1. Immediate Cache Load
+            try {
+                const cachedProjects = await getCachedProjects();
+                const foundProject = cachedProjects.find(p => String(p.id) === String(id));
+                if (foundProject) {
+                    setProject(foundProject);
+                    setIsLoading(false); // Render fast
+                }
+            } catch (err) {
+                 console.warn("Cache read failed", err);
+            }
+
+            // 2. Network Request (Background Sync)
             try {
                 const response = await fetch(`/api/projects/${id}`);
                 if (!response.ok) throw new Error("Project not found");
                 const data = await response.json();
                 setProject(data);
+                
+                // TODO: Update cache with new details if needed (currently we only cache list)
+                // For a robust app, we might want to update the single item in the `projects_cache` array here.
+
             } catch (err) {
-                console.error("Error:", err);
-                alert("Could not load project details.");
-                navigate('/engineer-dashboard');
+                console.warn("Network fetch failed:", err);
+                // If we have cached data, we are fine.
+                // If we didn't have cache, we might want to show error or navigate away
+                if (!project) {
+                    // Logic: If NO project in state (cache failed/empty) AND network failed -> Show Error
+                     const cachedProjects = await getCachedProjects();
+                     const foundProject = cachedProjects.find(p => String(p.id) === String(id));
+                     if (!foundProject) {
+                         alert("Could not load project details (Offline & Not Cached).");
+                         navigate('/engineer-dashboard');
+                     }
+                }
             } finally {
+                // Ensure loading state is off eventually
                 setIsLoading(false);
             }
         };
@@ -33,11 +63,30 @@ const DetailedProjInfo = () => {
         const fetchImages = async () => {
             setImageLoading(true);
             try {
+                // Network First
                 const res = await fetch(`/api/project-images/${id}`);
                 const data = await res.json();
-                setProjectImages(data);
+                
+                if (Array.isArray(data)) {
+                    setProjectImages(data);
+                    // Update Gallery Cache
+                    await cacheGallery(id, data);
+                } else {
+                    console.warn("API did not return an array for images:", data);
+                    setProjectImages([]);
+                }
             } catch (error) {
-                console.error("Error loading images:", error);
+                console.warn("Online gallery load failed, checking cache:", error);
+                
+                // Cache Fallback
+                try {
+                   const cachedImages = await getCachedGallery(id);
+                   if (cachedImages && cachedImages.length > 0) {
+                      setProjectImages(cachedImages);
+                   }
+                } catch (cacheErr) {
+                   console.error("Cache retrieval failed", cacheErr);
+                }
             } finally {
                 setImageLoading(false);
             }

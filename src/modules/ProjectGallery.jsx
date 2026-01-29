@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import BottomNav from './BottomNav';
 import { auth } from '../firebase'; // Ensure auth is imported to get the current user UID
+import { cacheGallery, getCachedGallery } from '../db';
 
 const ProjectGallery = () => {
     const { projectId } = useParams();
@@ -13,16 +14,43 @@ const ProjectGallery = () => {
 
     const API_BASE = ''; 
 
+    // Helper to ensure valid image source
+    const getImgSrc = (imgData) => {
+        if (!imgData) return "";
+        if (imgData.startsWith("http") || imgData.startsWith("data:")) return imgData;
+        return `data:image/jpeg;base64,${imgData}`;
+    };
+
     useEffect(() => {
         const fetchImages = async () => {
-            try {
-                const user = auth.currentUser;
-                if (!user) {
-                    console.error("No user logged in");
-                    setLoading(false);
-                    return;
-                }
+            const user = auth.currentUser;
+            if (!user) {
+                console.error("No user logged in");
+                setLoading(false);
+                return;
+            }
 
+            let hasLoadedFromCache = false;
+
+            // Stale-While-Revalidate Strategy
+            
+            // 1. Immediate Cache Load
+            if (projectId) {
+                try {
+                    const cachedImages = await getCachedGallery(projectId);
+                    if (cachedImages && Array.isArray(cachedImages) && cachedImages.length > 0) {
+                        console.log("Loaded images from cache:", cachedImages.length);
+                        setImages(cachedImages);
+                        hasLoadedFromCache = true;
+                        setLoading(false);
+                    }
+                } catch (err) {
+                    console.warn("Cache read failed:", err);
+                }
+            }
+
+            // 2. Network Request (Background Sync)
+            try {
                 // LOGIC: If we have a projectId in the URL, fetch project-specific images. 
                 // Otherwise, fetch ALL images uploaded by this specific engineer.
                 const endpoint = projectId 
@@ -31,9 +59,27 @@ const ProjectGallery = () => {
 
                 const response = await fetch(endpoint);
                 const data = await response.json();
-                setImages(data);
+                
+                if (Array.isArray(data)) {
+                    console.log("Loaded images from network:", data.length);
+                    setImages(data);
+                    // Cache if viewing a specific project
+                    if (projectId) {
+                        await cacheGallery(projectId, data);
+                    }
+                } else {
+                    console.warn("API did not return an array:", data);
+                    // Only wipe if we didn't load from cache. 
+                    // If we have cache, assume API error/offline and keep showing cache.
+                    if (!hasLoadedFromCache) setImages([]); 
+                }
+
             } catch (err) {
-                console.error("Failed to load gallery:", err);
+                console.warn("Network gallery load failed:", err);
+                // If we didn't have cached data and network failed
+                if (projectId && !hasLoadedFromCache) {
+                     // Try one last cache read if we haven't already (unlikely to help if first one failed, but safe)
+                }
             } finally {
                 setLoading(false);
             }
@@ -82,7 +128,7 @@ const ProjectGallery = () => {
                                     onClick={() => setSelectedImage(img)}
                                 >
                                     <img 
-                                        src={img.image_data} 
+                                        src={getImgSrc(img.image_data)} 
                                         alt="Site progress" 
                                         className="w-full h-40 object-cover cursor-pointer"
                                     />
@@ -118,7 +164,7 @@ const ProjectGallery = () => {
 
                         <div className="w-full max-w-4xl max-h-[70vh] flex items-center justify-center">
                             <img 
-                                src={selectedImage.image_data} 
+                                src={getImgSrc(selectedImage.image_data)} 
                                 alt="Zoomed progress" 
                                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                                 onClick={(e) => e.stopPropagation()}

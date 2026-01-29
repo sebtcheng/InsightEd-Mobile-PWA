@@ -12,6 +12,7 @@ import PageTransition from "../components/PageTransition";
 import CalendarWidget from "../components/CalendarWidget";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { cacheProjects, getCachedProjects } from "../db";
 
 // --- CONSTANTS ---
 const ProjectStatus = {
@@ -203,35 +204,76 @@ const EngineerDashboard = () => {
         try {
             setIsLoading(true);
             let url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
+            let currentProjects = [];
             
             if (currentRole === 'Super User') {
                  url = `${API_BASE}/api/projects`; // Fetch all
             }
 
-            const response = await fetch(url);
-          if (!response.ok) throw new Error("Failed to fetch projects");
-          const data = await response.json();
+            // ENGINEER: Stale-While-Revalidate Strategy
+            
+            // 1. Immediate Cache Load (Fast Render)
+            try {
+                const cachedData = await getCachedProjects();
+                if (cachedData && cachedData.length > 0) {
+                    // If we have cache, show it immediately
+                    setProjects(cachedData);
+                    currentProjects = cachedData; // Prevent overwrite by empty array later
+                    setIsLoading(false); // Stop spinner early if we have data
+                }
+            } catch (err) {
+                 console.warn("Cache read failed", err);
+            }
 
-          const mappedData = data.map((item) => ({
-            id: item.id,
-            projectName: item.projectName,
-            schoolName: item.schoolName,
-            schoolId: item.schoolId,
-            status: item.status,
-            accomplishmentPercentage: item.accomplishmentPercentage,
-            projectAllocation: item.projectAllocation,
-            targetCompletionDate: item.targetCompletionDate,
-            statusAsOfDate: item.statusAsOfDate,
-            otherRemarks: item.otherRemarks,
-            contractorName: item.contractorName,
-          }));
-          setProjects(mappedData);
+            // 2. Network Request (Background Sync)
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch projects");
+                const data = await response.json();
 
-          const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${user.uid}`);
-          if (actResponse.ok) {
-            const actData = await actResponse.json();
-            setActivities(actData);
-          }
+                currentProjects = data.map((item) => ({
+                    id: item.id,
+                    projectName: item.projectName,
+                    schoolName: item.schoolName,
+                    schoolId: item.schoolId,
+                    status: item.status,
+                    accomplishmentPercentage: item.accomplishmentPercentage,
+                    projectAllocation: item.projectAllocation,
+                    targetCompletionDate: item.targetCompletionDate,
+                    projects_count: 1,
+                    // Additional fields for charts
+                    region: item.region,
+                    division: item.division,
+                    statusAsOfDate: item.statusAsOfDate,
+                    otherRemarks: item.otherRemarks,
+                    contractorName: item.contractorName,
+                }));
+                
+                // Cache data if we are an Engineer
+                if (currentRole !== 'Super User') { 
+                     await cacheProjects(currentProjects);
+                }
+                
+                // Update state with fresh data
+                setProjects(currentProjects);
+
+            } catch (networkError) {
+                console.warn("Dashboard network request failed:", networkError);
+                // If we didn't have cached data before, we might need to rely on the fallback from the 'cache read' block above
+                // But typically if cache read passed, we are good. 
+                // We basically just suppress the network error UI-wise if we have stale data.
+            }
+
+            try {
+                const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${user.uid}`);
+                if (actResponse.ok) {
+                    const actData = await actResponse.json();
+                    setActivities(actData);
+                }
+            } catch (actErr) {
+                console.log("Offline: Cannot fetch recent activities.");
+            }
+
         } catch (err) {
           console.error("Error loading projects/activities:", err);
         } finally {

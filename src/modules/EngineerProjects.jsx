@@ -7,7 +7,7 @@ import BottomNav from "./BottomNav";
 import PageTransition from "../components/PageTransition";
 import { auth, db } from "../firebase";
 import { doc, getDoc, query, collection, where, getDocs } from "firebase/firestore";
-import { addEngineerToOutbox } from "../db";
+import { addEngineerToOutbox, cacheProjects, getCachedProjects } from "../db";
 import { compressImage } from "../utils/imageCompression";
 
 // --- CONSTANTS ---
@@ -496,11 +496,12 @@ const EngineerProjects = () => {
           console.error("Error fetching user profile:", e);
         }
 
-      try {
-        setIsLoading(true);
-        const userRole = localStorage.getItem('userRole');
+        try {
+          setIsLoading(true);
+          const userRole = localStorage.getItem('userRole');
+          let currentProjects = [];
 
-        if (userRole === 'Super Admin') {
+          if (userRole === 'Super Admin') {
              // SUPER ADMIN: Firestore Query (ALL)
              const q = query(collection(db, 'projects'));
              const querySnapshot = await getDocs(q);
@@ -509,7 +510,7 @@ const EngineerProjects = () => {
                 ...doc.data()
              }));
              
-             setProjects(mappedData.map(item => ({
+             currentProjects = mappedData.map(item => ({
                 id: item.id,
                 projectName: item.projectName || "Untitled",
                 schoolName: item.schoolName || "Unknown School",
@@ -522,34 +523,63 @@ const EngineerProjects = () => {
                 otherRemarks: item.otherRemarks,
                 contractorName: item.contractorName,
                 uid: item.uid
-             })));
+             }));
 
-        } else {
-            // ENGINEER: API Fetch
-            const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
-            if (!response.ok) throw new Error("Failed to fetch projects");
-            const data = await response.json();
+          } else {
+
+            // ENGINEER: Stale-While-Revalidate Strategy
             
-            setProjects(data.map(item => ({
-                id: item.id,
-                projectName: item.projectName,
-                schoolName: item.schoolName,
-                schoolId: item.schoolId,
-                status: item.status,
-                accomplishmentPercentage: item.accomplishmentPercentage,
-                projectAllocation: item.projectAllocation,
-                targetCompletionDate: item.targetCompletionDate,
-                statusAsOfDate: item.statusAsOfDate,
-                otherRemarks: item.otherRemarks,
-                contractorName: item.contractorName,
-            })));
-        }
+            // 1. Immediate Cache Load (Fast Render)
+            try {
+                const cachedData = await getCachedProjects();
+                if (cachedData && cachedData.length > 0) {
+                     setProjects(cachedData); 
+                     currentProjects = cachedData; // Prevent overwrite by empty array later
+                     setIsLoading(false); // Stop spinner if we have data
+                }
+            } catch (err) {
+                 console.warn("Cache read failed", err);
+            }
 
-      } catch (err) {
-        console.error("Error loading projects:", err);
-      } finally {
-        setIsLoading(false);
-      }
+            // 2. Network Request (Background Sync)
+            try {
+                const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
+                if (!response.ok) throw new Error("Failed to fetch projects");
+                const data = await response.json();
+                
+                currentProjects = data.map(item => ({
+                    id: item.id,
+                    projectName: item.projectName,
+                    schoolName: item.schoolName,
+                    schoolId: item.schoolId,
+                    status: item.status,
+                    accomplishmentPercentage: item.accomplishmentPercentage,
+                    projectAllocation: item.projectAllocation,
+                    targetCompletionDate: item.targetCompletionDate,
+                    statusAsOfDate: item.statusAsOfDate,
+                    otherRemarks: item.otherRemarks,
+                    contractorName: item.contractorName,
+                }));
+
+                // Update Cache on success
+                await cacheProjects(currentProjects);
+                
+                // Update state with fresh data
+                setProjects(currentProjects);
+
+            } catch (networkError) {
+                console.warn("Network request failed:", networkError);
+                // If we didn't have cached data before, we rely on the fallback above or show empty state if truly offline & no cache
+            }
+          }
+          
+          setProjects(currentProjects);
+
+        } catch (err) {
+          console.error("Error loading projects:", err);
+        } finally {
+          setIsLoading(false);
+        }
       }
     };
     fetchUserDataAndProjects();
@@ -638,6 +668,13 @@ const EngineerProjects = () => {
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
+
+    // CHECK: Limit to 5 photos max
+    if (selectedFiles.length + files.length > 5) {
+        alert("You can only upload a maximum of 5 photos.");
+        return;
+    }
+
     const validFiles = files.filter(file => file.size <= 5 * 1024 * 1024);
     const newPreviews = validFiles.map(file => URL.createObjectURL(file));
     setSelectedFiles(prev => [...prev, ...validFiles]);

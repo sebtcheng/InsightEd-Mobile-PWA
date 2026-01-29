@@ -944,14 +944,14 @@ const MonitoringDashboard = () => {
                                                     <div className="space-y-3">
                                                         {sortedSchools.map((s) => (
                                                             <div key={s.school_id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group">
-                                                                <div className="flex-1">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{s.school_name}</h4>
-                                                                        {s.percentage === 100 && <FiCheckCircle className="text-emerald-500" size={14} />}
-                                                                        {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase">No Data</span>}
+                                                                <div className="flex-1 min-w-0 pr-4">
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors truncate">{s.school_name}</h4>
+                                                                        {s.percentage === 100 && <FiCheckCircle className="text-emerald-500 shrink-0" size={14} />}
+                                                                        {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0">No Data</span>}
                                                                     </div>
                                                                     
-                                                                    <div className="mt-2 w-full max-w-[200px] h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                    <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                                                                          <div 
                                                                             className={`h-full rounded-full transition-all duration-500 ${
                                                                                 s.percentage === 100 ? 'bg-emerald-500' : 
@@ -963,13 +963,13 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                     
                                                                     {s.missing.length > 0 && s.missing.length < 10 && (
-                                                                        <p className="text-[10px] text-slate-400 mt-1 truncate max-w-xs">
+                                                                        <p className="text-[10px] text-slate-400 mt-1.5 truncate">
                                                                             Missing: {s.missing.join(', ')}
                                                                         </p>
                                                                     )}
                                                                 </div>
                                                                 
-                                                                <div className="text-right">
+                                                                <div className="text-right shrink-0">
                                                                     <span className={`text-xl font-black ${
                                                                         s.percentage === 100 ? 'text-emerald-500' : 
                                                                         s.percentage >= 50 ? 'text-blue-500' : 
