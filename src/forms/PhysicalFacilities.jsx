@@ -5,7 +5,7 @@ import { auth, db } from '../firebase';
 import { addToOutbox, getOutbox } from '../db';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
-import { FiBox, FiArrowLeft, FiCheckCircle, FiHelpCircle, FiInfo } from 'react-icons/fi';
+import { FiBox, FiArrowLeft, FiCheckCircle, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
@@ -52,16 +52,25 @@ const PhysicalFacilities = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenFacilitiesInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenFacilitiesInfo', 'true');
+        }
+    }, []);
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
 
     const initialFields = {
-        build_classrooms_total: 0,
-        build_classrooms_new: 0,
-        build_classrooms_good: 0,
-        build_classrooms_repair: 0,
-        build_classrooms_demolition: 0
+        build_classrooms_total: '',
+        build_classrooms_new: '',
+        build_classrooms_good: '',
+        build_classrooms_repair: '',
+        build_classrooms_demolition: ''
     };
 
     const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
@@ -147,12 +156,22 @@ const PhysicalFacilities = () => {
                             setFormData(loaded);
                             setOriginalData(loaded);
 
-                            if (dbData.build_classrooms_total > 0 || viewOnly) setIsLocked(true);
+                            // Check if there is ANY actual data before locking
+                            // Check if there is ANY actual data in FORM FIELDS before locking
+                            const hasData = Object.keys(initialFields).some(key => {
+                                const val = dbData[key];
+                                return val !== 0 && val !== '0' && val !== '' && val !== null && val !== undefined;
+                            });
+                            if (hasData || viewOnly) setIsLocked(true);
+                            else setIsLocked(false);
 
                             // UPDATE CACHE
                             localStorage.setItem(CACHE_KEY, JSON.stringify(loaded));
                         } else {
-                            if (!loadedFromCache) setFormData(defaultFormData);
+                            if (!loadedFromCache) {
+                                setFormData(defaultFormData);
+                                setIsLocked(false); // Explicitly ensure unlocked if no data
+                            }
                         }
                     }
                 } catch (error) {
@@ -207,8 +226,21 @@ const PhysicalFacilities = () => {
         const { name, value } = e.target;
         // Robust numeric input handling with 5-digit limit
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
-        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
+    };
+
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        const fields = [
+            'build_classrooms_new', 'build_classrooms_good',
+            'build_classrooms_repair', 'build_classrooms_demolition'
+        ];
+
+        for (const f of fields) {
+            if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+        }
+        return true;
     };
 
     const confirmSave = async () => {
@@ -287,7 +319,7 @@ const PhysicalFacilities = () => {
                     <input
                         type="text" inputMode="numeric" pattern="[0-9]*"
                         name="build_classrooms_total"
-                        value={formData.build_classrooms_total || 0}
+                        value={formData.build_classrooms_total || ''}
                         onChange={handleChange} // Allows manual override if needed, though useEffect will overwrite on dependent change
                         disabled={true}
                         className="w-full text-center text-7xl font-black text-[#004A99] bg-transparent outline-none placeholder-slate-200 tracking-tighter"
@@ -296,10 +328,10 @@ const PhysicalFacilities = () => {
                     <p className="text-[10px] text-slate-400 mt-2 font-medium">Overall count in the school</p>
                 </div>
 
-                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new || 0} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good || 0} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair || 0} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition || 0} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition || ''} onChange={handleChange} disabled={isLocked || viewOnly} />
 
             </div>
 
@@ -307,37 +339,15 @@ const PhysicalFacilities = () => {
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button
-                            onClick={() => navigate('/jurisdiction-schools')}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-transform"
-                        >
-                            Back to Schools List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setShowEditModal(true)}
-                            className="w-full bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/10 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                        >
-                            <span>🔓 Unlock to Edit Data</span>
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                            🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            {originalData && (
-                                <button
-                                    onClick={() => { setFormData(originalData); setIsLocked(true); }}
-                                    className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                            )}
-                            <button
-                                onClick={() => setShowSaveModal(true)}
-                                disabled={isSaving}
-                                className="flex-[2] bg-[#004A99] text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 active:scale-[0.98] transition-all"
-                            >
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        </button>
                     )}
                 </div>
             </div>

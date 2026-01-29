@@ -534,7 +534,7 @@ const SchoolHeadDashboard = () => {
                         {/* 3. Quick Actions Grid (NEW) */}
                         <div>
                             <div className="flex justify-between items-end mb-4 px-1">
-                                <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider">Quick Actions</h3>
+                                <h3 className="text-slate-700 dark:text-slate-300 font-bold text-sm uppercase tracking-wider">Pending Forms</h3>
                                 <button onClick={() => navigate('/school-forms')} className="text-[#004A99] dark:text-blue-400 text-xs font-semibold">View All</button>
                             </div>
                             <div className="grid grid-cols-4 gap-3">

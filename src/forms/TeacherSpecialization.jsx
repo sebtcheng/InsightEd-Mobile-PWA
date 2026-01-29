@@ -1,7 +1,7 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiBook, FiAward, FiBriefcase, FiCheckCircle, FiAlertCircle, FiHelpCircle, FiInfo } from 'react-icons/fi';
+import { FiArrowLeft, FiBook, FiAward, FiBriefcase, FiCheckCircle, FiAlertCircle, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -13,14 +13,14 @@ import SuccessModal from '../components/SuccessModal';
 // Helper: Define initial state structure
 const getInitialFields = () => ({
     // Core Subjects (Major & Teaching Load)
-    spec_english_major: 0, spec_english_teaching: 0,
-    spec_filipino_major: 0, spec_filipino_teaching: 0,
-    spec_math_major: 0, spec_math_teaching: 0,
-    spec_science_major: 0, spec_science_teaching: 0,
-    spec_ap_major: 0, spec_ap_teaching: 0,
-    spec_mapeh_major: 0, spec_mapeh_teaching: 0,
-    spec_esp_major: 0, spec_esp_teaching: 0,
-    spec_tle_major: 0, spec_tle_teaching: 0
+    spec_english_major: '', spec_english_teaching: '',
+    spec_filipino_major: '', spec_filipino_teaching: '',
+    spec_math_major: '', spec_math_teaching: '',
+    spec_science_major: '', spec_science_teaching: '',
+    spec_ap_major: '', spec_ap_teaching: '',
+    spec_mapeh_major: '', spec_mapeh_teaching: '',
+    spec_esp_major: '', spec_esp_teaching: '',
+    spec_tle_major: '', spec_tle_teaching: ''
 });
 
 // --- SUB-COMPONENT (Moved Outside) ---
@@ -38,9 +38,9 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
                 <input
                     type="number"
                     min="0"
-                    placeholder="0"
+                    placeholder=""
                     name={`spec_${id}_major`}
-                    value={major}
+                    value={major || ''}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
                     onWheel={(e) => e.target.blur()}
@@ -53,9 +53,9 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
                 <input
                     type="number"
                     min="0"
-                    placeholder="0"
+                    placeholder=""
                     name={`spec_${id}_teaching`}
-                    value={teaching}
+                    value={teaching || ''}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
                     onWheel={(e) => e.target.blur()}
@@ -82,6 +82,15 @@ const TeacherSpecialization = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenSpecializationInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenSpecializationInfo', 'true');
+        }
+    }, []);
     const [userRole, setUserRole] = useState("School Head");
 
     const [schoolId, setSchoolId] = useState(null);
@@ -219,8 +228,20 @@ const TeacherSpecialization = () => {
         const { name, value } = e.target;
         // Limit to 3 digits
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
-        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
+    };
+
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        const subjects = ['english', 'filipino', 'math', 'science', 'ap', 'mapeh', 'esp', 'tle'];
+        for (const s of subjects) {
+            const major = formData[`spec_${s}_major`];
+            const teaching = formData[`spec_${s}_teaching`];
+            if (major === '' || major === null || major === undefined) return false;
+            if (teaching === '' || teaching === null || teaching === undefined) return false;
+        }
+        return true;
     };
 
     const confirmSave = async () => {
@@ -300,7 +321,7 @@ const TeacherSpecialization = () => {
                                 <h1 className="text-2xl font-bold text-white tracking-tight">Teacher Specialization</h1>
                             </div>
                             <p className="text-blue-100 text-xs font-medium mt-1">
-                                Q: How many teachers specialized in (Majored) a subject versus how many are actually teaching it?
+                                Q: How many teachers specialized/majored in the subject as compared to how many teachers are actually teaching the subject?
                             </p>
                         </div>
                     </div>
@@ -348,29 +369,19 @@ const TeacherSpecialization = () => {
                 </div>
             </div>
 
-            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
-                <div className="max-w-4xl mx-auto flex gap-3">
+            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                            Back to List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setIsLocked(false)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
-                                Cancel
-                            </button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        </button>
                     )}
                 </div>
             </div>
@@ -414,7 +425,7 @@ const TeacherSpecialization = () => {
                             <FiInfo />
                         </div>
                         <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'How many teachers specialized in (Majored) a subject versus how many are actually teaching it?'</b></p>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'How many teachers specialized/majored in the subject as compared to how many teachers are actually teaching the subject?'</b></p>
                         <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>

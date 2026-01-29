@@ -243,7 +243,14 @@ const SchoolProfile = () => {
 
             if (cachedProfile) {
                 try {
-                    const localData = JSON.parse(cachedProfile);
+                    let localData = JSON.parse(cachedProfile);
+
+                    // NEW: Detect snake_case from SchoolForms cache and convert
+                    if (localData.school_id && !localData.schoolId) {
+                        console.log("Converting cached snake_case data to camelCase");
+                        localData = mapDbToForm(localData);
+                    }
+
                     // Critical: Restore Offering
                     if (!localData.curricularOffering) {
                         localData.curricularOffering = cachedOffering || '';

@@ -79,6 +79,15 @@ const ShiftingModalities = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
 
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenShiftingInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenShiftingInfo', 'true');
+        }
+    }, []);
+
     // Data
     const [schoolId, setSchoolId] = useState(null);
     const [offering, setOffering] = useState('');
@@ -301,6 +310,27 @@ const ShiftingModalities = () => {
     };
 
     // --- SAVE ---
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        const checkLevel = (lvl) => {
+            const shift = shifts[`shift_${lvl}`];
+            const mode = modes[`mode_${lvl}`];
+            // Both must be selected (non-empty string)
+            return shift !== '' && shift !== 'Select Strategy...' && mode !== '' && mode !== 'Select Mode...';
+        };
+
+        if (showElem()) {
+            if (!['kinder', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6'].every(checkLevel)) return false;
+        }
+        if (showJHS()) {
+            if (!['g7', 'g8', 'g9', 'g10'].every(checkLevel)) return false;
+        }
+        if (showSHS()) {
+            if (!['g11', 'g12'].every(checkLevel)) return false;
+        }
+        return true;
+    };
+
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
@@ -480,29 +510,19 @@ const ShiftingModalities = () => {
                 </div>
             </div>
 
-            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
-                <div className="max-w-4xl mx-auto flex gap-3">
+            {/* --- STANDARDIZED FOOTER            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                            Back to List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setIsLocked(false)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            <button onClick={() => { setIsLocked(true); setShifts(originalData?.shifts || shifts); setModes(originalData?.modes || modes); setAdms(originalData?.adms || adms); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
-                                Cancel
-                            </button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        </button>
                     )}
                 </div>
             </div>

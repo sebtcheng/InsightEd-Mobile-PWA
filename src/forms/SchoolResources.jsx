@@ -1,7 +1,7 @@
 // src/forms/SchoolResources.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiPackage, FiMapPin, FiLayout, FiCheckCircle, FiXCircle, FiMonitor, FiTool, FiDroplet, FiZap, FiHelpCircle, FiInfo } from 'react-icons/fi';
+import { FiArrowLeft, FiPackage, FiMapPin, FiLayout, FiCheckCircle, FiXCircle, FiMonitor, FiTool, FiDroplet, FiZap, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -10,6 +10,126 @@ import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
+
+
+// --- EXTRACTED COMPONENTS ---
+const InputField = ({ label, name, type = "number", formData, handleChange, isLocked, viewOnly }) => (
+    <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
+        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-2/3 group-hover:text-blue-600 transition-colors">{label}</label>
+        <input
+            type={type} name={name} value={+formData[name] || ''}
+            onChange={handleChange} disabled={isLocked || viewOnly}
+            onWheel={(e) => e.target.blur()}
+            className="w-24 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent text-lg shadow-sm"
+        />
+    </div>
+);
+
+const SelectField = ({ label, name, options, formData, handleChange, isLocked, viewOnly }) => (
+    <div className="flex flex-col gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
+        {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">{label}</label>}
+        <select
+            name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
+            className="w-full font-bold text-slate-700 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
+        >
+            <option value="">-- Select --</option>
+            {options.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+            ))}
+        </select>
+    </div>
+);
+
+const SeatRow = ({ label, enrollment, seatKey, formData, handleChange, isLocked, viewOnly }) => {
+    const seats = formData[seatKey] || 0;
+    const shortage = enrollment - seats;
+    const isShortage = shortage > 0;
+
+    return (
+        <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
+            <td className="py-4 px-4 text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">{label}</td>
+            <td className="py-4 px-4 text-center">
+                <span className="bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-lg font-bold">
+                    {enrollment}
+                </span>
+            </td>
+            <td className="py-4 px-4">
+                <div className="flex justify-center flex-col items-center">
+                    <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total (All Sections)</p>
+                    <input
+                        type="number"
+                        name={seatKey}
+                        onChange={handleChange}
+                        disabled={isLocked || viewOnly}
+                        onWheel={(e) => e.target.blur()}
+                        className="w-20 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                        value={+seats || ''}
+                    />
+                </div>
+            </td>
+            <td className="py-4 px-4 text-center">
+                {isShortage ? (
+                    <span className="text-red-600 bg-red-50 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border border-red-100 inline-flex items-center gap-1">
+                        <FiXCircle className="inline" /> -{shortage}
+                    </span>
+                ) : (
+                    <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-emerald-100 inline-flex items-center gap-1">
+                        <FiCheckCircle className="inline" /> OK
+                    </span>
+                )}
+            </td>
+        </tr>
+    );
+};
+
+const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange, isLocked, viewOnly }) => (
+    <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
+        <td className="py-4 px-4 text-xs font-bold text-slate-600 uppercase tracking-wide group-hover:text-blue-600 transition-colors">{label}</td>
+        <td className="py-3 px-2">
+            <div className="relative">
+                <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
+                <input
+                    type="number"
+                    name={funcName}
+                    value={+formData[funcName] || ''}
+                    onChange={handleChange}
+                    disabled={isLocked || viewOnly}
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                />
+            </div>
+        </td>
+        <td className="py-3 px-2">
+            <div className="relative">
+                <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
+                <input
+                    type="number"
+                    name={nonFuncName}
+                    value={+formData[nonFuncName] || ''}
+                    onChange={handleChange}
+                    disabled={isLocked || viewOnly}
+                    onWheel={(e) => e.target.blur()}
+                    className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
+                />
+            </div>
+        </td>
+    </tr>
+);
+
+const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => (
+    <div className="flex justify-between items-center p-4 border-b border-slate-50 last:border-0 bg-slate-50/50 rounded-2xl mb-2 hover:bg-white hover:shadow-sm hover:border-slate-100 transition-all">
+        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
+        <input
+            type="number"
+            name={name}
+            value={+formData[name] || ''}
+            onChange={handleChange}
+            disabled={isLocked || viewOnly}
+            onWheel={(e) => e.target.blur()}
+            className="w-20 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent shadow-sm"
+        />
+    </div>
+);
 
 const SchoolResources = () => {
     const navigate = useNavigate();
@@ -28,6 +148,15 @@ const SchoolResources = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
+
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenResourcesInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenResourcesInfo', 'true');
+        }
+    }, []);
     const [userRole, setUserRole] = useState("School Head");
     const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
@@ -47,36 +176,35 @@ const SchoolResources = () => {
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
         res_internet_type: '',
-        res_toilets_male: 0,
-        res_toilets_female: 0,
-        res_toilets_common: 0, // [NEW] Common CR
-        res_toilets_pwd: 0,
+        res_toilets_male: '',
+        res_toilets_female: '',
+        res_toilets_common: '', // [NEW] Common CR
+        res_toilets_pwd: '',
         res_water_source: '',
-        res_tvl_workshops: 0,
-        res_faucets: 0,
-        res_ownership_type: '',
+        res_tvl_workshops: '',
+        res_faucets: '',
         res_electricity_source: '',
         res_buildable_space: '',
         sha_category: '', // [NEW] SHA Category
 
         // LABS
-        res_sci_labs: 0, res_com_labs: 0,
+        res_sci_labs: '', res_com_labs: '',
 
         // FUNCTIONAL / NON-FUNCTIONAL
-        res_ecart_func: 0, res_ecart_nonfunc: 0,
-        res_laptop_func: 0, res_laptop_nonfunc: 0,
-        res_tv_func: 0, res_tv_nonfunc: 0,
-        res_printer_func: 0, res_printer_nonfunc: 0,
-        res_desk_func: 0, res_desk_nonfunc: 0,
-        res_armchair_func: 0, res_armchair_nonfunc: 0,
-        res_toilet_func: 0, res_toilet_nonfunc: 0,
-        res_handwash_func: 0, res_handwash_nonfunc: 0,
+        res_ecart_func: '', res_ecart_nonfunc: '',
+        res_laptop_func: '', res_laptop_nonfunc: '',
+        res_tv_func: '', res_tv_nonfunc: '',
+        res_printer_func: '', res_printer_nonfunc: '',
+        res_desk_func: '', res_desk_nonfunc: '',
+        res_armchair_func: '', res_armchair_nonfunc: '',
+        res_toilet_func: '', res_toilet_nonfunc: '',
+        res_handwash_func: '', res_handwash_nonfunc: '',
 
         // SEATS
-        seats_kinder: 0, seats_grade_1: 0, seats_grade_2: 0, seats_grade_3: 0,
-        seats_grade_4: 0, seats_grade_5: 0, seats_grade_6: 0,
-        seats_grade_7: 0, seats_grade_8: 0, seats_grade_9: 0, seats_grade_10: 0,
-        seats_grade_11: 0, seats_grade_12: 0
+        seats_kinder: '', seats_grade_1: '', seats_grade_2: '', seats_grade_3: '',
+        seats_grade_4: '', seats_grade_5: '', seats_grade_6: '',
+        seats_grade_7: '', seats_grade_8: '', seats_grade_9: '', seats_grade_10: '',
+        seats_grade_11: '', seats_grade_12: ''
     };
 
     // --- FETCH DATA (Strict Sync Cache Strategy) ---
@@ -248,9 +376,10 @@ const SchoolResources = () => {
         let finalValue = value;
 
         if (type === 'number') {
-            // Limit to 5 digits
-            const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
-            finalValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+            // Limit to 5 digits (4 for seats)
+            const limit = name.startsWith('seats_') ? 4 : 5;
+            const cleanValue = value.replace(/[^0-9]/g, '').slice(0, limit);
+            finalValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         }
 
         setFormData(prev => ({
@@ -265,15 +394,87 @@ const SchoolResources = () => {
     }, [formData]);
 
     // --- SAVE LOGIC ---
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        // 1. Check Generic Inputs (Labs, Internet, etc.)
+        const genericFields = [
+            'res_laboratories', 'res_internet_rooms', 'res_clinic',
+            'res_inv_math_sci', 'res_inv_tle', 'res_inv_ict', 'res_inv_library',
+            'res_wash_group', 'res_water_source_1', 'res_water_source_2'
+        ];
+
+        for (const f of genericFields) {
+            if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+        }
+
+        // 2. Check Toilets
+        if (formData.res_toilet_segmented) {
+            // Check male/female/pwd/communal inputs
+            const toiletFields = [
+                'res_toilet_male_func', 'res_toilet_male_nonfunc',
+                'res_toilet_female_func', 'res_toilet_female_nonfunc',
+                'res_toilet_pwd_func', 'res_toilet_pwd_nonfunc',
+                'res_toilet_communal_func', 'res_toilet_communal_nonfunc'
+            ];
+            for (const f of toiletFields) {
+                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            }
+        } else {
+            // Shared
+            const sharedFields = ['res_toilet_shared_func', 'res_toilet_shared_nonfunc'];
+            for (const f of sharedFields) {
+                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            }
+        }
+
+        // 3. Check Seats (Conditional)
+        if (showElem()) {
+            if (seatsData.seats_kinder === '' || seatsData.seats_g1_g3 === '' || seatsData.seats_g4_g6 === '') return false;
+        }
+        if (showJHS()) {
+            if (seatsData.seats_jhs === '') return false;
+        }
+        if (showSHS()) {
+            if (seatsData.seats_shs === '') return false;
+        }
+
+        return true;
+    };
+
     const confirmSave = async () => {
         setShowSaveModal(false);
         setIsSaving(true);
 
-        const payload = {
+        const rawPayload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
             uid: auth.currentUser.uid,
             ...formData
         };
+
+        // Sanitize Payload: Convert empty strings to 0 for numeric fields
+        // Define fields that are ALLOWED to be strings (nullable in DB or handled by valueOrNull)
+        const stringFields = [
+            'res_internet_type', 'res_water_source', 'res_electricity_source',
+            'res_ownership_type', 'res_buildable_space', 'sha_category',
+            'schoolId', 'uid'
+        ];
+
+        const payload = {};
+        Object.keys(rawPayload).forEach(key => {
+            if (stringFields.includes(key)) {
+                payload[key] = rawPayload[key];
+            } else {
+                // Numeric fields: Convert '' -> 0
+                const val = rawPayload[key];
+                payload[key] = (val === '' || val === null || val === undefined) ? 0 : val;
+            }
+        });
+
+        if (!payload.schoolId) {
+            alert("Error: School ID is missing. Please ensure your profile is loaded.");
+            setIsSaving(false);
+            return;
+        }
 
         if (!navigator.onLine) {
             await handleOffline(payload);
@@ -292,9 +493,13 @@ const SchoolResources = () => {
                 setOriginalData({ ...formData });
                 setIsLocked(true);
             } else {
-                throw new Error("Update failed");
+                const errorData = await res.json();
+                alert(`Server Error: ${errorData.error || errorData.message || "Update failed"}`);
+                // Do not fallback to offline for server logic errors
             }
         } catch (e) {
+            console.error(e);
+            // Only fallback to offline for network errors
             await handleOffline(payload);
         } finally {
             setIsSaving(false);
@@ -314,126 +519,7 @@ const SchoolResources = () => {
         setIsSaving(false);
     };
 
-    // --- COMPONENTS ---
-    const InputField = ({ label, name, type = "number" }) => (
-        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-2/3 group-hover:text-blue-600 transition-colors">{label}</label>
-            <input
-                type={type} name={name} value={formData[name] ?? (type === 'number' ? 0 : '')}
-                onChange={handleChange} disabled={isLocked || viewOnly}
-                onWheel={(e) => e.target.blur()}
-                className="w-24 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent text-lg shadow-sm"
-            />
-        </div>
-    );
-
-    const SelectField = ({ label, name, options }) => (
-        <div className="flex flex-col gap-2 bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
-            {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">{label}</label>}
-            <select
-                name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
-                className="w-full font-bold text-slate-700 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
-            >
-                <option value="">-- Select --</option>
-                {options.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                ))}
-            </select>
-        </div>
-    );
-
-    const SeatRow = ({ label, enrollment, seatKey }) => {
-        const seats = formData[seatKey] || 0;
-        const shortage = enrollment - seats;
-        const isShortage = shortage > 0;
-
-        return (
-            <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
-                <td className="py-4 px-4 text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">{label}</td>
-                <td className="py-4 px-4 text-center">
-                    <span className="bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-lg font-bold">
-                        {enrollment}
-                    </span>
-                </td>
-                <td className="py-4 px-4">
-                    <div className="flex justify-center flex-col items-center">
-                        <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total (All Sections)</p>
-                        <input
-                            type="number"
-                            name={seatKey}
-                            value={seats}
-                            onChange={handleChange}
-                            disabled={isLocked || viewOnly}
-                            onWheel={(e) => e.target.blur()}
-                            className="w-20 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
-                        />
-                    </div>
-                </td>
-                <td className="py-4 px-4 text-center">
-                    {isShortage ? (
-                        <span className="text-red-600 bg-red-50 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border border-red-100 inline-flex items-center gap-1">
-                            <FiXCircle className="inline" /> -{shortage}
-                        </span>
-                    ) : (
-                        <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-emerald-100 inline-flex items-center gap-1">
-                            <FiCheckCircle className="inline" /> OK
-                        </span>
-                    )}
-                </td>
-            </tr>
-        );
-    };
-
-    const ResourceAuditRow = ({ label, funcName, nonFuncName }) => (
-        <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
-            <td className="py-4 px-4 text-xs font-bold text-slate-600 uppercase tracking-wide group-hover:text-blue-600 transition-colors">{label}</td>
-            <td className="py-3 px-2">
-                <div className="relative">
-                    <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
-                    <input
-                        type="number"
-                        name={funcName}
-                        value={formData[funcName] || 0}
-                        onChange={handleChange}
-                        disabled={isLocked || viewOnly}
-                        onWheel={(e) => e.target.blur()}
-                        className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
-                        placeholder="0"
-                    />
-                </div>
-            </td>
-            <td className="py-3 px-2">
-                <div className="relative">
-                    <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
-                    <input
-                        type="number"
-                        name={nonFuncName}
-                        value={formData[nonFuncName] || 0}
-                        onChange={handleChange}
-                        disabled={isLocked || viewOnly}
-                        onWheel={(e) => e.target.blur()}
-                        className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
-                        placeholder="0"
-                    />
-                </div>
-            </td>
-        </tr>
-    );
-
-    const LabRow = ({ label, name }) => (
-        <div className="flex justify-between items-center p-4 border-b border-slate-50 last:border-0 bg-slate-50/50 rounded-2xl mb-2 hover:bg-white hover:shadow-sm hover:border-slate-100 transition-all">
-            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
-            <input
-                type="number"
-                name={name}
-                value={formData[name] || 0}
-                onChange={handleChange}
-                disabled={isLocked || viewOnly}
-                onWheel={(e) => e.target.blur()}
-                className="w-20 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent shadow-sm"
-            />
-        </div>
-    );
+    // --- COMPONENTS EXTRACTED ABOVE ---
 
     // VISIBILITY Helpers
     const showElem = () => !curricularOffering || curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
@@ -493,14 +579,14 @@ const SchoolResources = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50 bg-white">
-                                <ResourceAuditRow label="E-Cart" funcName="res_ecart_func" nonFuncName="res_ecart_nonfunc" />
-                                <ResourceAuditRow label="Laptop" funcName="res_laptop_func" nonFuncName="res_laptop_nonfunc" />
-                                <ResourceAuditRow label="TV / Smart TV" funcName="res_tv_func" nonFuncName="res_tv_nonfunc" />
-                                <ResourceAuditRow label="Printers" funcName="res_printer_func" nonFuncName="res_printer_nonfunc" />
-                                <ResourceAuditRow label="Desks" funcName="res_desk_func" nonFuncName="res_desk_nonfunc" />
-                                <ResourceAuditRow label="Arm Chairs" funcName="res_armchair_func" nonFuncName="res_armchair_nonfunc" />
-                                <ResourceAuditRow label="Toilets" funcName="res_toilet_func" nonFuncName="res_toilet_nonfunc" />
-                                <ResourceAuditRow label="Hand Washing Stn" funcName="res_handwash_func" nonFuncName="res_handwash_nonfunc" />
+                                <ResourceAuditRow label="E-Cart" funcName="res_ecart_func" nonFuncName="res_ecart_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="Laptop" funcName="res_laptop_func" nonFuncName="res_laptop_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="TV / Smart TV" funcName="res_tv_func" nonFuncName="res_tv_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="Printers" funcName="res_printer_func" nonFuncName="res_printer_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="Desks" funcName="res_desk_func" nonFuncName="res_desk_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="Arm Chairs" funcName="res_armchair_func" nonFuncName="res_armchair_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="Toilets" funcName="res_toilet_func" nonFuncName="res_toilet_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <ResourceAuditRow label="Hand Washing Stn" funcName="res_handwash_func" nonFuncName="res_handwash_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                             </tbody>
                         </table>
                     </div>
@@ -508,9 +594,9 @@ const SchoolResources = () => {
                     {/* Labs Section */}
                     <div className="space-y-2 pt-2">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 pl-1">Specialized Rooms</p>
-                        <LabRow label="Science Laboratory" name="res_sci_labs" />
-                        <LabRow label="Computer Laboratory" name="res_com_labs" />
-                        <LabRow label="TVL/TLE Workshop Lab" name="res_tvl_workshops" />
+                        <LabRow label="Science Laboratory" name="res_sci_labs" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <LabRow label="Computer Laboratory" name="res_com_labs" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        <LabRow label="TVL/TLE Workshop Lab" name="res_tvl_workshops" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                     </div>
                 </div>
 
@@ -527,27 +613,26 @@ const SchoolResources = () => {
                     </div>
 
                     <div className="grid gap-4">
-                        <SelectField
-                            label="Ownership Type"
-                            name="res_ownership_type"
-                            options={["DOS", "DOD", "For Verification", "PP", "SP", "Tax Dec", "TCT/OCT", "Usucfruct agreement", "With Adverse Claims"]}
-                        />
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <SelectField
                                 label="Electricity Source"
                                 name="res_electricity_source"
                                 options={["For Verification", "GRID AND OFF-GRID SUPPLY", "GRID SUPPLY", "OFF-GRID SUPPLY", "NO ELECTRICITY"]}
+                                formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                             />
                             <SelectField
                                 label="Water Source"
                                 name="res_water_source"
                                 options={["For Verification", "Natural Resources", "Piped line from Local Service Provider", "No Water Source"]}
+                                formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                             />
                         </div>
                         <SelectField
                             label="Is there Buildable Space?"
                             name="res_buildable_space"
                             options={["Yes", "No"]}
+                            formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                         />
                         <SelectField
                             label="SHA (Special Hardship Allowance) Category"
@@ -558,6 +643,7 @@ const SchoolResources = () => {
                                 "PURE MULTIGRADE SCHOOL",
                                 "HARDSHIP POST AND PURE MULTIGRADE SCHOOL"
                             ]}
+                            formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                         />
                     </div>
                 </div>
@@ -588,27 +674,33 @@ const SchoolResources = () => {
                             <tbody className="divide-y divide-slate-50 bg-white">
                                 {showElem() && (
                                     <>
-                                        <SeatRow label="Kinder" enrollment={enrollmentData.gradeKinder || 0} seatKey="seats_kinder" />
-                                        <SeatRow label="Grade 1" enrollment={enrollmentData.grade1 || 0} seatKey="seats_grade_1" />
-                                        <SeatRow label="Grade 2" enrollment={enrollmentData.grade2 || 0} seatKey="seats_grade_2" />
-                                        <SeatRow label="Grade 3" enrollment={enrollmentData.grade3 || 0} seatKey="seats_grade_3" />
-                                        <SeatRow label="Grade 4" enrollment={enrollmentData.grade4 || 0} seatKey="seats_grade_4" />
-                                        <SeatRow label="Grade 5" enrollment={enrollmentData.grade5 || 0} seatKey="seats_grade_5" />
-                                        <SeatRow label="Grade 6" enrollment={enrollmentData.grade6 || 0} seatKey="seats_grade_6" />
+                                        <>
+                                            <SeatRow label="Kinder" enrollment={enrollmentData.gradeKinder || 0} seatKey="seats_kinder" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 1" enrollment={enrollmentData.grade1 || 0} seatKey="seats_grade_1" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 2" enrollment={enrollmentData.grade2 || 0} seatKey="seats_grade_2" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 3" enrollment={enrollmentData.grade3 || 0} seatKey="seats_grade_3" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 4" enrollment={enrollmentData.grade4 || 0} seatKey="seats_grade_4" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 5" enrollment={enrollmentData.grade5 || 0} seatKey="seats_grade_5" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 6" enrollment={enrollmentData.grade6 || 0} seatKey="seats_grade_6" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                        </>
                                     </>
                                 )}
                                 {showJHS() && (
                                     <>
-                                        <SeatRow label="Grade 7" enrollment={enrollmentData.grade7 || 0} seatKey="seats_grade_7" />
-                                        <SeatRow label="Grade 8" enrollment={enrollmentData.grade8 || 0} seatKey="seats_grade_8" />
-                                        <SeatRow label="Grade 9" enrollment={enrollmentData.grade9 || 0} seatKey="seats_grade_9" />
-                                        <SeatRow label="Grade 10" enrollment={enrollmentData.grade10 || 0} seatKey="seats_grade_10" />
+                                        <>
+                                            <SeatRow label="Grade 7" enrollment={enrollmentData.grade7 || 0} seatKey="seats_grade_7" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 8" enrollment={enrollmentData.grade8 || 0} seatKey="seats_grade_8" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 9" enrollment={enrollmentData.grade9 || 0} seatKey="seats_grade_9" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 10" enrollment={enrollmentData.grade10 || 0} seatKey="seats_grade_10" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                        </>
                                     </>
                                 )}
                                 {showSHS() && (
                                     <>
-                                        <SeatRow label="Grade 11" enrollment={enrollmentData.grade11 || 0} seatKey="seats_grade_11" />
-                                        <SeatRow label="Grade 12" enrollment={enrollmentData.grade12 || 0} seatKey="seats_grade_12" />
+                                        <>
+                                            <SeatRow label="Grade 11" enrollment={enrollmentData.grade11 || 0} seatKey="seats_grade_11" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 12" enrollment={enrollmentData.grade12 || 0} seatKey="seats_grade_12" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                        </>
                                     </>
                                 )}
                             </tbody>
@@ -647,40 +739,30 @@ const SchoolResources = () => {
                     <div className="grid gap-4">
                         {crType === 'Segmented' ? (
                             <div className="grid grid-cols-2 gap-4">
-                                <InputField label="Male Toilets" name="res_toilets_male" />
-                                <InputField label="Female Toilets" name="res_toilets_female" />
+                                <InputField label="Male Toilets" name="res_toilets_male" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                <InputField label="Female Toilets" name="res_toilets_female" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                             </div>
                         ) : (
-                            <InputField label="Common/Shared Toilets" name="res_toilets_common" />
+                            <InputField label="Common/Shared Toilets" name="res_toilets_common" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                         )}
-                        <InputField label="PWD Toilets" name="res_toilets_pwd" />
+                        <InputField label="PWD Toilets" name="res_toilets_pwd" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                     </div>
                 </div>
             </div>
 
-            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
-                <div className="max-w-4xl mx-auto flex gap-3">
+            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                            Back to List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setIsLocked(false)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            <button onClick={() => { setIsLocked(true); setFormData(originalData || formData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
-                                Cancel
-                            </button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        </button>
                     )}
                 </div>
             </div>

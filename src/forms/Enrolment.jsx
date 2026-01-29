@@ -50,6 +50,15 @@ const Enrolment = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
 
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenEnrolmentInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenEnrolmentInfo', 'true');
+        }
+    }, []);
+
     // Core Data
     const [schoolId, setSchoolId] = useState(null);
     const [curricularOffering, setCurricularOffering] = useState('');
@@ -57,26 +66,26 @@ const Enrolment = () => {
     // Form Data (Snake Case)
     const initialFields = {
         // Elementary
-        grade_kinder: 0, grade_1: 0, grade_2: 0, grade_3: 0,
-        grade_4: 0, grade_5: 0, grade_6: 0,
+        grade_kinder: '', grade_1: '', grade_2: '', grade_3: '',
+        grade_4: '', grade_5: '', grade_6: '',
         // JHS
-        grade_7: 0, grade_8: 0, grade_9: 0, grade_10: 0,
+        grade_7: '', grade_8: '', grade_9: '', grade_10: '',
         // SHS Strands 11
-        abm_11: 0, stem_11: 0, humss_11: 0, gas_11: 0,
-        tvl_ict_11: 0, tvl_he_11: 0, tvl_ia_11: 0, tvl_afa_11: 0,
-        arts_11: 0, sports_11: 0,
+        abm_11: '', stem_11: '', humss_11: '', gas_11: '',
+        tvl_ict_11: '', tvl_he_11: '', tvl_ia_11: '', tvl_afa_11: '',
+        arts_11: '', sports_11: '',
         // SHS Strands 12
-        abm_12: 0, stem_12: 0, humss_12: 0, gas_12: 0,
-        tvl_ict_12: 0, tvl_he_12: 0, tvl_ia_12: 0, tvl_afa_12: 0,
-        arts_12: 0, sports_12: 0,
+        abm_12: '', stem_12: '', humss_12: '', gas_12: '',
+        tvl_ict_12: '', tvl_he_12: '', tvl_ia_12: '', tvl_afa_12: '',
+        arts_12: '', sports_12: '',
 
         // ARAL Data
-        aral_math_g1: 0, aral_read_g1: 0, aral_sci_g1: 0,
-        aral_math_g2: 0, aral_read_g2: 0, aral_sci_g2: 0,
-        aral_math_g3: 0, aral_read_g3: 0, aral_sci_g3: 0,
-        aral_math_g4: 0, aral_read_g4: 0, aral_sci_g4: 0,
-        aral_math_g5: 0, aral_read_g5: 0, aral_sci_g5: 0,
-        aral_math_g6: 0, aral_read_g6: 0, aral_sci_g6: 0,
+        aral_math_g1: '', aral_read_g1: '', aral_sci_g1: '',
+        aral_math_g2: '', aral_read_g2: '', aral_sci_g2: '',
+        aral_math_g3: '', aral_read_g3: '', aral_sci_g3: '',
+        aral_math_g4: '', aral_read_g4: '', aral_sci_g4: '',
+        aral_math_g5: '', aral_read_g5: '', aral_sci_g5: '',
+        aral_math_g6: '', aral_read_g6: '', aral_sci_g6: '',
 
         // Totals (Computed)
         es_enrollment: 0, jhs_enrollment: 0, shs_enrollment: 0, total_enrollment: 0,
@@ -228,8 +237,45 @@ const Enrolment = () => {
 
     const handleChange = (name, value) => {
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 5);
-        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
+    };
+
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        // Elementary
+        if (showElem()) {
+            const elemFields = ['grade_kinder', 'grade_1', 'grade_2', 'grade_3', 'grade_4', 'grade_5', 'grade_6'];
+            // Also ARAL fields
+            const aralFields = [];
+            [1, 2, 3, 4, 5, 6].forEach(g => {
+                aralFields.push(`aral_math_g${g}`, `aral_read_g${g}`, `aral_sci_g${g}`);
+            });
+
+            for (const f of [...elemFields, ...aralFields]) {
+                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            }
+        }
+
+        // JHS
+        if (showJHS()) {
+            const jhsFields = ['grade_7', 'grade_8', 'grade_9', 'grade_10'];
+            for (const f of jhsFields) {
+                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            }
+        }
+
+        // SHS
+        if (showSHS()) {
+            const shsFields = [
+                'abm_11', 'stem_11', 'humss_11', 'gas_11', 'tvl_ict_11', 'tvl_he_11', 'tvl_ia_11', 'tvl_afa_11', 'arts_11', 'sports_11',
+                'abm_12', 'stem_12', 'humss_12', 'gas_12', 'tvl_ict_12', 'tvl_he_12', 'tvl_ia_12', 'tvl_afa_12', 'arts_12', 'sports_12'
+            ];
+            for (const f of shsFields) {
+                if (formData[f] === '' || formData[f] === null || formData[f] === undefined) return false;
+            }
+        }
+        return true;
     };
 
     const confirmSave = async () => {
@@ -345,10 +391,9 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={formData[item.k] || ''}
+                                        type="number" value={+formData[item.k] || ''}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
-                                        placeholder="0"
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                     />
                                 </div>
@@ -369,10 +414,9 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={formData[item.k] || ''}
+                                        type="number" value={+formData[item.k] || ''}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
-                                        placeholder="0"
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                     />
                                 </div>
@@ -410,11 +454,11 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.l}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[row.k11] || ''} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={+formData[row.k11] || ''} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[row.k12] || ''} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={+formData[row.k12] || ''} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}
@@ -443,15 +487,15 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[`aral_math_g${g}`] || ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={+formData[`aral_math_g${g}`] || ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[`aral_read_g${g}`] || ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={+formData[`aral_read_g${g}`] || ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[`aral_sci_g${g}`] || ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="number" value={+formData[`aral_sci_g${g}`] || ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}
@@ -473,7 +517,7 @@ const Enrolment = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
                         </button>
                     )}

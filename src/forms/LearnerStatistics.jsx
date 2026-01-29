@@ -17,12 +17,12 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
     // Helper to get value specifically for this component instance
     const getGridValue = (cat, grade) => {
         const key = `stat_${cat}_${grade}`;
-        return formData[key] || 0;
+        return formData[key] || '';
     };
 
     // Calculate totals locally based on the passed formData
     const calculateTotals = () => {
-        const sum = (gradeList) => gradeList.reduce((acc, g) => acc + (getGridValue(category, g) || 0), 0);
+        const sum = (gradeList) => gradeList.reduce((acc, g) => acc + (Number(getGridValue(category, g)) || 0), 0);
         return {
             es: sum(['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6']),
             jhs: sum(['g7', 'g8', 'g9', 'g10']),
@@ -121,6 +121,15 @@ const LearnerStatistics = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
 
+    // --- AUTO-SHOW INFO MODAL ---
+    useEffect(() => {
+        const hasSeenInfo = localStorage.getItem('hasSeenLearnerStatsInfo');
+        if (!hasSeenInfo) {
+            setShowInfoModal(true);
+            localStorage.setItem('hasSeenLearnerStatsInfo', 'true');
+        }
+    }, []);
+
     // Core Form Data + JSONB Grids
     const [formData, setFormData] = useState({
         schoolId: '',
@@ -132,7 +141,7 @@ const LearnerStatistics = () => {
         const key = `stat_${category}_${grade}`;
         // Limit to 3 digits
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
-        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
 
         setFormData(prev => ({
             ...prev,
@@ -320,6 +329,37 @@ const LearnerStatistics = () => {
         fetchData();
     }, []);
 
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        // Need to check ALL grid cells
+        // It's a bit heavy but necessary.
+        const cats = ['sned', 'disability', 'als', 'muslim', 'ip', 'displaced', 'repetition', 'overage', 'dropout'];
+        const grades = getGrades(); // ['k', 'g1'...]
+
+        // Filter grades based on offering
+        const offering = formData.curricular_offering?.toLowerCase() || '';
+        const activeGrades = [];
+
+        if (offering.includes('elementary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || !offering) {
+            activeGrades.push('k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6');
+        }
+        if (offering.includes('junior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || !offering) {
+            activeGrades.push('g7', 'g8', 'g9', 'g10');
+        }
+        if (offering.includes('senior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || !offering) {
+            activeGrades.push('g11', 'g12');
+        }
+
+        for (const cat of cats) {
+            for (const g of activeGrades) {
+                const key = `stat_${cat}_${g}`;
+                const val = formData[key];
+                if (val === '' || val === null || val === undefined) return false;
+            }
+        }
+        return true;
+    };
+
     const handleSave = async () => {
         const user = auth.currentUser;
         if (!user) return;
@@ -460,7 +500,7 @@ const LearnerStatistics = () => {
                                     </span>
                                 )}
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the breakdown of learners by specific programs (IP, Muslim, etc.) and categories per grade level?</p>
+                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the breakdown of learners per category or characteristic?</p>
                         </div>
                     </div>
                     <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
@@ -573,8 +613,8 @@ const LearnerStatistics = () => {
                     ) : (
                         <button
                             onClick={handleSave}
-                            disabled={saving}
-                            className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                            disabled={saving || !isFormValid()}
+                            className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {saving ? 'Saving...' : <><FiSave /> Save Statistics</>}
                         </button>

@@ -64,24 +64,24 @@ const OrganizedClasses = () => {
 
     // Default values set to 0
     const [formData, setFormData] = useState({
-        kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
-        g7: 0, g8: 0, g9: 0, g10: 0,
-        g11: 0, g12: 0
+        kinder: '', g1: '', g2: '', g3: '', g4: '', g5: '', g6: '',
+        g7: '', g8: '', g9: '', g10: '',
+        g11: '', g12: ''
     });
 
     const [classSizeData, setClassSizeData] = useState({
-        cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
-        cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
-        cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
-        cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
-        cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
-        cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
-        cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
-        cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
-        cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
-        cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
-        cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
-        cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
+        cntLessG1: '', cntWithinG1: '', cntAboveG1: '',
+        cntLessG2: '', cntWithinG2: '', cntAboveG2: '',
+        cntLessG3: '', cntWithinG3: '', cntAboveG3: '',
+        cntLessG4: '', cntWithinG4: '', cntAboveG4: '',
+        cntLessG5: '', cntWithinG5: '', cntAboveG5: '',
+        cntLessG6: '', cntWithinG6: '', cntAboveG6: '',
+        cntLessG7: '', cntWithinG7: '', cntAboveG7: '',
+        cntLessG8: '', cntWithinG8: '', cntAboveG8: '',
+        cntLessG9: '', cntWithinG9: '', cntAboveG9: '',
+        cntLessG10: '', cntWithinG10: '', cntAboveG10: '',
+        cntLessG11: '', cntWithinG11: '', cntAboveG11: '',
+        cntLessG12: '', cntWithinG12: '', cntAboveG12: ''
     });
     const [originalData, setOriginalData] = useState(null);
 
@@ -99,23 +99,23 @@ const OrganizedClasses = () => {
             if (user) {
                 // DEFAULT STATE (Prevents Uncontrolled Input Errors)
                 const defaultFormData = {
-                    kinder: 0, g1: 0, g2: 0, g3: 0, g4: 0, g5: 0, g6: 0,
-                    g7: 0, g8: 0, g9: 0, g10: 0,
-                    g11: 0, g12: 0
+                    kinder: '', g1: '', g2: '', g3: '', g4: '', g5: '', g6: '',
+                    g7: '', g8: '', g9: '', g10: '',
+                    g11: '', g12: ''
                 };
                 const defaultClassSize = {
-                    cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
-                    cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
-                    cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
-                    cntLessG4: 0, cntWithinG4: 0, cntAboveG4: 0,
-                    cntLessG5: 0, cntWithinG5: 0, cntAboveG5: 0,
-                    cntLessG6: 0, cntWithinG6: 0, cntAboveG6: 0,
-                    cntLessG7: 0, cntWithinG7: 0, cntAboveG7: 0,
-                    cntLessG8: 0, cntWithinG8: 0, cntAboveG8: 0,
-                    cntLessG9: 0, cntWithinG9: 0, cntAboveG9: 0,
-                    cntLessG10: 0, cntWithinG10: 0, cntAboveG10: 0,
-                    cntLessG11: 0, cntWithinG11: 0, cntAboveG11: 0,
-                    cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
+                    cntLessG1: '', cntWithinG1: '', cntAboveG1: '',
+                    cntLessG2: '', cntWithinG2: '', cntAboveG2: '',
+                    cntLessG3: '', cntWithinG3: '', cntAboveG3: '',
+                    cntLessG4: '', cntWithinG4: '', cntAboveG4: '',
+                    cntLessG5: '', cntWithinG5: '', cntAboveG5: '',
+                    cntLessG6: '', cntWithinG6: '', cntAboveG6: '',
+                    cntLessG7: '', cntWithinG7: '', cntAboveG7: '',
+                    cntLessG8: '', cntWithinG8: '', cntAboveG8: '',
+                    cntLessG9: '', cntWithinG9: '', cntAboveG9: '',
+                    cntLessG10: '', cntWithinG10: '', cntAboveG10: '',
+                    cntLessG11: '', cntWithinG11: '', cntAboveG11: '',
+                    cntLessG12: '', cntWithinG12: '', cntAboveG12: ''
                 };
 
                 const storedSchoolId = localStorage.getItem('schoolId');
@@ -291,10 +291,10 @@ const OrganizedClasses = () => {
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
-        const hasSeenInfo = sessionStorage.getItem('hasSeenOrganizedClassesInfo');
+        const hasSeenInfo = localStorage.getItem('hasSeenOrganizedClassesInfo');
         if (!hasSeenInfo) {
             setShowInfoModal(true);
-            sessionStorage.setItem('hasSeenOrganizedClassesInfo', 'true');
+            localStorage.setItem('hasSeenOrganizedClassesInfo', 'true');
         }
     }, []);
 
@@ -310,14 +310,14 @@ const OrganizedClasses = () => {
     // --- HANDLER FIXES ---
     const handleChange = (name, value) => {
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
-        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     const handleClassSizeChange = (e) => {
         const { name, value } = e.target;
         const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
-        const intValue = cleanValue === '' ? 0 : parseInt(cleanValue, 10);
+        const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setClassSizeData(prev => ({ ...prev, [name]: intValue }));
     };
 
@@ -326,6 +326,32 @@ const OrganizedClasses = () => {
         setOriginalData({ ...formData, classSize: { ...classSizeData } });
         setIsLocked(false);
         setShowEditModal(false);
+    };
+
+    // --- VALIDATION ---
+    const isFormValid = () => {
+        const grades = [];
+        if (showElem()) grades.push('kinder', '1', '2', '3', '4', '5', '6');
+        if (showJHS()) grades.push('7', '8', '9', '10');
+        if (showSHS()) grades.push('11', '12');
+
+        // Check Grade Enrolment Inputs
+        for (const g of grades) {
+            const key = g === 'kinder' ? 'grade_kinder' : `grade_${g}`;
+            if (formData[key] === '' || formData[key] === null || formData[key] === undefined) return false;
+        }
+
+        // Check Class Size Inputs
+        const sizeGrades = [];
+        if (showElem()) sizeGrades.push('Kinder', '1', '2', '3', '4', '5', '6');
+        if (showJHS()) sizeGrades.push('7', '8', '9', '10');
+        if (showSHS()) sizeGrades.push('11', '12');
+
+        for (const g of sizeGrades) {
+            if (classSizeData[`cntLessG${g}`] === '' || classSizeData[`cntWithinG${g}`] === '' || classSizeData[`cntAboveG${g}`] === '') return false;
+        }
+
+        return true;
     };
 
     const confirmSave = async () => {
@@ -423,10 +449,9 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="number"
-                                            value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                            value={+formData[item.k] || ''}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
-                                            placeholder="0"
                                             className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         />
                                     </div>
@@ -448,10 +473,9 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="number"
-                                            value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                            value={+formData[item.k] || ''}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
-                                            placeholder="0"
                                             className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         />
                                     </div>
@@ -472,10 +496,9 @@ const OrganizedClasses = () => {
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
                                             type="number"
-                                            value={formData[item.k] === 0 ? '' : formData[item.k]}
+                                            value={+formData[item.k] || ''}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
-                                            placeholder="0"
                                             className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         />
                                     </div>
@@ -500,6 +523,9 @@ const OrganizedClasses = () => {
                             <div>
                                 <h2 className="text-base font-bold text-slate-800">Class Size Standards</h2>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Analysis per Category</p>
+                                <p className="text-xs text-blue-600 mt-2 bg-blue-50 p-2 rounded-lg border border-blue-100 italic">
+                                    How many sections have class size that is less than, within, or above the standard?
+                                </p>
                             </div>
                         </div>
 
@@ -526,7 +552,7 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric"
                                                     name={`cntLessG${g}`}
-                                                    value={classSizeData[`cntLessG${g}`]}
+                                                    value={+classSizeData[`cntLessG${g}`] || ''}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -538,7 +564,7 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric"
                                                     name={`cntWithinG${g}`}
-                                                    value={classSizeData[`cntWithinG${g}`]}
+                                                    value={+classSizeData[`cntWithinG${g}`] || ''}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -550,7 +576,7 @@ const OrganizedClasses = () => {
                                                 <input
                                                     type="text" inputMode="numeric"
                                                     name={`cntAboveG${g}`}
-                                                    value={classSizeData[`cntAboveG${g}`]}
+                                                    value={+classSizeData[`cntAboveG${g}`] || ''}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -566,29 +592,19 @@ const OrganizedClasses = () => {
                 </form>
             </div>
 
-            {/* --- STANDARDIZED FOOTER (Unlock to Edit) --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
-                <div className="max-w-4xl mx-auto flex gap-3">
+            {/* Footer Actions */}
+            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                <div className="max-w-lg mx-auto flex gap-3">
                     {viewOnly ? (
-                        <button onClick={() => navigate(-1)} className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                            Back to List
-                        </button>
+                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
-                        <button
-                            onClick={() => setShowEditModal(true)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
+                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <>
-                            <button onClick={() => { setIsLocked(true); setFormData(originalData?.formData || formData); setClassSizeData(originalData?.classSizeData || classSizeData); }} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold">
-                                Cancel
-                            </button>
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-[2] py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg">
-                                {isSaving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </>
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><FiSave /> Save Changes</>}
+                        </button>
                     )}
                 </div>
             </div>
