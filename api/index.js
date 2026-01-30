@@ -296,6 +296,43 @@ const initOtpTable = async () => {
         console.error('❌ Failed to migrate specialization columns:', migErr.message);
       }
 
+      // --- MIGRATION: ADD IPC COLUMN TO ENGINEER FORM ---
+      try {
+        // First ensure the table exists (it should, but safety first)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS engineer_form (
+                project_id SERIAL PRIMARY KEY,
+                school_name TEXT,
+                project_name TEXT,
+                school_id TEXT,
+                region TEXT,
+                division TEXT,
+                status TEXT,
+                accomplishment_percentage INTEGER,
+                status_as_of TIMESTAMP,
+                target_completion_date TIMESTAMP,
+                actual_completion_date TIMESTAMP,
+                notice_to_proceed TIMESTAMP,
+                contractor_name TEXT,
+                project_allocation NUMERIC,
+                batch_of_funds TEXT,
+                other_remarks TEXT,
+                engineer_id TEXT,
+                validation_status TEXT,
+                validation_remarks TEXT,
+                validated_by TEXT
+            );
+        `);
+
+        await client.query(`
+            ALTER TABLE engineer_form 
+            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
+        `);
+        console.log('✅ Checked/Added IPC column to engineer_form');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate IPC column:', migErr.message);
+      }
+
       // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
       try {
         await client.query(`
@@ -324,6 +361,26 @@ const initOtpTable = async () => {
         console.log('✅ Checked/Added ARAL and Teaching Experience columns');
       } catch (migErr) {
         console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
+      }
+
+      // --- MIGRATION: UPDATE PROJECT HISTORY SCHEMA ---
+      try {
+        // 1. Add engineer_name column
+        await client.query(`
+          ALTER TABLE engineer_form 
+          ADD COLUMN IF NOT EXISTS engineer_name TEXT;
+        `);
+        console.log('✅ Checked/Added engineer_name and created_at columns');
+
+        // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
+        await client.query(`
+          ALTER TABLE engineer_form 
+          DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 
+        `);
+        console.log('✅ Dropped UNIQUE constraint on IPC (if existed)');
+
+      } catch (migErr) {
+        console.error('❌ Failed to migrate history schema:', migErr.message);
       }
 
 
@@ -420,6 +477,27 @@ const parseIntOrNull = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = parseInt(value);
   return isNaN(parsed) ? null : parsed;
+};
+
+/** Get User Full Name Helper */
+const getUserFullName = async (uid) => {
+  console.log("🔍 getUserFullName called with API uid:", uid);
+  try {
+    const res = await pool.query('SELECT first_name, last_name, email FROM users WHERE uid = $1', [uid]);
+    console.log("🔍 DB Result for user lookup:", res.rows);
+
+    if (res.rows.length > 0) {
+      const { first_name, last_name } = res.rows[0];
+      const fullName = `${first_name || ''} ${last_name || ''}`.trim();
+      console.log("✅ Resolved Full Name:", fullName);
+      return fullName || null;
+    } else {
+      console.warn("⚠️ No user found in DB for UID:", uid);
+    }
+  } catch (err) {
+    console.warn("⚠️ Error fetching user name:", err.message);
+  }
+  return null;
 };
 
 /** Log Activity Helper */
@@ -1284,6 +1362,7 @@ app.post('/api/save-enrolment', async (req, res) => {
 
 
 // --- 8. POST: Save New Project (Updated for Images & Transactions) ---
+// --- 8. POST: Save New Project (Updated for Images, Transactions & IPC) ---
 app.post('/api/save-project', async (req, res) => {
   const data = req.body;
 
@@ -1296,7 +1375,29 @@ app.post('/api/save-project', async (req, res) => {
     client = await pool.connect();
     await client.query('BEGIN'); // Start Transaction
 
-    // 1. Prepare Project Data
+    // 1. Generate IPC (INF-YYYY-XXXXX)
+    const year = new Date().getFullYear();
+    const ipcResult = await client.query(
+      "SELECT ipc FROM engineer_form WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+      [`INF-${year}-%`]
+    );
+
+    let nextSeq = 1;
+    if (ipcResult.rows.length > 0) {
+      const lastIpc = ipcResult.rows[0].ipc;
+      const parts = lastIpc.split('-');
+      if (parts.length === 3 && !isNaN(parts[2])) {
+        nextSeq = parseInt(parts[2]) + 1;
+      }
+    }
+    const newIpc = `INF-${year}-${String(nextSeq).padStart(5, '0')}`;
+
+    // 2. Prepare Project Data
+    // 2. Prepare Project Data
+    // Fix: Fetch engineer name for storage
+    const engineerName = await getUserFullName(data.uid);
+    const resolvedEngineerName = engineerName || data.modifiedBy || 'Engineer';
+
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
       valueOrNull(data.region), valueOrNull(data.division),
@@ -1305,7 +1406,9 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
       valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
       valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
-      data.uid
+      data.uid,
+      newIpc, // $17
+      resolvedEngineerName // $18
     ];
 
     const projectQuery = `
@@ -1314,17 +1417,17 @@ app.post('/api/save-project', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-      RETURNING project_id, project_name;
+        engineer_id, ipc, engineer_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      RETURNING project_id, project_name, ipc;
     `;
 
-    // 2. Insert Project
+    // 3. Insert Project
     const projectResult = await client.query(projectQuery, projectValues);
     const newProject = projectResult.rows[0];
     const newProjectId = newProject.project_id;
 
-    // 3. Insert Images (If they exist in the payload)
+    // 4. Insert Images (If they exist in the payload)
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
       const imageQuery = `
         INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
@@ -1338,21 +1441,48 @@ app.post('/api/save-project', async (req, res) => {
 
     await client.query('COMMIT');
 
-    // 4. Log Activity
+    // 5. Log Activity (Detailed for History)
+    const logDetails = {
+      action: "Project Created",
+      ipc: newIpc,
+      status: data.status || 'Not Yet Started',
+      accomplishment: parseIntOrNull(data.accomplishmentPercentage) || 0,
+      allocation: parseNumberOrNull(data.projectAllocation),
+      timestamp: new Date().toISOString()
+    };
+
+    // Fix: Ensure we have a valid user name for the log
+    // Fix: Ensure we have a valid user name for the log (Fetch from DB first)
+    let finalUserName = await getUserFullName(data.uid);
+
+    // Fallback to frontend provided data if DB fetch returns null
+    if (!finalUserName) {
+      finalUserName = data.modifiedBy;
+    }
+
+    // Final fallback
+    if (!finalUserName || finalUserName === 'undefined') {
+      finalUserName = "Engineer (Unknown)";
+    }
+
+    console.log("📝 Attempting to log CREATE activity for:", newIpc);
+
     try {
       await logActivity(
         data.uid,
-        data.modifiedBy,
+        finalUserName,
         'Engineer',
         'CREATE',
-        `Project: ${newProject.project_name}`,
-        `Created new project for ${data.schoolName} with ${data.images ? data.images.length : 0} photos`
+        `Project: ${newProject.project_name} (${newIpc})`,
+        JSON.stringify(logDetails)
       );
+      console.log("✅ Activity logged successfully for:", newIpc);
     } catch (logErr) {
       console.error("⚠️ Activity Log Error (Non-blocking):", logErr.message);
+      console.error("⚠️ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
     }
 
-    res.status(200).json({ message: "Project and images saved!", project: newProject });
+    res.status(200).json({ message: "Project and images saved!", project: newProject, ipc: newIpc });
 
   } catch (err) {
     if (client) await client.query('ROLLBACK');
@@ -1363,42 +1493,100 @@ app.post('/api/save-project', async (req, res) => {
   }
 });
 // --- 9. PUT: Update Project ---
+// --- 9. PUT: Update Project (With History Logging) ---
 app.put('/api/update-project/:id', async (req, res) => {
   const { id } = req.params;
   const data = req.body;
 
-  const query = `
-    UPDATE "engineer_form"
-    SET status = $1, accomplishment_percentage = $2, status_as_of = $3, other_remarks = $4, actual_completion_date = $5
-    WHERE project_id = $6
-    RETURNING *;
-  `;
-
-  const values = [
-    data.status, parseIntOrNull(data.accomplishmentPercentage),
-    valueOrNull(data.statusAsOfDate), valueOrNull(data.otherRemarks),
-    valueOrNull(data.actualCompletionDate),
-    id
-  ];
-
+  let client;
   try {
-    const result = await pool.query(query, values);
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-    if (result.rowCount === 0) return res.status(404).json({ message: "Project not found" });
+    // 1. Fetch Existing Data for Comparison
+    const oldRes = await client.query('SELECT * FROM "engineer_form" WHERE project_id = $1', [id]);
+    if (oldRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: "Project not found" });
+    }
+    const oldData = oldRes.rows[0];
+
+    // 2. Prepare Data for New Row (Append History)
+    // Fetch user name to ensure it's up-to-date
+    let finalUserName = await getUserFullName(data.uid);
+    if (!finalUserName) finalUserName = data.modifiedBy || 'Engineer (Unknown)';
+
+    // Merge new data with old data (Snapshot concept)
+    const newStatus = data.status || oldData.status;
+    const newAccomplishment = parseIntOrNull(data.accomplishmentPercentage) !== null ? parseIntOrNull(data.accomplishmentPercentage) : oldData.accomplishment_percentage;
+    const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
+    const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
+    const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
+
+    const insertValues = [
+      oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
+      newStatus, newAccomplishment, newStatusAsOf,
+      oldData.target_completion_date, newActualDate, oldData.notice_to_proceed,
+      oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
+      oldData.engineer_id, // Preserve original engineer ID
+      oldData.ipc,         // Preserve IPC to link history
+      finalUserName        // Update Name string
+    ];
+
+    const insertQuery = `
+      INSERT INTO "engineer_form" (
+        project_name, school_name, school_id, region, division,
+        status, accomplishment_percentage, status_as_of,
+        target_completion_date, actual_completion_date, notice_to_proceed,
+        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        engineer_id, ipc, engineer_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      RETURNING *;
+    `;
+
+    const result = await client.query(insertQuery, insertValues);
+    const newData = result.rows[0];
+
+    await client.query('COMMIT');
+
+    // 3. Track Changes (History)
+    const changes = [];
+    if (oldData.status !== newData.status) changes.push(`Status: '${oldData.status}' -> '${newData.status}'`);
+    if (oldData.accomplishment_percentage !== newData.accomplishment_percentage) changes.push(`Accomplishment: ${oldData.accomplishment_percentage}% -> ${newData.accomplishment_percentage}%`);
+    if (oldData.other_remarks !== newData.other_remarks) changes.push(`Remarks updated`);
+
+    // Create a detailed log object
+    const historyLog = {
+      action: "Project Update",
+      ipc: newData.ipc,
+      changes: changes, // List of human-readable changes
+      snapshot: { // Save key metrics
+        status: newData.status,
+        accomplishment: newData.accomplishment_percentage,
+        date: new Date().toISOString()
+      }
+    };
+
+    // 4. Log Activity
+    // Note: finalUserName is already computed above logic
+
 
     await logActivity(
       data.uid,
-      data.modifiedBy,
+      finalUserName,
       'Engineer',
       'UPDATE',
-      `Project ID: ${id}`,
-      `Updated status to ${data.status} (${data.accomplishmentPercentage}%)`
+      `Project: ${newData.project_name} (${newData.ipc || 'No IPC'})`,
+      JSON.stringify(historyLog) // Storing structured history
     );
 
-    res.json({ message: "Update successful", project: result.rows[0] });
+    res.json({ message: "Update successful", project: newData });
   } catch (err) {
+    if (client) await client.query('ROLLBACK');
     console.error("❌ Error updating project:", err.message);
     res.status(500).json({ message: "Server error" });
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -1411,9 +1599,14 @@ app.get('/api/projects', async (req, res) => {
     let whereClauses = [];
 
     let sql = `
+      WITH LatestProjects AS (
+          SELECT DISTINCT ON (ipc) *
+          FROM engineer_form
+          ORDER BY ipc, project_id DESC
+      )
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status,
+        school_id AS "schoolId", division, region, status, ipc, engineer_name AS "engineerName",
         accomplishment_percentage AS "accomplishmentPercentage",
         project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
@@ -1421,7 +1614,7 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
-      FROM "engineer_form"
+      FROM LatestProjects
     `;
 
     // 1. ADD FILTER: Only show projects belonging to this engineer
@@ -1468,7 +1661,7 @@ app.get('/api/projects/:id', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status,
+        school_id AS "schoolId", division, region, status, ipc,
         accomplishment_percentage AS "accomplishmentPercentage",
         project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
         contractor_name AS "contractorName", other_remarks AS "otherRemarks",
@@ -1492,7 +1685,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
     const query = `
       SELECT 
         project_id AS "id", school_name AS "schoolName", project_name AS "projectName",
-        school_id AS "schoolId", division, region, status, validation_status,
+        school_id AS "schoolId", division, region, status, validation_status, ipc,
         validation_remarks AS "validationRemarks", validated_by AS "validatedBy",
         accomplishment_percentage AS "accomplishmentPercentage",
         project_allocation AS "projectAllocation", batch_of_funds AS "batchOfFunds",
