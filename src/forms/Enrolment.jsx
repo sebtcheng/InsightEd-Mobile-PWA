@@ -565,8 +565,8 @@ const Enrolment = () => {
                 </div>
             )}
 
-            {showSuccessModal && <SuccessModal onClose={() => setShowSuccessModal(false)} />}
-            {showOfflineModal && <OfflineSuccessModal onClose={() => setShowOfflineModal(false)} />}
+            <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} />
+            <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
         </div>
     );
 };

@@ -33,7 +33,7 @@ const SelectField = ({ label, name, options, formData, handleChange, isLocked, v
             name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
             className="w-full font-bold text-slate-900 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
         >
-            <option value="">-- Select --</option>
+            <option value="" disabled hidden>-- Select --</option>
             {options.map(opt => (
                 <option key={opt} value={opt}>{opt}</option>
             ))}
@@ -410,36 +410,20 @@ const SchoolResources = () => {
     // --- VALIDATION ---
     const isFormValid = () => {
         const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
-        // 1. Check Generic Inputs (Labs, Internet, etc.)
+        // 1. Check Generic Inputs (Labs + Dropdowns)
         const genericFields = [
-            'res_laboratories', 'res_internet_rooms', 'res_clinic',
-            'res_inv_math_sci', 'res_inv_tle', 'res_inv_ict', 'res_inv_library',
-            'res_wash_group', 'res_water_source_1', 'res_water_source_2'
+            // Labs (Numeric)
+            'res_sci_labs', 'res_com_labs', 'res_tvl_workshops',
+            // Dropdowns (Strict Check)
+            'res_water_source', 'res_electricity_source', 'res_buildable_space', 'sha_category'
         ];
 
         for (const f of genericFields) {
+            // Strict check: must not be empty string (for dropdowns) or null/undefined
             if (!isValidEntry(formData[f])) return false;
         }
 
-        // 2. Check Toilets
-        if (formData.res_toilet_segmented) {
-            // Check male/female/pwd/communal inputs
-            const toiletFields = [
-                'res_toilet_male_func', 'res_toilet_male_nonfunc',
-                'res_toilet_female_func', 'res_toilet_female_nonfunc',
-                'res_toilet_pwd_func', 'res_toilet_pwd_nonfunc',
-                'res_toilet_communal_func', 'res_toilet_communal_nonfunc'
-            ];
-            for (const f of toiletFields) {
-                if (!isValidEntry(formData[f])) return false;
-            }
-        } else {
-            // Shared
-            const sharedFields = ['res_toilet_shared_func', 'res_toilet_shared_nonfunc'];
-            for (const f of sharedFields) {
-                if (!isValidEntry(formData[f])) return false;
-            }
-        }
+        // 2. Check Toilets (Removed legacy validation)
 
         // 3. Check Seats (Conditional)
         if (showElem()) {
@@ -777,7 +761,7 @@ const SchoolResources = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             ) : (

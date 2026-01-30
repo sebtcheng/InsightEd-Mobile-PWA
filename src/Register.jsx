@@ -430,6 +430,7 @@ const Register = () => {
 
         // STRICT OTP ENFORCEMENT
         // STRICT OTP ENFORCEMENT
+        // STRICT OTP ENFORCEMENT
         /*
         if (!isOtpVerified) {
             alert("Please verify your email via OTP before registering.");
@@ -1002,6 +1003,7 @@ const Register = () => {
                                 </div>
                             )}
 
+                            {/* === 3. EMAIL VERIFICATION & SECURITY === */}
                             {/* === 3. EMAIL VERIFICATION & SECURITY === */}
                             {/* === 3. EMAIL VERIFICATION & SECURITY === */}
                             {/* 

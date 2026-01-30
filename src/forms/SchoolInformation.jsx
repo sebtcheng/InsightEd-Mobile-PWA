@@ -219,6 +219,38 @@ const SchoolInformation = () => {
 
 
 
+    // --- DATE PICKER HELPERS ---
+    const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    const days = Array.from({ length: 31 }, (_, i) => i + 1);
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: currentYear - 1960 + 1 }, (_, i) => currentYear - i);
+
+    const handleDateChange = (part, val) => {
+        let y, m, d;
+        if (formData.dateHired) {
+            const parts = formData.dateHired.split('-');
+            y = parseInt(parts[0]);
+            m = parseInt(parts[1]) - 1; // 0-indexed for month logic
+            d = parseInt(parts[2]);
+        } else {
+            const now = new Date();
+            y = now.getFullYear();
+            m = now.getMonth();
+            d = now.getDate();
+        }
+
+        if (part === 'year') y = parseInt(val);
+        if (part === 'month') m = parseInt(val);
+        if (part === 'day') d = parseInt(val);
+
+        // Construct YYYY-MM-DD string
+        const isoDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        setFormData(prev => ({ ...prev, dateHired: isoDate }));
+    };
+
     const handleChange = (e) => {
         const { name, value } = e.target;
 
@@ -450,7 +482,40 @@ const SchoolInformation = () => {
                         <div className="space-y-1">
                             <label className={labelClass}>Date of Appointment</label>
                             <p className="text-[10px] text-slate-400 font-medium mb-1.5">Date of latest appointment issuance.</p>
-                            <input type="date" name="dateHired" value={formData.dateHired} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
+                            <div className="flex gap-2">
+                                {/* Month */}
+                                <select
+                                    value={formData.dateHired ? parseInt(formData.dateHired.split('-')[1]) - 1 : ''}
+                                    onChange={(e) => handleDateChange('month', e.target.value)}
+                                    className={`${inputClass} flex-[2] min-w-0`}
+                                    disabled={isLocked || viewOnly || isDummy}
+                                >
+                                    <option value="" disabled>Month</option>
+                                    {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                                </select>
+
+                                {/* Day */}
+                                <select
+                                    value={formData.dateHired ? parseInt(formData.dateHired.split('-')[2]) : ''}
+                                    onChange={(e) => handleDateChange('day', e.target.value)}
+                                    className={`${inputClass} flex-1 min-w-[70px]`}
+                                    disabled={isLocked || viewOnly || isDummy}
+                                >
+                                    <option value="" disabled>Day</option>
+                                    {days.map((d) => <option key={d} value={d}>{d}</option>)}
+                                </select>
+
+                                {/* Year */}
+                                <select
+                                    value={formData.dateHired ? parseInt(formData.dateHired.split('-')[0]) : ''}
+                                    onChange={(e) => handleDateChange('year', e.target.value)}
+                                    className={`${inputClass} flex-[1.5] min-w-[80px]`}
+                                    disabled={isLocked || viewOnly || isDummy}
+                                >
+                                    <option value="" disabled>Year</option>
+                                    {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>

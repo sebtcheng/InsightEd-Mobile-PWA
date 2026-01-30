@@ -1,17 +1,30 @@
 import React, { useEffect } from 'react';
 import { FiCheck, FiCheckCircle } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 
 const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!" }) => {
+    const navigate = useNavigate();
+    const [countdown, setCountdown] = React.useState(3);
 
-    // Auto-close after 2 seconds for smooth workflow
+    // Auto-redirect after 3 seconds with visible countdown
     useEffect(() => {
         if (isOpen) {
-            const timer = setTimeout(() => {
-                onClose();
-            }, 2000);
-            return () => clearTimeout(timer);
+            setCountdown(3); // Reset countdown on open
+
+            const timer = setInterval(() => {
+                setCountdown((prev) => {
+                    if (prev <= 1) {
+                        clearInterval(timer);
+                        navigate('/school-forms');
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+
+            return () => clearInterval(timer);
         }
-    }, [isOpen, onClose]);
+    }, [isOpen, navigate]);
 
     if (!isOpen) return null;
 
@@ -29,12 +42,15 @@ const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!"
                     </div>
 
                     <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Success!</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2 leading-relaxed">
                         {message}
+                    </p>
+                    <p className="text-xs text-slate-400 mb-6 font-medium animate-pulse">
+                        Redirecting in {countdown}s...
                     </p>
 
                     <button
-                        onClick={onClose}
+                        onClick={() => navigate('/school-forms')}
                         className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-green-900/20 transition-all active:scale-[0.98]"
                     >
                         Great!
