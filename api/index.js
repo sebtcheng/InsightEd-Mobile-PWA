@@ -884,7 +884,7 @@ app.post('/api/register-school', async (req, res) => {
       return res.status(400).json({ error: "This school is already registered." });
     }
 
-    // 2. GENERATE IERN (Sequential: YYYY-XXXXXX)
+    // 2. GENERATE IERN (Sequential: YYYY-XXXXX)
     const year = new Date().getFullYear();
     const iernResult = await client.query(
       "SELECT iern FROM school_profiles WHERE iern LIKE $1 ORDER BY iern DESC LIMIT 1",
@@ -894,14 +894,13 @@ app.post('/api/register-school', async (req, res) => {
     let nextSeq = 1;
     if (iernResult.rows.length > 0) {
       const lastIern = iernResult.rows[0].iern;
-      // Extract sequence part (assuming format YYYY-XXXXXX)
       const parts = lastIern.split('-');
       if (parts.length === 2 && !isNaN(parts[1])) {
-        const lastSeq = parseInt(parts[1]);
+        const lastSeq = parseInt(parts[1], 10);
         nextSeq = lastSeq + 1;
       }
     }
-    const newIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
+    const newIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 3. CREATE USER (Optional)
     try {
@@ -1098,10 +1097,13 @@ app.post('/api/save-school', async (req, res) => {
       let nextSeq = 1;
       if (iernResult.rows.length > 0) {
         const lastIern = iernResult.rows[0].iern;
-        const lastSeq = parseInt(lastIern.split('-')[1]);
-        nextSeq = lastSeq + 1;
+        const parts = lastIern.split('-');
+        if (parts.length === 2 && !isNaN(parts[1])) {
+          const lastSeq = parseInt(parts[1], 10);
+          nextSeq = lastSeq + 1;
+        }
       }
-      finalIern = `${year}-${String(nextSeq).padStart(6, '0')}`;
+      finalIern = `${year}-${String(nextSeq).padStart(5, '0')}`;
     }
 
     // 5. PERFORM INSERT OR UPDATE

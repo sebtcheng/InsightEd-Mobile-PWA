@@ -120,7 +120,7 @@ const LearnerStatistics = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
-    const [saveTimer, setSaveTimer] = useState(0);
+
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -132,18 +132,7 @@ const LearnerStatistics = () => {
     }, []);
 
     // --- SAVE TIMER EFFECTS ---
-    useEffect(() => {
-        if (!isLocked && !viewOnly) {
-            setSaveTimer(120);
-        }
-    }, [isLocked, viewOnly]);
 
-    useEffect(() => {
-        if (saveTimer > 0) {
-            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
-            return () => clearInterval(timer);
-        }
-    }, [saveTimer]);
 
     // Core Form Data + JSONB Grids
     const [formData, setFormData] = useState({
@@ -629,15 +618,11 @@ const LearnerStatistics = () => {
                     ) : (
                         <button
                             onClick={handleSave}
-                            disabled={saving || !isFormValid() || saveTimer > 0}
+                            disabled={saving}
                             className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {saving ? (
                                 'Saving...'
-                            ) : saveTimer > 0 ? (
-                                <span className="font-mono">
-                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
-                                </span>
                             ) : (
                                 <><FiSave /> Save Statistics</>
                             )}

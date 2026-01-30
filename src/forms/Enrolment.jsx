@@ -49,7 +49,7 @@ const Enrolment = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
-    const [saveTimer, setSaveTimer] = useState(0);
+
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -61,18 +61,7 @@ const Enrolment = () => {
     }, []);
 
     // --- SAVE TIMER EFFECTS ---
-    useEffect(() => {
-        if (!isLocked && !viewOnly) {
-            setSaveTimer(120);
-        }
-    }, [isLocked, viewOnly]);
 
-    useEffect(() => {
-        if (saveTimer > 0) {
-            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
-            return () => clearInterval(timer);
-        }
-    }, [saveTimer]);
 
     // Core Data
     const [schoolId, setSchoolId] = useState(null);
@@ -407,7 +396,8 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
+                                        type="text" inputMode="numeric" pattern="[0-9]*"
+                                        value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -430,7 +420,8 @@ const Enrolment = () => {
                                     <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                     <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total (All Sections)</p>
                                     <input
-                                        type="number" value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
+                                        type="text" inputMode="numeric" pattern="[0-9]*"
+                                        value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
                                         disabled={isLocked || viewOnly}
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
@@ -470,11 +461,11 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.l}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[row.k11] !== '' && formData[row.k11] != null ? +formData[row.k11] : ''} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[row.k11] === '' || formData[row.k11] === null ? '' : formData[row.k11]} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={formData[row.k12] !== '' && formData[row.k12] != null ? +formData[row.k12] : ''} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[row.k12] === '' || formData[row.k12] === null ? '' : formData[row.k12]} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}
@@ -503,15 +494,15 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={+formData[`aral_math_g${g}`] || ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_math_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={+formData[`aral_read_g${g}`] || ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_read_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="number" value={+formData[`aral_sci_g${g}`] || ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_sci_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" />
                                             </td>
                                         </tr>
                                     ))}
@@ -533,13 +524,9 @@ const Enrolment = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : saveTimer > 0 ? (
-                                <span className="font-mono">
-                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
-                                </span>
                             ) : (
                                 <><FiSave /> Save Changes</>
                             )}

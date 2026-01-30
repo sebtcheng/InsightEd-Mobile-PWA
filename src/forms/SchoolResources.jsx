@@ -17,9 +17,8 @@ const InputField = ({ label, name, type = "number", formData, handleChange, isLo
     <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 group hover:border-blue-100 transition-colors">
         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider w-2/3 group-hover:text-blue-600 transition-colors">{label}</label>
         <input
-            type={type} name={name} value={formData[name] !== '' && formData[name] != null ? +formData[name] : ''}
+            type="text" inputMode="numeric" pattern="[0-9]*" name={name} value={formData[name] ?? ''}
             onChange={handleChange} disabled={isLocked || viewOnly}
-            onWheel={(e) => e.target.blur()}
             className="w-24 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2.5 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent text-lg shadow-sm"
         />
     </div>
@@ -30,7 +29,7 @@ const SelectField = ({ label, name, options, formData, handleChange, isLocked, v
         {label && <label className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-600 transition-colors">{label}</label>}
         <select
             name={name} value={formData[name] || ''} onChange={handleChange} disabled={isLocked || viewOnly}
-            className="w-full font-bold text-slate-700 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
+            className="w-full font-bold text-slate-900 bg-white border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-100 disabled:text-slate-800 disabled:border-transparent shadow-sm text-sm"
         >
             <option value="">-- Select --</option>
             {options.map(opt => (
@@ -57,13 +56,12 @@ const SeatRow = ({ label, enrollment, seatKey, formData, handleChange, isLocked,
                 <div className="flex justify-center flex-col items-center">
                     <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total (All Sections)</p>
                     <input
-                        type="number"
+                        type="text" inputMode="numeric" pattern="[0-9]*"
                         name={seatKey}
                         onChange={handleChange}
                         disabled={isLocked || viewOnly}
-                        onWheel={(e) => e.target.blur()}
-                        className="w-20 text-center font-bold text-slate-800 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
-                        value={seats !== '' && seats != null ? +seats : ''}
+                        className="w-20 text-center font-bold text-slate-900 bg-white border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                        value={seats ?? ''}
                     />
                 </div>
             </td>
@@ -89,12 +87,11 @@ const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange
             <div className="relative">
                 <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
                 <input
-                    type="number"
+                    type="text" inputMode="numeric" pattern="[0-9]*"
                     name={funcName}
-                    value={formData[funcName] !== '' && formData[funcName] != null ? +formData[funcName] : ''}
+                    value={formData[funcName] ?? ''}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
-                    onWheel={(e) => e.target.blur()}
                     className="w-full text-center font-bold text-emerald-600 bg-emerald-50/50 border border-emerald-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none disabled:bg-transparent disabled:border-transparent"
                 />
             </div>
@@ -103,12 +100,11 @@ const ResourceAuditRow = ({ label, funcName, nonFuncName, formData, handleChange
             <div className="relative">
                 <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Count</p>
                 <input
-                    type="number"
+                    type="text" inputMode="numeric" pattern="[0-9]*"
                     name={nonFuncName}
-                    value={+formData[nonFuncName] ?? ''}
+                    value={formData[nonFuncName] ?? ''}
                     onChange={handleChange}
                     disabled={isLocked || viewOnly}
-                    onWheel={(e) => e.target.blur()}
                     className="w-full text-center font-bold text-rose-500 bg-rose-50/50 border border-rose-100 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-500 outline-none disabled:bg-transparent disabled:border-transparent"
                 />
             </div>
@@ -120,12 +116,11 @@ const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => 
     <div className="flex justify-between items-center p-4 border-b border-slate-50 last:border-0 bg-slate-50/50 rounded-2xl mb-2 hover:bg-white hover:shadow-sm hover:border-slate-100 transition-all">
         <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
         <input
-            type="number"
+            type="text" inputMode="numeric" pattern="[0-9]*"
             name={name}
-            value={+formData[name] ?? ''}
+            value={formData[name] ?? ''}
             onChange={handleChange}
             disabled={isLocked || viewOnly}
-            onWheel={(e) => e.target.blur()}
             className="w-20 text-center font-bold text-blue-900 bg-white border border-slate-200 rounded-xl py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-transparent shadow-sm"
         />
     </div>
@@ -148,7 +143,7 @@ const SchoolResources = () => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
-    const [saveTimer, setSaveTimer] = useState(0);
+
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -160,18 +155,7 @@ const SchoolResources = () => {
     }, []);
 
     // --- SAVE TIMER EFFECTS ---
-    useEffect(() => {
-        if (!isLocked && !viewOnly) {
-            setSaveTimer(120);
-        }
-    }, [isLocked, viewOnly]);
 
-    useEffect(() => {
-        if (saveTimer > 0) {
-            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
-            return () => clearInterval(timer);
-        }
-    }, [saveTimer]);
     const [userRole, setUserRole] = useState("School Head");
     const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
@@ -390,8 +374,11 @@ const SchoolResources = () => {
         const { name, value, type } = e.target;
         let finalValue = value;
 
-        if (type === 'number') {
-            // Limit to 5 digits (4 for seats)
+        // Check if one of the known non-numeric fields
+        const isStringField = ['res_internet_type', 'res_water_source', 'res_electricity_source', 'res_ownership_type', 'res_buildable_space', 'sha_category'].includes(name);
+
+        if (!isStringField) {
+            // Numeric handling
             const limit = name.startsWith('seats_') ? 4 : 5;
             const cleanValue = value.replace(/[^0-9]/g, '').slice(0, limit);
             finalValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
@@ -779,13 +766,9 @@ const SchoolResources = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : saveTimer > 0 ? (
-                                <span className="font-mono">
-                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
-                                </span>
                             ) : (
                                 <><FiSave /> Save Changes</>
                             )}

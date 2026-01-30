@@ -57,7 +57,7 @@ const OrganizedClasses = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
-    const [saveTimer, setSaveTimer] = useState(0);
+
 
     // Data
     const [schoolId, setSchoolId] = useState(null);
@@ -300,18 +300,7 @@ const OrganizedClasses = () => {
     }, []);
 
     // --- SAVE TIMER EFFECTS ---
-    useEffect(() => {
-        if (!isLocked && !viewOnly) {
-            setSaveTimer(120);
-        }
-    }, [isLocked, viewOnly]);
 
-    useEffect(() => {
-        if (saveTimer > 0) {
-            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
-            return () => clearInterval(timer);
-        }
-    }, [saveTimer]);
 
     // --- HELPERS ---
     const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
@@ -324,14 +313,14 @@ const OrganizedClasses = () => {
 
     // --- HANDLER FIXES ---
     const handleChange = (name, value) => {
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
     const handleClassSizeChange = (e) => {
         const { name, value } = e.target;
-        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 2);
+        const cleanValue = value.replace(/[^0-9]/g, '').slice(0, 3);
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
         setClassSizeData(prev => ({ ...prev, [name]: intValue }));
     };
@@ -466,11 +455,11 @@ const OrganizedClasses = () => {
                                         <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
-                                            type="number"
-                                            value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
+                                            type="text" inputMode="numeric" pattern="[0-9]*"
+                                            value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
-                                            className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                            className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         />
                                     </div>
                                 ))}
@@ -490,11 +479,11 @@ const OrganizedClasses = () => {
                                         <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
-                                            type="number"
-                                            value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
+                                            type="text" inputMode="numeric" pattern="[0-9]*"
+                                            value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
-                                            className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                            className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         />
                                     </div>
                                 ))}
@@ -513,11 +502,11 @@ const OrganizedClasses = () => {
                                         <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-blue-500 transition-colors w-full truncate">{item.l}</label>
                                         <p className="text-[9px] text-slate-400 font-medium mb-1.5 block">Total Sections</p>
                                         <input
-                                            type="number"
-                                            value={formData[item.k] !== '' && formData[item.k] != null ? +formData[item.k] : ''}
+                                            type="text" inputMode="numeric" pattern="[0-9]*"
+                                            value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                             onChange={(e) => handleChange(item.k, e.target.value)}
                                             disabled={isLocked || viewOnly}
-                                            className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
+                                            className="w-full h-12 text-center font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         />
                                     </div>
                                 ))}
@@ -568,9 +557,9 @@ const OrganizedClasses = () => {
                                             <td className="p-1">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
                                                 <input
-                                                    type="text" inputMode="numeric"
+                                                    type="text" inputMode="numeric" pattern="[0-9]*"
                                                     name={`cntLessG${g}`}
-                                                    value={classSizeData[`cntLessG${g}`] !== '' && classSizeData[`cntLessG${g}`] != null ? +classSizeData[`cntLessG${g}`] : ''}
+                                                    value={classSizeData[`cntLessG${g}`] === '' || classSizeData[`cntLessG${g}`] === null ? '' : classSizeData[`cntLessG${g}`]}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -580,9 +569,9 @@ const OrganizedClasses = () => {
                                             <td className="p-1">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
                                                 <input
-                                                    type="text" inputMode="numeric"
+                                                    type="text" inputMode="numeric" pattern="[0-9]*"
                                                     name={`cntWithinG${g}`}
-                                                    value={classSizeData[`cntWithinG${g}`] !== '' && classSizeData[`cntWithinG${g}`] != null ? +classSizeData[`cntWithinG${g}`] : ''}
+                                                    value={classSizeData[`cntWithinG${g}`] === '' || classSizeData[`cntWithinG${g}`] === null ? '' : classSizeData[`cntWithinG${g}`]}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -592,9 +581,9 @@ const OrganizedClasses = () => {
                                             <td className="p-1">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
                                                 <input
-                                                    type="text" inputMode="numeric"
+                                                    type="text" inputMode="numeric" pattern="[0-9]*"
                                                     name={`cntAboveG${g}`}
-                                                    value={classSizeData[`cntAboveG${g}`] !== '' && classSizeData[`cntAboveG${g}`] != null ? +classSizeData[`cntAboveG${g}`] : ''}
+                                                    value={classSizeData[`cntAboveG${g}`] === '' || classSizeData[`cntAboveG${g}`] === null ? '' : classSizeData[`cntAboveG${g}`]}
                                                     onChange={handleClassSizeChange}
                                                     disabled={isLocked || viewOnly}
                                                     onFocus={e => e.target.select()}
@@ -620,13 +609,9 @@ const OrganizedClasses = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : saveTimer > 0 ? (
-                                <span className="font-mono">
-                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
-                                </span>
                             ) : (
                                 <><FiSave /> Save Changes</>
                             )}

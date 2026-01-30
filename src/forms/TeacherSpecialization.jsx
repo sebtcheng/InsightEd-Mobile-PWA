@@ -83,7 +83,7 @@ const TeacherSpecialization = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const [showInfoModal, setShowInfoModal] = useState(false);
-    const [saveTimer, setSaveTimer] = useState(0);
+
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -95,18 +95,7 @@ const TeacherSpecialization = () => {
     }, []);
 
     // --- SAVE TIMER EFFECTS ---
-    useEffect(() => {
-        if (!isLocked && !viewOnly) {
-            setSaveTimer(120);
-        }
-    }, [isLocked, viewOnly]);
 
-    useEffect(() => {
-        if (saveTimer > 0) {
-            const timer = setInterval(() => setSaveTimer(prev => prev - 1), 1000);
-            return () => clearInterval(timer);
-        }
-    }, [saveTimer]);
     const [userRole, setUserRole] = useState("School Head");
 
     const [schoolId, setSchoolId] = useState(null);
@@ -396,13 +385,9 @@ const TeacherSpecialization = () => {
                             🔓 Unlock to Edit Data
                         </button>
                     ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid() || saveTimer > 0} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                             {isSaving ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : saveTimer > 0 ? (
-                                <span className="font-mono">
-                                    Review Data ({Math.floor(saveTimer / 60)}:{String(saveTimer % 60).padStart(2, '0')})
-                                </span>
                             ) : (
                                 <><FiSave /> Save Changes</>
                             )}
