@@ -115,13 +115,22 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                     <div className="font-bold text-slate-800 dark:text-slate-100 mb-1 line-clamp-2 leading-tight group-hover:text-[#004A99] dark:group-hover:text-blue-400 transition-colors">
                       {p.schoolName}
                     </div>
-                    <div className="text-[10px] text-slate-400 mb-2 line-clamp-1 italic">
-                      {p.projectName}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500 dark:text-slate-400 font-mono">
-                        {p.schoolId}
-                      </span>
+                    {/* ID Badges Row */}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {/* IPC Badge */}
+                      {p.ipc && (
+                        <div className="group/ipc flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 transition-colors cursor-help" title="InsightEd Project Code">
+                           <div className="w-1.5 h-1.5 rounded-full bg-[#004A99] dark:bg-blue-400 group-hover/ipc:animate-pulse"></div>
+                           <span className="text-[8px] font-black uppercase tracking-wider text-[#004A99]/70 dark:text-blue-300/70">IPC</span>
+                           <span className="text-[9px] font-bold font-mono text-[#004A99] dark:text-blue-300">{p.ipc}</span>
+                        </div>
+                      )}
+                      
+                      {/* School ID Badge */}
+                      <div className="flex items-center gap-1.5 bg-slate-100/80 dark:bg-slate-700/50 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600">
+                         <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">ID</span>
+                         <span className="text-[9px] font-bold font-mono text-slate-600 dark:text-slate-300">{p.schoolId}</span>
+                      </div>
                     </div>
                   </td>
 
@@ -593,6 +602,7 @@ const EngineerProjects = () => {
                     statusAsOfDate: item.statusAsOfDate,
                     otherRemarks: item.otherRemarks,
                     contractorName: item.contractorName,
+                    ipc: item.ipc // Added IPC mapping
                 }));
 
                 // Update Cache on success

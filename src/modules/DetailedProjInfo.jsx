@@ -117,12 +117,30 @@ const DetailedProjInfo = () => {
                     <button onClick={() => navigate(-1)} className="absolute top-8 left-6 text-blue-200 hover:text-white text-sm font-bold flex items-center gap-1">
                         ← Back
                     </button>
-                    <div className="mt-6 text-center">
-                        <span className="inline-block px-3 py-1 bg-white/10 text-blue-100 text-[10px] rounded-full mb-2 border border-blue-400/30">
-                            ID: {project.schoolId}
-                        </span>
-                        <h1 className="text-2xl font-bold text-white leading-tight">{project.schoolName}</h1>
-                        <p className="text-blue-200 text-sm mt-1">{project.projectName}</p>
+                    <div className="mt-8 text-center relative z-10">
+                        {/* Premium ID Badges */}
+                        <div className="flex flex-wrap justify-center items-center gap-3 mb-4">
+                             {/* School ID Pill */}
+                             <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 backdrop-blur-md rounded-xl border border-white/20 shadow-lg group hover:bg-white/15 transition-all">
+                                <span className="text-[9px] text-blue-200 uppercase font-black tracking-widest group-hover:text-blue-100 transition-colors">School ID</span>
+                                <div className="h-3 w-[1px] bg-white/20"></div>
+                                <span className="text-sm text-white font-mono font-bold tracking-wider shadow-black drop-shadow-sm">{project.schoolId}</span>
+                            </div>
+
+                            {/* IPC Pill */}
+                            {project.ipc && (
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 backdrop-blur-md rounded-xl border border-emerald-400/30 shadow-lg shadow-emerald-900/20 group hover:bg-emerald-500/30 transition-all">
+                                     <span className="text-[9px] text-emerald-200 uppercase font-black tracking-widest group-hover:text-emerald-100 transition-colors">InsightEd Project Code</span>
+                                     <div className="h-3 w-[1px] bg-emerald-400/30"></div>
+                                     <span className="text-sm text-emerald-50 font-mono font-bold tracking-wider shadow-black drop-shadow-sm">{project.ipc}</span>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <h1 className="text-2xl sm:text-3xl font-black text-white leading-tight tracking-tight drop-shadow-md">{project.schoolName}</h1>
+                        <p className="text-blue-100/80 text-xs sm:text-sm font-medium mt-2 max-w-md mx-auto leading-relaxed border-t border-blue-400/30 pt-2 inline-block px-4">
+                            {project.projectName}
+                        </p>
                     </div>
                 </div>
 
