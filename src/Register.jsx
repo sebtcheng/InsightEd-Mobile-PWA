@@ -430,13 +430,10 @@ const Register = () => {
 
         // STRICT OTP ENFORCEMENT
         // STRICT OTP ENFORCEMENT
-        // STRICT OTP ENFORCEMENT
-        /*
         if (!isOtpVerified) {
             alert("Please verify your email via OTP before registering.");
             return;
         }
-        */
 
         setLoading(true);
 
@@ -1005,8 +1002,6 @@ const Register = () => {
 
                             {/* === 3. EMAIL VERIFICATION & SECURITY === */}
                             {/* === 3. EMAIL VERIFICATION & SECURITY === */}
-                            {/* === 3. EMAIL VERIFICATION & SECURITY === */}
-                            {/* 
                             <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
@@ -1067,7 +1062,6 @@ const Register = () => {
                                     </div>
                                 </div>
                             </div>
-                            */}
 
 
 

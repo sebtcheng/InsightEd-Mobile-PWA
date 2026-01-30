@@ -9,8 +9,8 @@ const Leaderboard = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
 
-    // 1. CHANGED: Default tab is now 'divisions'
-    const [activeTab, setActiveTab] = useState('divisions');
+    // 1. CHANGED: Default tab is now 'regions'
+    const [activeTab, setActiveTab] = useState('regions');
     const [data, setData] = useState({ divisions: [], regions: [] });
     const [userScope, setUserScope] = useState(null);
     const [currentUserRegion, setCurrentUserRegion] = useState(null);
@@ -49,8 +49,8 @@ const Leaderboard = () => {
 
                 setCurrentUserRegion(regionFilter);
 
-                // Initial Fetch: Divisions (Default)
-                await fetchTab('divisions', regionFilter);
+                // Initial Fetch: Regions (Default)
+                await fetchTab('regions', regionFilter);
 
             } catch (err) {
                 console.error("Leaderboard init error:", err);
@@ -91,16 +91,22 @@ const Leaderboard = () => {
         setLoading(true);
         try {
             let url = '';
-            const region = regionOverride || currentUserRegion || 'Region VIII';
 
             if (tab === 'regions') {
                 // National View: Fetch all regions
                 url = `/api/leaderboard?scope=national`;
                 setUserScope('National');
             } else {
-                // Divisions View: Fetch ALL divisions
-                url = `/api/leaderboard?scope=national_divisions`;
-                setUserScope('National');
+                // Divisions View: 
+                // If a region is specified (Drill-down or User's Region), show divisions for that region
+                if (regionOverride) {
+                    url = `/api/leaderboard?scope=region&filter=${encodeURIComponent(regionOverride)}`;
+                    setUserScope(regionOverride);
+                } else {
+                    // Fallback: Fetch ALL divisions (National)
+                    url = `/api/leaderboard?scope=national_divisions`;
+                    setUserScope('National');
+                }
             }
 
             const res = await fetch(url);
@@ -221,16 +227,16 @@ const Leaderboard = () => {
                 <div className="flex justify-center -mt-8 relative z-20 px-4 mb-6">
                     <div className="bg-white p-1 rounded-full shadow-lg flex w-full max-w-[200px]">
                         <button
-                            onClick={() => handleTabChange('divisions')}
-                            className={`flex-1 py-2 px-2 rounded-full text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'divisions' ? 'bg-[#004A99] text-white shadow-md' : 'text-slate-500'}`}
-                        >
-                            Divisions
-                        </button>
-                        <button
                             onClick={() => handleTabChange('regions')}
                             className={`flex-1 py-2 px-2 rounded-full text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'regions' ? 'bg-[#004A99] text-white shadow-md' : 'text-slate-500'}`}
                         >
                             Regions
+                        </button>
+                        <button
+                            onClick={() => handleTabChange('divisions')}
+                            className={`flex-1 py-2 px-2 rounded-full text-[10px] font-bold transition-all whitespace-nowrap ${activeTab === 'divisions' ? 'bg-[#004A99] text-white shadow-md' : 'text-slate-500'}`}
+                        >
+                            Divisions
                         </button>
                     </div>
                 </div>
@@ -282,44 +288,67 @@ const Leaderboard = () => {
                                 }) : <div className="text-center text-slate-400 py-10">No schools found</div>
                             ) : (
                                 /* DIVISIONS / REGIONS RENDER LOGIC */
-                                displayList.length > 0 ? displayList.map((item, index) => (
-                                    <div
-                                        key={item.name}
-                                        onClick={() => activeTab === 'divisions' ? handleDivisionClick(item.name) : null}
-                                        className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden group hover:border-blue-200 transition-colors ${activeTab === 'divisions' ? 'cursor-pointer active:scale-[0.98]' : ''}`}
-                                    >
-                                        {/* Rank Number */}
-                                        <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
-                                            {index + 1}
-                                        </div>
+                                displayList.length > 0 ? displayList.map((item, index) => {
+                                    const isMe = activeTab === 'regions'
+                                        ? item.name === currentUserRegion
+                                        : item.name === currentUserDivision;
 
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <h3 className="font-bold text-slate-800 text-sm truncate pr-2">{item.name}</h3>
-                                                <span className={`px-2 py-0.5 rounded-lg text-xs font-black border ${activeTab === 'regions' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
-                                                    {item.avg_completion}%
-                                                </span>
+                                    return (
+                                        <div
+                                            key={item.name}
+                                            onClick={() => {
+                                                if (activeTab === 'regions') {
+                                                    // Drill down to division
+                                                    setCurrentUserRegion(item.name);
+                                                    setActiveTab('divisions');
+                                                    fetchTab('divisions', item.name);
+                                                } else {
+                                                    handleDivisionClick(item.name);
+                                                }
+                                            }}
+                                            className={`bg-white p-5 rounded-2xl shadow-sm border flex items-center gap-4 relative overflow-hidden group hover:border-blue-200 transition-colors cursor-pointer active:scale-[0.98] ${isMe ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200 z-10 scale-[1.01]' : 'border-slate-100'}`}
+                                        >
+                                            {/* Rank Number */}
+                                            <div className={`text-2xl font-black italic ${getMedalColor(index)} w-8 text-center shrink-0`}>
+                                                {index + 1}
                                             </div>
 
-                                            {/* Progress Bar */}
-                                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full bg-gradient-to-r ${activeTab === 'regions' ? 'from-emerald-400 to-teal-600' : 'from-blue-400 to-indigo-600'}`}
-                                                    style={{ width: `${item.avg_completion}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <h3 className={`font-bold text-sm truncate pr-2 ${isMe ? 'text-blue-800' : 'text-slate-800'}`}>
+                                                        {item.name} {isMe && <span className="ml-1 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-full uppercase align-middle">You</span>}
+                                                    </h3>
+                                                    <span className={`px-2 py-0.5 rounded-lg text-xs font-black border ${activeTab === 'regions' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                                                        {item.avg_completion}%
+                                                    </span>
+                                                </div>
 
-                                        {/* Medal Icon for Top 3 */}
-                                        {index < 3 && (
-                                            <TbMedal className={`${getMedalColor(index)} opacity-10 absolute -right-4 -top-2 rotate-12`} size={80} />
-                                        )}
-                                    </div>
-                                )) : (
+                                                {/* Progress Bar */}
+                                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full bg-gradient-to-r ${activeTab === 'regions' ? 'from-emerald-400 to-teal-600' : 'from-blue-400 to-indigo-600'}`}
+                                                        style={{ width: `${item.avg_completion}%` }}
+                                                    ></div>
+                                                </div>
+
+                                                {/* NEW HELPER TEXT */}
+                                                <p className="text-[10px] text-blue-400 mt-3 font-medium flex items-center gap-1 opacity-80">
+                                                    {activeTab === 'regions' ? '👆 Tap to see Divisions' : '👆 Tap to see Schools'}
+                                                </p>
+                                            </div>
+
+                                            {/* Medal Icon for Top 3 */}
+                                            {index < 3 && (
+                                                <TbMedal className={`${getMedalColor(index)} opacity-10 absolute -right-4 -top-2 rotate-12`} size={80} />
+                                            )}
+                                        </div>
+                                    );
+                                }) : (
                                     <div className="text-center py-10 text-slate-400 text-xs">
                                         No {activeTab} found matching "{search}"
                                     </div>
-                                ))}
+                                )
+                            )}
                         </>
                     )}
                 </div>
