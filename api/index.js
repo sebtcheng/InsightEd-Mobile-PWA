@@ -263,7 +263,8 @@ const initOtpTable = async () => {
                 city TEXT,
                 barangay TEXT,
                 office TEXT,
-                position TEXT
+                position TEXT,
+                disabled BOOLEAN DEFAULT FALSE
             );
         `);
         // If table exists, ensure columns exist
@@ -277,7 +278,8 @@ const initOtpTable = async () => {
             ADD COLUMN IF NOT EXISTS city TEXT,
             ADD COLUMN IF NOT EXISTS barangay TEXT,
             ADD COLUMN IF NOT EXISTS office TEXT,
-            ADD COLUMN IF NOT EXISTS position TEXT;
+            ADD COLUMN IF NOT EXISTS position TEXT,
+            ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log('✅ Checked/Extended users table schema');
       } catch (migErr) {
@@ -753,6 +755,73 @@ app.post('/api/settings/save', async (req, res) => {
   } catch (err) {
     console.error("Save Setting Error:", err);
     res.status(500).json({ error: "Failed to save setting" });
+  }
+});
+
+// --- 1d. ADMIN USER MANAGEMENT ---
+
+// GET All Users
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT uid, email, role, first_name, last_name, region, division, created_at, disabled 
+      FROM users 
+      ORDER BY created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Get Users Error:", err);
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// POST Toggle User Status (Enable/Disable)
+app.post('/api/admin/users/:uid/status', async (req, res) => {
+  const { uid } = req.params;
+  const { disabled } = req.body;
+
+  if (typeof disabled !== 'boolean') {
+    return res.status(400).json({ error: "Disabled status must be a boolean" });
+  }
+
+  try {
+    // 1. Update Firebase Auth
+    await admin.auth().updateUser(uid, { disabled });
+
+    // 2. Update DB
+    await pool.query('UPDATE users SET disabled = $1 WHERE uid = $2', [disabled, uid]);
+
+    // 3. Log
+    // (Assuming userUid comes from auth middleware/header, implemented loosely here for simplicity, 
+    // ideally should extract requester from token)
+    // For now, we'll log as 'System/Admin' if not provided
+    console.log(`✅ User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update User Status Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE User
+app.delete('/api/admin/users/:uid', async (req, res) => {
+  const { uid } = req.params;
+
+  try {
+    // 1. Delete from Firebase Auth
+    await admin.auth().deleteUser(uid);
+
+    // 2. Delete from DB (Users table)
+    // Note: Dependent records (logs, etc.) might need handling depending on FK constraints.
+    // Assuming simple deletion for now.
+    await pool.query('DELETE FROM users WHERE uid = $1', [uid]);
+
+    console.log(`✅ User ${uid} deleted permanently.`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete User Error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
