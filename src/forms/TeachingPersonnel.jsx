@@ -251,7 +251,15 @@ const TeachingPersonnel = () => {
     const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
     const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
 
-    const getTotal = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0);
+    const getTotal = () => {
+        // Calculate total teachers by excluding teaching experience fields (teach_exp_*)
+        return Object.entries(formData).reduce((total, [key, value]) => {
+            if (!key.startsWith('teach_exp_') && !key.startsWith('teach_multi_3plus_flag')) {
+                total += parseInt(value) || 0;
+            }
+            return total;
+        }, 0);
+    };
 
     const handleChange = (name, value) => {
         // 1. Strip non-numeric characters
