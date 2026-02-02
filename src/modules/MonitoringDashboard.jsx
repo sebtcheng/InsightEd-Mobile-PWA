@@ -687,7 +687,10 @@ const MonitoringDashboard = () => {
                                 <div className="flex items-center gap-2 mb-2 opacity-80">
                                     <FiMapPin size={14} />
                                     <span className="text-xs font-bold uppercase tracking-widest">
-                                        {userData?.role === 'Regional Office' ? `Region ${userData?.region}` : `${userData?.division} Division`}
+                                        {userData?.role === 'Regional Office' 
+                                            ? (userData?.region?.toString().toLowerCase().includes('region') ? userData?.region : `Region ${userData?.region}`) 
+                                            : `SDO ${userData?.division?.toString().replace(/\s+Division$/i, '')}`
+                                        }
                                     </span>
                                 </div>
                                 <h1 className="text-3xl font-black tracking-tight">Monitoring</h1>

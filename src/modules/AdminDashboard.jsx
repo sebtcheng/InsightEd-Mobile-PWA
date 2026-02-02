@@ -3,7 +3,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase } from "react-icons/fi";
+import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle } from "react-icons/fi";
 
 // --- REUSABLE STAT COMPONENT ---
 const StatCard = ({ label, value, icon, color }) => (
@@ -26,6 +26,7 @@ const AdminDashboard = () => {
     // Data States
     const [schools, setSchools] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [users, setUsers] = useState([]);
     const [auditLogs, setAuditLogs] = useState([]);
 
     // Loading States
@@ -42,7 +43,7 @@ const AdminDashboard = () => {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [usersRes, schoolsRes, projectsRes, auditRes, deadlineRes] = await Promise.all([
+            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, usersRes] = await Promise.all([
                 // checking user role/name
                 (async () => {
                     const user = auth.currentUser;
@@ -54,7 +55,8 @@ const AdminDashboard = () => {
                 fetch('/api/schools').then(r => r.json()),
                 fetch('/api/projects').then(r => r.json()), // Changed to /api/projects
                 fetch('/api/activities').then(r => r.json()),
-                fetch('/api/settings/enrolment_deadline').then(r => r.json())
+                fetch('/api/settings/enrolment_deadline').then(r => r.json()),
+                fetch('/api/admin/users').then(r => r.json())
             ]);
 
             // Handle Schools
@@ -70,6 +72,9 @@ const AdminDashboard = () => {
             if (deadlineRes && deadlineRes.value) {
                 setDeadlineDate(deadlineRes.value);
             }
+
+            // Handle Users
+            if (Array.isArray(usersRes)) setUsers(usersRes);
 
         } catch (error) {
             console.error("Dashboard Sync Error:", error);
@@ -122,6 +127,44 @@ const AdminDashboard = () => {
             alert("❌ Error updating deadline.");
         } finally {
             setUpdatingDeadline(false);
+        }
+    };
+
+    const handleDisableUser = async (uid, currentStatus) => {
+        if (!window.confirm(`Are you sure you want to ${currentStatus ? 'ENABLE' : 'DISABLE'} this user?`)) return;
+        
+        try {
+            const res = await fetch(`/api/admin/users/${uid}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ disabled: !currentStatus })
+            });
+            if (res.ok) {
+                alert(`✅ User ${currentStatus ? 'enabled' : 'disabled'} successfully!`);
+                fetchAllData();
+            } else {
+                alert("❌ Action failed.");
+            }
+        } catch (err) {
+            alert("❌ Error updating user status.");
+        }
+    };
+
+    const handleDeleteUser = async (uid) => {
+        if (!window.confirm("Are you sure you want to PERMANENTLY DELETE this user? This action cannot be undone.")) return;
+
+        try {
+            const res = await fetch(`/api/admin/users/${uid}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                alert("✅ User deleted successfully!");
+                fetchAllData();
+            } else {
+                alert("❌ Delete failed.");
+            }
+        } catch (err) {
+            alert("❌ Error deleting user.");
         }
     };
 
@@ -312,6 +355,102 @@ const AdminDashboard = () => {
         );
     };
 
+    const renderAccountManagement = () => {
+        const filteredUsers = users.filter(u => 
+            (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+            (u.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (u.last_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        return (
+             <div className="animate-in fade-in duration-300">
+                <div className="flex items-center gap-2 mb-4 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
+                    <FiSearch className="text-gray-400 ml-2" />
+                    <input
+                        type="text"
+                        placeholder="Search users..."
+                        className="flex-1 text-sm outline-none"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50 text-[10px] uppercase font-bold text-gray-400">
+                            <tr>
+                                <th className="p-3">User</th>
+                                <th className="p-3">Role</th>
+                                <th className="p-3 hidden md:table-cell">Jurisdiction</th>
+                                <th className="p-3 text-center">Status</th>
+                                <th className="p-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {filteredUsers.map(user => (
+                                <tr key={user.uid} className="hover:bg-blue-50/50 transition-colors group">
+                                    <td className="p-3">
+                                        <p className="font-bold text-gray-800 text-sm">{user.first_name} {user.last_name}</p>
+                                        <p className="text-[10px] text-gray-500">{user.email}</p>
+                                    </td>
+                                    <td className="p-3">
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                            user.role === 'Admin' ? 'bg-purple-100 text-purple-600 border-purple-200' :
+                                            user.role === 'Central Office' ? 'bg-blue-100 text-blue-600 border-blue-200' :
+                                            'bg-slate-100 text-slate-600 border-slate-200'
+                                        }`}>
+                                            {user.role}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 hidden md:table-cell">
+                                        <p className="text-[10px] text-gray-600">
+                                            {user.region && `Reg: ${user.region}`}
+                                            {user.division && ` • Div: ${user.division}`}
+                                        </p>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                       {user.disabled ? (
+                                           <span className="inline-flex items-center gap-1 bg-red-100 text-red-600 text-[9px] font-black px-1.5 py-0.5 rounded">
+                                               <FiSlash size={8} /> DISABLED
+                                           </span>
+                                       ) : (
+                                           <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-600 text-[9px] font-black px-1.5 py-0.5 rounded">
+                                               <FiCheckCircle size={8} /> ACTIVE
+                                           </span>
+                                       )}
+                                    </td>
+                                    <td className="p-3 text-right">
+                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleDisableUser(user.uid, user.disabled)}
+                                                className={`p-1.5 rounded-lg transition-colors ${user.disabled ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-orange-50 text-orange-600 hover:bg-orange-100'}`}
+                                                title={user.disabled ? "Enable User" : "Disable User"}
+                                            >
+                                                {user.disabled ? <FiCheckCircle size={14} /> : <FiSlash size={14} />}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteUser(user.uid)}
+                                                className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                                title="Delete User"
+                                            >
+                                                <FiTrash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {filteredUsers.length === 0 && (
+                        <div className="p-8 text-center text-gray-400 text-xs italic">
+                            No users found.
+                        </div>
+                    )}
+                </div>
+             </div>
+        );
+    };
+
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
@@ -359,6 +498,12 @@ const AdminDashboard = () => {
                             >
                                 Audit Trail
                             </button>
+                            <button
+                                onClick={() => { setActiveTab('accounts'); setSearchTerm(''); }}
+                                className={`px-4 py-2 text-xs font-bold rounded-lg whitespace-nowrap transition-all ${activeTab === 'accounts' ? 'bg-[#004A99] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                Account Management
+                            </button>
                         </div>
 
                         {/* CONTENT AREA */}
@@ -373,6 +518,7 @@ const AdminDashboard = () => {
                                     {activeTab === 'schools' && renderSchoolsList()}
                                     {activeTab === 'projects' && renderProjectsList()}
                                     {activeTab === 'audit' && renderAuditTable()}
+                                    {activeTab === 'accounts' && renderAccountManagement()}
                                 </>
                             )}
                         </div>
