@@ -478,7 +478,6 @@ const EditProjectModal = ({
           <button
             onClick={() => {
               onSave(formData);
-              onClose();
             }}
             disabled={isUploading}
             className="flex-[2] py-4 text-white font-black text-xs uppercase tracking-widest bg-gradient-to-r from-[#004A99] to-[#003366] rounded-2xl shadow-xl shadow-blue-900/20 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
@@ -647,6 +646,13 @@ const EngineerProjects = () => {
   const handleSaveProject = async (updatedProject) => {
     const user = auth.currentUser;
     if (!user) return;
+    
+    // CHECK: Mandatory Photo Upload
+    if (selectedFiles.length === 0) {
+        alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project update.");
+        return;
+    }
+
     setIsUploading(true); 
     try {
         const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };

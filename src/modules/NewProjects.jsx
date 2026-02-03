@@ -236,6 +236,12 @@ const NewProjects = () => {
             return;
         }
 
+        // CHECK: Mandatory Photo Upload
+        if (selectedFiles.length === 0) {
+            alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
+            return;
+        }
+
         setIsSubmitting(true);
 
         // 1. PRE-PROCESS IMAGES (Compress and convert to Base64 strings immediately)
