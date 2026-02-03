@@ -185,7 +185,7 @@ const MonitoringDashboard = () => {
         }).catch(err => console.error("Failed to load locations", err));
 
         // Load Schools Data for Division filtering
-        Papa.parse('/schools.csv', {
+        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
             download: true,
             header: true,
             skipEmptyLines: true,

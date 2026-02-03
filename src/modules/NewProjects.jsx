@@ -33,7 +33,7 @@ const NewProjects = () => {
     // --- 1. LOAD CSV DATA & CHECK PROJECT LIMIT ON MOUNT ---
     useEffect(() => {
         // A. Load CSV
-        Papa.parse('/schools.csv', {
+        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
             download: true,
             header: true,
             skipEmptyLines: true,
