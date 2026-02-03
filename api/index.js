@@ -358,6 +358,9 @@ const initOtpTable = async () => {
         ADD COLUMN IF NOT EXISTS classes_grade_12 INTEGER DEFAULT 0,
 
         -- Class Size Analysis
+        ADD COLUMN IF NOT EXISTS cnt_less_kinder INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_within_kinder INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS cnt_above_kinder INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_less_g1 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_within_g1 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_above_g1 INTEGER DEFAULT 0,
@@ -2309,6 +2312,7 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
                 classes_grade_7, classes_grade_8, classes_grade_9, classes_grade_10,
                 classes_grade_11, classes_grade_12,
                 
+                cnt_less_kinder, cnt_within_kinder, cnt_above_kinder,
                 cnt_less_g1, cnt_within_g1, cnt_above_g1,
                 cnt_less_g2, cnt_within_g2, cnt_above_g2,
                 cnt_less_g3, cnt_within_g3, cnt_above_g3,
@@ -2344,6 +2348,7 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
         grade_9: row.classes_grade_9, grade_10: row.classes_grade_10,
         grade_11: row.classes_grade_11, grade_12: row.classes_grade_12,
 
+        cnt_less_kinder: row.cnt_less_kinder, cnt_within_kinder: row.cnt_within_kinder, cnt_above_kinder: row.cnt_above_kinder,
         cnt_less_g1: row.cnt_less_g1, cnt_within_g1: row.cnt_within_g1, cnt_above_g1: row.cnt_above_g1,
         cnt_less_g2: row.cnt_less_g2, cnt_within_g2: row.cnt_within_g2, cnt_above_g2: row.cnt_above_g2,
         cnt_less_g3: row.cnt_less_g3, cnt_within_g3: row.cnt_within_g3, cnt_above_g3: row.cnt_above_g3,
@@ -2378,6 +2383,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
                 classes_grade_7 = $9, classes_grade_8 = $10, classes_grade_9 = $11,
                 classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14,
                 
+                cnt_less_kinder = $51, cnt_within_kinder = $52, cnt_above_kinder = $53,
                 cnt_less_g1 = $15, cnt_within_g1 = $16, cnt_above_g1 = $17,
                 cnt_less_g2 = $18, cnt_within_g2 = $19, cnt_above_g2 = $20,
                 cnt_less_g3 = $21, cnt_within_g3 = $22, cnt_above_g3 = $23,
@@ -2413,7 +2419,9 @@ app.post('/api/save-organized-classes', async (req, res) => {
       data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
       data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
       data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
-      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0
+      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
+
+      data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0
     ]);
 
     if (result.rowCount === 0) {

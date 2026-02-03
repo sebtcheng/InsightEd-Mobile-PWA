@@ -71,6 +71,7 @@ const OrganizedClasses = () => {
     });
 
     const [classSizeData, setClassSizeData] = useState({
+        cntLessKinder: 0, cntWithinKinder: 0, cntAboveKinder: 0,
         cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
         cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
         cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
@@ -105,6 +106,7 @@ const OrganizedClasses = () => {
                     g11: 0, g12: 0
                 };
                 const defaultClassSize = {
+                    cntLessKinder: 0, cntWithinKinder: 0, cntAboveKinder: 0,
                     cntLessG1: 0, cntWithinG1: 0, cntAboveG1: 0,
                     cntLessG2: 0, cntWithinG2: 0, cntAboveG2: 0,
                     cntLessG3: 0, cntWithinG3: 0, cntAboveG3: 0,
@@ -238,6 +240,7 @@ const OrganizedClasses = () => {
                             };
 
                             const newClassSize = {
+                                cntLessKinder: dbData.cnt_less_kinder ?? 0, cntWithinKinder: dbData.cnt_within_kinder ?? 0, cntAboveKinder: dbData.cnt_above_kinder ?? 0,
                                 cntLessG1: dbData.cnt_less_g1 ?? 0, cntWithinG1: dbData.cnt_within_g1 ?? 0, cntAboveG1: dbData.cnt_above_g1 ?? 0,
                                 cntLessG2: dbData.cnt_less_g2 ?? 0, cntWithinG2: dbData.cnt_within_g2 ?? 0, cntAboveG2: dbData.cnt_above_g2 ?? 0,
                                 cntLessG3: dbData.cnt_less_g3 ?? 0, cntWithinG3: dbData.cnt_within_g3 ?? 0, cntAboveG3: dbData.cnt_above_g3 ?? 0,
@@ -361,9 +364,10 @@ const OrganizedClasses = () => {
         if (showSHS()) sizeGrades.push('11', '12');
 
         for (const g of sizeGrades) {
-            if (!isValidEntry(classSizeData[`cntLessG${g}`]) ||
-                !isValidEntry(classSizeData[`cntWithinG${g}`]) ||
-                !isValidEntry(classSizeData[`cntAboveG${g}`])) return false;
+            const suffix = g === 'Kinder' ? 'Kinder' : `G${g}`;
+            if (!isValidEntry(classSizeData[`cntLess${suffix}`]) ||
+                !isValidEntry(classSizeData[`cntWithin${suffix}`]) ||
+                !isValidEntry(classSizeData[`cntAbove${suffix}`])) return false;
         }
 
         return true;
@@ -535,7 +539,7 @@ const OrganizedClasses = () => {
                         </div>
                     )}
 
-                    {/* --- CLASS SIZE STANDARD TABLE (Restored & Styled) --- */}
+                    {/* --- CLASS SIZE STANDARD TABLE (Dynamic Sections) --- */}
                     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-6">
                         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
                             <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-xl">
@@ -550,68 +554,170 @@ const OrganizedClasses = () => {
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-50">
-                                    <tr>
-                                        <th className="pb-3 text-left pl-2">Grade Level</th>
-                                        <th className="pb-3 text-emerald-600">{"< 50"} <br /> (Less than)</th>
-                                        <th className="pb-3 text-blue-600">{"50 - 60"} <br /> (Within)</th>
-                                        <th className="pb-3 text-red-600">{"> 60"} <br /> (Above)</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-50">
-                                    {[
-                                        ...(showElem() ? [1, 2, 3, 4, 5, 6] : []),
-                                        ...(showJHS() ? [7, 8, 9, 10] : []),
-                                        ...(showSHS() ? [11, 12] : [])
-                                    ].map(g => (
-                                        <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
-                                            <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Grade {g}</td>
-                                            <td className="p-1">
-                                                <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
-                                                <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
-                                                    name={`cntLessG${g}`}
-                                                    value={classSizeData[`cntLessG${g}`]}
-                                                    onChange={handleClassSizeChange}
-                                                    disabled={isLocked || viewOnly}
-                                                    onFocus={() => classSizeData[`cntLessG${g}`] === 0 && handleClassSizeChange({ target: { name: `cntLessG${g}`, value: '' } })}
-                                                    onBlur={() => (classSizeData[`cntLessG${g}`] === '' || classSizeData[`cntLessG${g}`] === null) && handleClassSizeChange({ target: { name: `cntLessG${g}`, value: 0 } })}
-                                                    className="w-full h-10 text-center font-bold text-emerald-700 bg-emerald-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-xs transition-all hover:border-emerald-200"
-                                                />
-                                            </td>
-                                            <td className="p-1">
-                                                <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
-                                                <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
-                                                    name={`cntWithinG${g}`}
-                                                    value={classSizeData[`cntWithinG${g}`]}
-                                                    onChange={handleClassSizeChange}
-                                                    disabled={isLocked || viewOnly}
-                                                    onFocus={() => classSizeData[`cntWithinG${g}`] === 0 && handleClassSizeChange({ target: { name: `cntWithinG${g}`, value: '' } })}
-                                                    onBlur={() => (classSizeData[`cntWithinG${g}`] === '' || classSizeData[`cntWithinG${g}`] === null) && handleClassSizeChange({ target: { name: `cntWithinG${g}`, value: 0 } })}
-                                                    className="w-full h-10 text-center font-bold text-blue-700 bg-blue-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-xs transition-all hover:border-blue-200"
-                                                />
-                                            </td>
-                                            <td className="p-1">
-                                                <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
-                                                <input
-                                                    type="text" inputMode="numeric" pattern="[0-9]*"
-                                                    name={`cntAboveG${g}`}
-                                                    value={classSizeData[`cntAboveG${g}`]}
-                                                    onChange={handleClassSizeChange}
-                                                    disabled={isLocked || viewOnly}
-                                                    onFocus={() => classSizeData[`cntAboveG${g}`] === 0 && handleClassSizeChange({ target: { name: `cntAboveG${g}`, value: '' } })}
-                                                    onBlur={() => (classSizeData[`cntAboveG${g}`] === '' || classSizeData[`cntAboveG${g}`] === null) && handleClassSizeChange({ target: { name: `cntAboveG${g}`, value: 0 } })}
-                                                    className="w-full h-10 text-center font-bold text-red-700 bg-red-50/30 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none text-xs transition-all hover:border-red-200"
-                                                />
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        {/* --- Kinder --- */}
+                        {showElem() && (
+                            <div className="mb-6">
+                                <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Kindergarten</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-50">
+                                            <tr>
+                                                <th className="pb-3 text-left pl-2">Grade Level</th>
+                                                <th className="pb-3 text-emerald-600">{"< 25"} <br /> (Less than)</th>
+                                                <th className="pb-3 text-blue-600">{"25 - 30"} <br /> (Within)</th>
+                                                <th className="pb-3 text-red-600">{"> 30"} <br /> (Above)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            <tr className="group hover:bg-slate-50/50 transition-colors">
+                                                <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Kinder</td>
+                                                {['Less', 'Within', 'Above'].map(type => (
+                                                    <td key={type} className="p-1">
+                                                        <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
+                                                        <input
+                                                            type="text" inputMode="numeric" pattern="[0-9]*"
+                                                            name={`cnt${type}Kinder`}
+                                                            value={classSizeData[`cnt${type}Kinder`]}
+                                                            onChange={handleClassSizeChange}
+                                                            disabled={isLocked || viewOnly}
+                                                            onFocus={() => classSizeData[`cnt${type}Kinder`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}Kinder`, value: '' } })}
+                                                            onBlur={() => (classSizeData[`cnt${type}Kinder`] === '' || classSizeData[`cnt${type}Kinder`] === null) && handleClassSizeChange({ target: { name: `cnt${type}Kinder`, value: 0 } })}
+                                                            className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
+                                                        />
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- Grades 1-3 --- */}
+                        {showElem() && (
+                            <div className="mb-6">
+                                <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Grades 1 - 3</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-50">
+                                            <tr>
+                                                <th className="pb-3 text-left pl-2">Grade Level</th>
+                                                <th className="pb-3 text-emerald-600">{"< 30"} <br /> (Less than)</th>
+                                                <th className="pb-3 text-blue-600">{"30 - 35"} <br /> (Within)</th>
+                                                <th className="pb-3 text-red-600">{"> 35"} <br /> (Above)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {[1, 2, 3].map(g => (
+                                                <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
+                                                    <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Grade {g}</td>
+                                                    {['Less', 'Within', 'Above'].map(type => (
+                                                        <td key={type} className="p-1">
+                                                            <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
+                                                            <input
+                                                                type="text" inputMode="numeric" pattern="[0-9]*"
+                                                                name={`cnt${type}G${g}`}
+                                                                value={classSizeData[`cnt${type}G${g}`]}
+                                                                onChange={handleClassSizeChange}
+                                                                disabled={isLocked || viewOnly}
+                                                                onFocus={() => classSizeData[`cnt${type}G${g}`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: '' } })}
+                                                                onBlur={() => (classSizeData[`cnt${type}G${g}`] === '' || classSizeData[`cnt${type}G${g}`] === null) && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: 0 } })}
+                                                                className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
+                                                            />
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- Grades 4-6 --- */}
+                        {showElem() && (
+                            <div className="mb-6">
+                                <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Grades 4 - 6</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-50">
+                                            <tr>
+                                                <th className="pb-3 text-left pl-2">Grade Level</th>
+                                                <th className="pb-3 text-emerald-600">{"< 40"} <br /> (Less than)</th>
+                                                <th className="pb-3 text-blue-600">{"40 - 45"} <br /> (Within)</th>
+                                                <th className="pb-3 text-red-600">{"> 45"} <br /> (Above)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {[4, 5, 6].map(g => (
+                                                <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
+                                                    <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Grade {g}</td>
+                                                    {['Less', 'Within', 'Above'].map(type => (
+                                                        <td key={type} className="p-1">
+                                                            <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
+                                                            <input
+                                                                type="text" inputMode="numeric" pattern="[0-9]*"
+                                                                name={`cnt${type}G${g}`}
+                                                                value={classSizeData[`cnt${type}G${g}`]}
+                                                                onChange={handleClassSizeChange}
+                                                                disabled={isLocked || viewOnly}
+                                                                onFocus={() => classSizeData[`cnt${type}G${g}`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: '' } })}
+                                                                onBlur={() => (classSizeData[`cnt${type}G${g}`] === '' || classSizeData[`cnt${type}G${g}`] === null) && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: 0 } })}
+                                                                className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
+                                                            />
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- JHS / SHS (Retained Generic) --- */}
+                        {(showJHS() || showSHS()) && (
+                            <div className="mb-6">
+                                <h3 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Junior & Senior High School</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="text-[10px] uppercase font-bold text-slate-400 tracking-wider text-center border-b border-slate-50">
+                                            <tr>
+                                                <th className="pb-3 text-left pl-2">Grade Level</th>
+                                                <th className="pb-3 text-emerald-600">{"< 50"} <br /> (Less than)</th>
+                                                <th className="pb-3 text-blue-600">{"50 - 60"} <br /> (Within)</th>
+                                                <th className="pb-3 text-red-600">{"> 60"} <br /> (Above)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {[
+                                                ...(showJHS() ? [7, 8, 9, 10] : []),
+                                                ...(showSHS() ? [11, 12] : [])
+                                            ].map(g => (
+                                                <tr key={g} className="group hover:bg-slate-50/50 transition-colors">
+                                                    <td className="py-2 pl-2 font-bold text-slate-600 text-xs text-left">Grade {g}</td>
+                                                    {['Less', 'Within', 'Above'].map(type => (
+                                                        <td key={type} className="p-1">
+                                                            <p className="text-[9px] text-slate-400 font-medium mb-1 block text-center">Total Sections</p>
+                                                            <input
+                                                                type="text" inputMode="numeric" pattern="[0-9]*"
+                                                                name={`cnt${type}G${g}`}
+                                                                value={classSizeData[`cnt${type}G${g}`]}
+                                                                onChange={handleClassSizeChange}
+                                                                disabled={isLocked || viewOnly}
+                                                                onFocus={() => classSizeData[`cnt${type}G${g}`] === 0 && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: '' } })}
+                                                                onBlur={() => (classSizeData[`cnt${type}G${g}`] === '' || classSizeData[`cnt${type}G${g}`] === null) && handleClassSizeChange({ target: { name: `cnt${type}G${g}`, value: 0 } })}
+                                                                className={`w-full h-10 text-center font-bold border border-slate-200 rounded-lg focus:ring-2 outline-none text-xs transition-all ${type === 'Less' ? 'text-emerald-700 bg-emerald-50/30 focus:ring-emerald-500 hover:border-emerald-200' : type === 'Within' ? 'text-blue-700 bg-blue-50/30 focus:ring-blue-500 hover:border-blue-200' : 'text-red-700 bg-red-50/30 focus:ring-red-500 hover:border-red-200'}`}
+                                                            />
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </form>
             </div>

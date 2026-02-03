@@ -211,8 +211,14 @@ const SchoolForms = () => {
 
     // --- 4. COMPUTED STATS ---
     const { completedCount, totalCount, progress, categorizedForms } = useMemo(() => {
+        // FILTER: Hide Specialization for Purely Elementary
+        const isElementary = schoolProfile?.curricular_offering === 'Purely Elementary';
+        const activeForms = isElementary
+            ? formsData.filter(f => f.id !== 'specialization')
+            : formsData;
+
         let completed = 0;
-        const processedForms = formsData.map(f => {
+        const processedForms = activeForms.map(f => {
             const status = getStatus(f.id);
             if (status === 'completed') completed++;
 
