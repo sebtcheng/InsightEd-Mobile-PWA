@@ -4,7 +4,8 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiSearch, FiChevronRight, FiMapPin, FiBarChart2, FiHardDrive, FiFileText, FiTrendingUp, FiCheckCircle, FiClock, FiBell } from 'react-icons/fi';
+import { FiSearch, FiChevronRight, FiMapPin, FiBarChart2, FiHardDrive, FiFileText, FiTrendingUp, FiCheckCircle, FiClock, FiBell, FiRefreshCw } from 'react-icons/fi';
+
 
 const SchoolJurisdictionList = () => {
     const navigate = useNavigate();
@@ -20,42 +21,45 @@ const SchoolJurisdictionList = () => {
     const filterRegion = searchParams.get('region');
     const filterDivision = searchParams.get('division');
 
-    useEffect(() => {
-        const fetchSchools = async () => {
-            const user = auth.currentUser;
-            if (!user) return;
 
-            const docRef = doc(db, "users", user.uid);
-            const docSnap = await getDoc(docRef);
-            
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setUserData(data);
+    const fetchSchools = async () => {
+        setLoading(true); // Ensure loading state is shown on refresh
+        const user = auth.currentUser;
+        if (!user) return;
 
-                try {
-                    // Logic: Use URL params if present (CO drill-down), otherwise use User Data (RO/SDO)
-                    const regionToUse = filterRegion || data.region;
-                    const divisionToUse = filterDivision || data.division;
+        const docRef = doc(db, "users", user.uid);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserData(data);
 
-                    const params = new URLSearchParams({
-                        region: regionToUse,
-                        ...(divisionToUse && { division: divisionToUse })
-                    });
+            try {
+                // Logic: Use URL params if present (CO drill-down), otherwise use User Data (RO/SDO)
+                const regionToUse = filterRegion || data.region;
+                const divisionToUse = filterDivision || data.division;
 
-                    // If we have a region (either from URL or User), fetch schools
-                    if (regionToUse) {
-                        const res = await fetch(`/api/monitoring/schools?${params.toString()}`);
-                        if (res.ok) setSchools(await res.json());
-                    }
-                } catch (err) {
-                    console.error("Fetch Schools Error:", err);
+                const params = new URLSearchParams({
+                    region: regionToUse,
+                    ...(divisionToUse && { division: divisionToUse })
+                });
+
+                // If we have a region (either from URL or User), fetch schools
+                if (regionToUse) {
+                    const res = await fetch(`/api/monitoring/schools?${params.toString()}`);
+                    if (res.ok) setSchools(await res.json());
                 }
+            } catch (err) {
+                console.error("Fetch Schools Error:", err);
             }
-            setLoading(false);
-        };
+        }
+        setLoading(false);
+    };
 
+    useEffect(() => {
         fetchSchools();
     }, [filterRegion, filterDivision]);
+
 
     const filteredSchools = schools.filter(s => 
         s.school_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -156,11 +160,20 @@ const SchoolJurisdictionList = () => {
                                 )}
                             </p>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex flex-col items-end">
                             <span className="text-2xl font-black">{filteredSchools.length}</span>
-                            <p className="text-[10px] font-bold opacity-60 uppercase">Total</p>
+                            <p className="text-[10px] font-bold opacity-60 uppercase mb-2">Total</p>
+                            
+                            <button 
+                                onClick={fetchSchools}
+                                className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-all hover:rotate-180 active:scale-95 backdrop-blur-md"
+                                title="Refresh List"
+                            >
+                                <FiRefreshCw size={14} />
+                            </button>
                         </div>
                     </div>
+
                 </div>
 
                 <div className="px-5 space-y-4">
@@ -188,7 +201,25 @@ const SchoolJurisdictionList = () => {
                                         <h3 className="font-extrabold text-slate-800 dark:text-slate-100 leading-snug group-hover:text-blue-600 transition-colors">
                                             {school.school_name || "Unknown School"}
                                         </h3>
-                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">ID: {school.school_id}</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ID: {school.school_id}</p>
+                                            
+                                            {/* COMPLETION INDICATOR */}
+                                            {(() => {
+                                                const isComplete = school.profile_status && school.head_status && school.enrollment_status && 
+                                                                 school.classes_status && school.shifting_status && school.personnel_status && 
+                                                                 school.specialization_status && school.resources_status;
+                                                return isComplete ? (
+                                                    <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                        <FiCheckCircle size={10} /> Completed
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-1 text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                                        <FiClock size={10} /> Incomplete
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
                                     </div>
                                     <div className="flex flex-wrap gap-1 justify-end max-w-[140px]">
                                         <StatusBadge active={school.profile_status} label="Info" />

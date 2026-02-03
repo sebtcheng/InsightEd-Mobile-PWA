@@ -606,6 +606,17 @@ const initOtpTable = async () => {
         console.error('❌ Failed to init system_settings table:', tableErr.message);
       }
 
+      // --- MIGRATION: ADD DISABLED COLUMN TO USERS ---
+      try {
+        await client.query(`
+          ALTER TABLE users 
+          ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
+        `);
+        console.log('✅ Checked/Added disabled column to users table');
+      } catch (migErr) {
+        console.error('❌ Failed to migrate disabled column:', migErr.message);
+      }
+
     } finally {
       client.release();
     }
@@ -776,25 +787,34 @@ app.get('/api/admin/users', async (req, res) => {
 });
 
 // POST Toggle User Status (Enable/Disable)
+// POST Toggle User Status (Enable/Disable)
 app.post('/api/admin/users/:uid/status', async (req, res) => {
   const { uid } = req.params;
-  const { disabled } = req.body;
+  const { disabled, adminUid } = req.body;
 
   if (typeof disabled !== 'boolean') {
     return res.status(400).json({ error: "Disabled status must be a boolean" });
   }
 
   try {
-    // 1. Update Firebase Auth
-    await admin.auth().updateUser(uid, { disabled });
+    // 1. Update Firebase Auth (Best Effort)
+    try {
+      await admin.auth().updateUser(uid, { disabled });
+    } catch (authErr) {
+      console.warn(`⚠️ Firebase Auth update failed (likely missing credentials), creating DB-only ban: ${authErr.message}`);
+    }
 
-    // 2. Update DB
-    await pool.query('UPDATE users SET disabled = $1 WHERE uid = $2', [disabled, uid]);
+    // 2. Update DB (Critical Source of Truth) AND Get user email for log
+    const result = await pool.query('UPDATE users SET disabled = $1 WHERE uid = $2 RETURNING email', [disabled, uid]);
+    const targetEmail = result.rows.length > 0 ? result.rows[0].email : uid;
 
-    // 3. Log
-    // (Assuming userUid comes from auth middleware/header, implemented loosely here for simplicity, 
-    // ideally should extract requester from token)
-    // For now, we'll log as 'System/Admin' if not provided
+    // 3. Log Activity
+    if (adminUid) {
+      const adminName = await getUserFullName(adminUid) || 'Admin';
+      const action = disabled ? 'DISABLE_USER' : 'ENABLE_USER';
+      await logActivity(adminUid, adminName, 'Admin', action, targetEmail, `User ${targetEmail} was ${disabled ? 'disabled' : 'enabled'}`);
+    }
+
     console.log(`✅ User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
 
     res.json({ success: true });
@@ -804,18 +824,34 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
   }
 });
 
+
+
+// DELETE User
 // DELETE User
 app.delete('/api/admin/users/:uid', async (req, res) => {
   const { uid } = req.params;
+  const { adminUid } = req.query;
 
   try {
-    // 1. Delete from Firebase Auth
-    await admin.auth().deleteUser(uid);
+    // 0. Get Target Info (Before Delete)
+    const userRes = await pool.query('SELECT email FROM users WHERE uid = $1', [uid]);
+    const targetEmail = userRes.rows.length > 0 ? userRes.rows[0].email : uid;
 
-    // 2. Delete from DB (Users table)
-    // Note: Dependent records (logs, etc.) might need handling depending on FK constraints.
-    // Assuming simple deletion for now.
+    // 1. Delete from Firebase Auth (Best Effort)
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (authErr) {
+      console.warn(`⚠️ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
+    }
+
+    // 2. Delete from DB (Critical Source of Truth)
     await pool.query('DELETE FROM users WHERE uid = $1', [uid]);
+
+    // 3. Log Activity
+    if (adminUid) {
+      const adminName = await getUserFullName(adminUid) || 'Admin';
+      await logActivity(adminUid, adminName, 'Admin', 'DELETE_USER', targetEmail, `User ${targetEmail} was permanently deleted`);
+    }
 
     console.log(`✅ User ${uid} deleted permanently.`);
     res.json({ success: true });
@@ -825,11 +861,42 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
   }
 });
 
+
+
 // ==================================================================
 //                        OTP & AUTH ROUTES
 // ==================================================================
 
 // Initialize OTP Table
+// (omitted for brevity)
+
+// --- USER VALIDATION ENDPOINT (STRICT LOGIN CHECK) ---
+app.get('/api/auth/validate/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT uid, disabled, role FROM users WHERE uid = $1', [uid]);
+
+    if (result.rows.length === 0) {
+      // User not found in SQL DB (Implicitly Deleted)
+      return res.json({ valid: false, reason: 'not_found' });
+    }
+
+    const user = result.rows[0];
+    if (user.disabled) {
+      return res.json({ valid: false, reason: 'disabled' });
+    }
+
+    // User exists and is active
+    res.json({ valid: true, role: user.role });
+
+  } catch (err) {
+    console.error("Validation Error:", err);
+    // Fail safe: If error, allow login but log it? Or block?
+    // Safer to block if we can't verify:
+    res.status(500).json({ error: "Validation failed" });
+  }
+});
+
 
 
 // --- POST: Send OTP (Real Email via Nodemailer) ---

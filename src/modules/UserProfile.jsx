@@ -2,13 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'; // Added addDoc, collection, serverTimestamp
 import BottomNav from './BottomNav';
+
 import PageTransition from '../components/PageTransition';
 import { useTheme } from '../context/ThemeContext'; // Import Hook
 
 // Icons
-import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp } from "react-icons/fi";
+import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare } from "react-icons/fi";
+
 
 const FAQ_DATA = [
     {
@@ -65,6 +67,15 @@ const UserProfile = () => {
         city: '',
         barangay: ''
     });
+
+    // Feedback State
+    const [feedbackRatings, setFeedbackRatings] = useState({
+        easeOfUse: 0,
+        aesthetics: 0,
+        functionality: 0
+    });
+    const [feedbackComment, setFeedbackComment] = useState('');
+
 
     // --- INITIAL FETCH ---
     useEffect(() => {
@@ -189,6 +200,38 @@ const UserProfile = () => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
+
+    const handleSubmitFeedback = async () => {
+        if (feedbackRatings.easeOfUse === 0 || feedbackRatings.aesthetics === 0 || feedbackRatings.functionality === 0) {
+            alert("Please rate all categories before submitting.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await addDoc(collection(db, "app_feedback"), {
+                userId: auth.currentUser?.uid || 'anonymous',
+                userName: userData?.firstName ? `${userData.firstName} ${userData.lastName}` : 'Anonymous',
+                role: userData?.role || 'User',
+                ratings: feedbackRatings,
+                comment: feedbackComment,
+                timestamp: serverTimestamp(),
+                appVersion: '1.0.0'
+            });
+
+            alert("Thank you for your feedback! We appreciate your input.");
+            // Reset form and go back
+            setFeedbackRatings({ easeOfUse: 0, aesthetics: 0, functionality: 0 });
+            setFeedbackComment('');
+            setActiveTab('settings');
+        } catch (error) {
+            console.error("Error submitting feedback:", error);
+            alert(`Failed to submit feedback: ${error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     // --- SUB-VIEWS RENDERERS ---
 
@@ -403,6 +446,79 @@ const UserProfile = () => {
         );
     };
 
+    // 5. FEEDBACK VIEW (NEW)
+    const renderFeedback = () => {
+        const categories = [
+            { id: 'easeOfUse', label: 'Ease of Use' },
+            { id: 'aesthetics', label: 'Aesthetics / Design' },
+            { id: 'functionality', label: 'Functionality' }
+        ];
+
+        return (
+            <div className="p-5 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm">
+                    <div className="text-center mb-6">
+                        <div className="w-12 h-12 bg-pink-50 dark:bg-pink-900/30 rounded-full flex items-center justify-center text-pink-500 mx-auto mb-3">
+                            <FiStar size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Rate Our App</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Your feedback helps us improve.</p>
+                    </div>
+
+                    <div className="space-y-6 mb-6">
+                        {categories.map((cat) => (
+                            <div key={cat.id} className="text-center">
+                                <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">{cat.label}</label>
+                                <div className="flex justify-center gap-2">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                            key={star}
+                                            onClick={() => setFeedbackRatings(prev => ({ ...prev, [cat.id]: star }))}
+                                            className="bg-transparent border-0 cursor-pointer focus:outline-none transition-transform active:scale-90 hover:scale-110"
+                                        >
+                                            <FiStar 
+                                                size={28} 
+                                                className={`transition-colors duration-200 ${
+                                                    star <= feedbackRatings[cat.id] 
+                                                        ? 'fill-amber-400 text-amber-400' 
+                                                        : 'text-slate-200 dark:text-slate-600'
+                                                }`} 
+                                            />
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mb-6">
+                        <label className="block text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Comments & Suggestions</label>
+                        <textarea
+                            className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
+                            rows="4"
+                            placeholder="Tell us what you like or what needs improvement..."
+                            value={feedbackComment}
+                            onChange={(e) => setFeedbackComment(e.target.value)}
+                        />
+                    </div>
+
+                    <button 
+                        onClick={handleSubmitFeedback}
+                        disabled={loading}
+                        className="w-full py-3 bg-[#004A99] hover:bg-blue-800 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
+                    >
+                        {loading ? 'Submitting...' : (
+                            <>
+                                <FiMessageSquare /> Submit Feedback
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+
     // 3. MAIN SETTINGS MENU
     const renderSettingsMenu = () => (
         <div className="p-5">
@@ -471,6 +587,16 @@ const UserProfile = () => {
                     <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
                 </button>
 
+                <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => setActiveTab('feedback')}>
+                    <div className="flex items-center gap-4">
+                        <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-300">
+                            <FiStar size={20} />
+                        </div>
+                        <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200">Rate & Feedback</span>
+                    </div>
+                    <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
+                </button>
+
                 <button className="w-full flex justify-between items-center px-5 py-4 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => setActiveTab('about')}>
                     <div className="flex items-center gap-4">
                         <div className="w-9 h-9 rounded-lg flex justify-center items-center bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300">
@@ -526,7 +652,9 @@ const UserProfile = () => {
                     {activeTab === 'settings' && renderSettingsMenu()}
                     {activeTab === 'profile' && renderProfileEdit()}
                     {activeTab === 'faq' && renderFAQ()}
+                    {activeTab === 'feedback' && renderFeedback()}
                     {activeTab === 'about' && renderAbout()}
+
                 </div>
 
                 <BottomNav homeRoute={homeRoute} userRole={userData?.role} />

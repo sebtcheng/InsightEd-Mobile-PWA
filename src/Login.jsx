@@ -207,12 +207,47 @@ const Login = () => {
                     new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 5000))
                 ]);
 
-                if (docSnap.exists()) {
                     userData = docSnap.data();
                     role = userData.role;
-                }
+
+                    // --- STRICT BACKEND VALIDATION ---
+                    try {
+                        const valRes = await fetch(`/api/auth/validate/${uid}`);
+                        if (valRes.ok) {
+                            const valData = await valRes.json();
+                            if (!valData.valid) {
+                                console.warn(`Backend validation failed: ${valData.reason}`);
+                                await auth.signOut();
+                                if (valData.reason === 'disabled') {
+                                    alert("Your account has been disabled. Please contact the administrator.");
+                                } else {
+                                    alert("Account not found. Please contact support.");
+                                }
+                                setLoading(false);
+                                return; // Stop execution
+                            }
+                            // Optional: Sync role from valid backend response? 
+                            // role = valData.role || role; 
+                        }
+                    } catch (valErr) {
+                        console.warn("Backend validation unreachable, falling back to Firestore/Cache warning...", valErr);
+                        // Decide: Block or Allow offline? 
+                        // If strict security: Block. But for offline PWA: Allow with warning?
+                        // For now, proceed with Firestore check (fallback)
+                    }
+
+                    // --- CHECK IF DISABLED (FIRESTORE FALLBACK) ---
+                    if (userData && userData.disabled) {
+
+                        console.warn("Account is disabled. Blocking login.");
+                        await auth.signOut();
+                        alert("Your account has been disabled. Please contact the administrator.");
+                        setLoading(false);
+                        return; // Stop execution
+                    }
             } catch (firestoreErr) {
                 console.warn("Firestore blocked or slow, trying fallback...", firestoreErr);
+
                 // Fallback: Check Local Storage
                 const storedRole = localStorage.getItem('userRole');
                 if (storedRole) {

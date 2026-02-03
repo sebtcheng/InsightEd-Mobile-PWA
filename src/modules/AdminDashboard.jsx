@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle } from "react-icons/fi";
+import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare } from "react-icons/fi";
+
 
 // --- REUSABLE STAT COMPONENT ---
 const StatCard = ({ label, value, icon, color }) => (
@@ -28,6 +29,8 @@ const AdminDashboard = () => {
     const [projects, setProjects] = useState([]);
     const [users, setUsers] = useState([]);
     const [auditLogs, setAuditLogs] = useState([]);
+    const [feedbackList, setFeedbackList] = useState([]); // New state for feedback
+
 
     // Loading States
     const [loading, setLoading] = useState(false);
@@ -43,8 +46,9 @@ const AdminDashboard = () => {
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, usersRes] = await Promise.all([
+            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, usersRes, feedbackQuerySnapshot] = await Promise.all([
                 // checking user role/name
+
                 (async () => {
                     const user = auth.currentUser;
                     if (user) {
@@ -56,8 +60,16 @@ const AdminDashboard = () => {
                 fetch('/api/projects').then(r => r.json()), // Changed to /api/projects
                 fetch('/api/activities').then(r => r.json()),
                 fetch('/api/settings/enrolment_deadline').then(r => r.json()),
-                fetch('/api/admin/users').then(r => r.json())
+                fetch('/api/admin/users').then(r => r.json()),
+                // Fetch Feedback directly from Firestore for real-time accuracy
+                // Added catch block to prevent entire dashboard failure if permissions are missing
+                getDocs(query(collection(db, "app_feedback"), orderBy("timestamp", "desc")))
+                    .catch(err => {
+                        console.warn("Feedback fetch failed (likely permissions):", err);
+                        return null; 
+                    })
             ]);
+
 
             // Handle Schools
             if (Array.isArray(schoolsRes)) setSchools(schoolsRes);
@@ -75,6 +87,16 @@ const AdminDashboard = () => {
 
             // Handle Users
             if (Array.isArray(usersRes)) setUsers(usersRes);
+
+            // Handle Feedback
+            const feedbackData = [];
+            if (feedbackQuerySnapshot && feedbackQuerySnapshot.forEach) {
+                feedbackQuerySnapshot.forEach(doc => {
+                    feedbackData.push({ id: doc.id, ...doc.data() });
+                });
+            }
+            setFeedbackList(feedbackData);
+
 
         } catch (error) {
             console.error("Dashboard Sync Error:", error);
@@ -100,6 +122,13 @@ const AdminDashboard = () => {
         const target = new Date(p.targetCompletionDate);
         return new Date() > target;
     }).length;
+
+    // Feedback Stats Helper
+    const calculateAverageRating = (field) => {
+        if (feedbackList.length === 0) return 0;
+        const sum = feedbackList.reduce((acc, curr) => acc + (curr.ratings?.[field] || 0), 0);
+        return (sum / feedbackList.length).toFixed(1);
+    };
 
     // --- HANDLERS ---
     const handleUpdateDeadline = async () => {
@@ -134,10 +163,11 @@ const AdminDashboard = () => {
         if (!window.confirm(`Are you sure you want to ${currentStatus ? 'ENABLE' : 'DISABLE'} this user?`)) return;
         
         try {
+            const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
             const res = await fetch(`/api/admin/users/${uid}/status`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ disabled: !currentStatus })
+                body: JSON.stringify({ disabled: !currentStatus, adminUid })
             });
             if (res.ok) {
                 alert(`✅ User ${currentStatus ? 'enabled' : 'disabled'} successfully!`);
@@ -154,7 +184,8 @@ const AdminDashboard = () => {
         if (!window.confirm("Are you sure you want to PERMANENTLY DELETE this user? This action cannot be undone.")) return;
 
         try {
-            const res = await fetch(`/api/admin/users/${uid}`, {
+            const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
+            const res = await fetch(`/api/admin/users/${uid}?adminUid=${adminUid}`, {
                 method: 'DELETE'
             });
             if (res.ok) {
@@ -375,7 +406,8 @@ const AdminDashboard = () => {
                     />
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50 text-[10px] uppercase font-bold text-gray-400">
                             <tr>
@@ -420,7 +452,7 @@ const AdminDashboard = () => {
                                        )}
                                     </td>
                                     <td className="p-3 text-right">
-                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex justify-end gap-1">
                                             <button 
                                                 onClick={() => handleDisableUser(user.uid, user.disabled)}
                                                 className={`p-1.5 rounded-lg transition-colors ${user.disabled ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-orange-50 text-orange-600 hover:bg-orange-100'}`}
@@ -437,6 +469,7 @@ const AdminDashboard = () => {
                                             </button>
                                         </div>
                                     </td>
+
                                 </tr>
                             ))}
                         </tbody>
@@ -450,6 +483,79 @@ const AdminDashboard = () => {
              </div>
         );
     };
+
+    const renderFeedbackView = () => (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-500">
+             {/* Stats Cards */}
+             <div className="grid grid-cols-3 gap-4 mb-6">
+                <StatCard 
+                    label="Ease of Use" 
+                    value={calculateAverageRating('easeOfUse')} 
+                    icon={<FiStar />} 
+                    color="text-amber-500 bg-amber-50" 
+                />
+                <StatCard 
+                    label="Aesthetics" 
+                    value={calculateAverageRating('aesthetics')} 
+                    icon={<FiStar />} 
+                    color="text-pink-500 bg-pink-50" 
+                />
+                <StatCard 
+                    label="Functionality" 
+                    value={calculateAverageRating('functionality')} 
+                    icon={<FiStar />} 
+                    color="text-blue-500 bg-blue-50" 
+                />
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h3 className="font-bold text-gray-700 m-0 flex items-center gap-2">
+                        <FiMessageSquare /> User Feedback
+                    </h3>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold">
+                        {feedbackList.length} Reviews
+                    </span>
+                </div>
+                
+                <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+                    {feedbackList.length === 0 ? (
+                        <div className="p-8 text-center text-gray-400 text-sm">No feedback received yet.</div>
+                    ) : (
+                        feedbackList.map((item) => (
+                            <div key={item.id} className="p-4 hover:bg-slate-50 transition-colors">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <p className="font-bold text-sm text-gray-800 m-0">{item.userName}</p>
+                                        <p className="text-xs text-gray-500 m-0">{item.role} • {item.timestamp?.toDate ? new Date(item.timestamp.toDate()).toLocaleDateString() : 'Just now'}</p>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        {[1, 2, 3, 4, 5].map(star => (
+                                            <FiStar 
+                                                key={star} 
+                                                size={12} 
+                                                className={star <= Math.round((item.ratings?.easeOfUse + item.ratings?.aesthetics + item.ratings?.functionality)/3) ? "fill-amber-400 text-amber-400" : "text-gray-200"} 
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="text-xs text-gray-500 mb-2 flex gap-4">
+                                     <span>Ease: <b>{item.ratings?.easeOfUse}</b></span>
+                                     <span>Look: <b>{item.ratings?.aesthetics}</b></span>
+                                     <span>Func: <b>{item.ratings?.functionality}</b></span>
+                                </div>
+                                {item.comment && (
+                                    <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700 italic border border-gray-100">
+                                        "{item.comment}"
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <PageTransition>
@@ -499,6 +605,12 @@ const AdminDashboard = () => {
                                 Audit Trail
                             </button>
                             <button
+                                onClick={() => { setActiveTab('feedback'); setSearchTerm(''); }}
+                                className={`px-4 py-2 text-xs font-bold rounded-lg whitespace-nowrap transition-all ${activeTab === 'feedback' ? 'bg-[#004A99] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                App Feedback
+                            </button>
+                            <button
                                 onClick={() => { setActiveTab('accounts'); setSearchTerm(''); }}
                                 className={`px-4 py-2 text-xs font-bold rounded-lg whitespace-nowrap transition-all ${activeTab === 'accounts' ? 'bg-[#004A99] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
                             >
@@ -518,6 +630,7 @@ const AdminDashboard = () => {
                                     {activeTab === 'schools' && renderSchoolsList()}
                                     {activeTab === 'projects' && renderProjectsList()}
                                     {activeTab === 'audit' && renderAuditTable()}
+                    {activeTab === 'feedback' && renderFeedbackView()}
                                     {activeTab === 'accounts' && renderAccountManagement()}
                                 </>
                             )}

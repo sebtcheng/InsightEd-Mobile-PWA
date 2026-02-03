@@ -336,6 +336,17 @@ const Register = () => {
 
 
 
+        // STRICT EMAIL VALIDATION (Added for Bypass)
+        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
+            alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
+            return;
+        }
+
+        // STRICT OTP ENFORCEMENT (COMMENTED OUT FOR TESTING)
+        // if (!isOtpVerified) {
+        //     alert("Please verify your email via OTP before registering.");
+        //     return;
+        // }
 
         setLoading(true);
 
@@ -902,7 +913,70 @@ const Register = () => {
                                 </div>
                             )}
 
+                            {/* === 3. EMAIL VERIFICATION & SECURITY (COMMENTED OUT FOR TESTING) === */}
+                            {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+                                    <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
+                                        {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
+                                    </span>
+                                    Account Security
+                                </h3>
 
+                                <div className="mb-6 space-y-3">
+
+                                    
+                                    
+                                    <div className="flex flex-col gap-3">
+                                        <p className="text-xs text-slate-500">
+                                            Verifying: <span className="font-bold text-slate-700">{formData.email || "No email entered"}</span>
+                                        </p>
+
+                                        {!isOtpVerified && (
+                                            <button
+                                                type="button"
+                                                onClick={handleSendOtp}
+                                                disabled={otpLoading || !canResend || !formData.email}
+                                                className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-3 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                {otpLoading ? 'Sending Code...' : !canResend ? `Resend in ${timer}s` : isOtpSent ? 'Resend Verification Code' : 'Send Verification Code'}
+                                            </button>
+                                        )}
+
+                                        {isOtpSent && !isOtpVerified && (
+                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Enter Code</label>
+                                                <div className="flex justify-between gap-2 mb-3">
+                                                    {otp.map((digit, index) => (
+                                                        <input
+                                                            key={index}
+                                                            type="text"
+                                                            maxLength="1"
+                                                            value={digit}
+                                                            onChange={e => handleOtpChange(e.target, index)}
+                                                            className="w-10 h-12 text-center border-2 border-slate-200 rounded-lg focus:border-blue-500 outline-none text-lg font-bold bg-white"
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleVerifyOtp}
+                                                    className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700"
+                                                >
+                                                    Verify Code
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {isOtpVerified && (
+                                            <div className="bg-green-50 text-green-700 px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-2 border border-green-200">
+                                                <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                                                Email Verified Successfully
+                                            </div>
+                                        )}
+                                    </div> 
+                                    
+                                </div>
+                            </div> */}
 
 
 

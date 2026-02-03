@@ -713,9 +713,9 @@ const EngineerProjects = () => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    // CHECK: Limit to 5 photos max
-    if (selectedFiles.length + files.length > 5) {
-        alert("You can only upload a maximum of 5 photos.");
+    // CHECK: Limit to 2 photos max
+    if (selectedFiles.length + files.length > 2) {
+        alert("You can only upload a maximum of 2 photos.");
         return;
     }
 
