@@ -33,7 +33,7 @@ const NewProjects = () => {
     // --- 1. LOAD CSV DATA & CHECK PROJECT LIMIT ON MOUNT ---
     useEffect(() => {
         // A. Load CSV
-        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
+        Papa.parse('/schools.csv', {
             download: true,
             header: true,
             skipEmptyLines: true,
@@ -233,6 +233,12 @@ const NewProjects = () => {
         if (isDummy) {
             alert("PREVIEW MODE: This project entry will NOT be saved.");
             navigate(-1);
+            return;
+        }
+
+        // CHECK: Mandatory Photo Upload
+        if (selectedFiles.length === 0) {
+            alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
             return;
         }
 

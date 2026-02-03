@@ -49,7 +49,8 @@ const SchoolHeadDashboard = () => {
     const [showDeadlineAlert, setShowDeadlineAlert] = useState(false);
 
     // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
-    const SEARCHABLE_ITEMS = [
+    // NOTE: We filter this list based on school offering below
+    const BASE_ITEMS = [
         // IDENTITY
         { name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600" },
         { name: "School Head Info", route: "/school-information", icon: FiUser, color: "bg-indigo-100 text-indigo-600" },
@@ -68,6 +69,14 @@ const SchoolHeadDashboard = () => {
         { name: "School Resources", route: "/school-resources", icon: FiBox, color: "bg-emerald-100 text-emerald-600" },
         { name: "Physical Facilities", route: "/physical-facilities", icon: FiLayers, color: "bg-amber-100 text-amber-600" },
     ];
+
+    // Computed Property for Filtered Items
+    const SEARCHABLE_ITEMS = React.useMemo(() => {
+        if (schoolProfile?.curricular_offering === 'Purely Elementary') {
+            return BASE_ITEMS.filter(item => item.name !== "Specialization");
+        }
+        return BASE_ITEMS;
+    }, [schoolProfile]);
 
     // Reuse SEARCHABLE_ITEMS for search logic to keep them in sync
     const ALL_ITEMS = SEARCHABLE_ITEMS;
@@ -93,6 +102,7 @@ const SchoolHeadDashboard = () => {
     useEffect(() => {
         if (!schoolProfile) return;
 
+        const isElementary = schoolProfile.curricular_offering === 'Purely Elementary';
         const completedList = [];
 
         // Helper to check if any field with prefix has value > 0
@@ -124,8 +134,10 @@ const SchoolHeadDashboard = () => {
         const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
         if (totalTeachers > 0) completedList.push("Teaching Personnel");
 
-        // 8. Specialization
-        if (hasData('spec_', 'number')) completedList.push("Specialization");
+        // 8. Specialization (CONDITIONAL)
+        if (!isElementary) {
+            if (hasData('spec_', 'number')) completedList.push("Specialization");
+        }
 
         // 9. Resources
         const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
@@ -137,6 +149,7 @@ const SchoolHeadDashboard = () => {
         setStats(prev => ({
             ...prev,
             completedForms: completedList.length,
+            totalForms: isElementary ? 9 : 10, // Adjust total
             enrollment: schoolProfile.total_enrollment || 0
         }));
         setCompletedItems(completedList);

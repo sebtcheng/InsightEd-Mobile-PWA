@@ -67,7 +67,9 @@ const Register = () => {
         barangay: ''
     });
 
-    // --- OTP STATE ---
+    // --- OTP STATE --- (REMOVED)
+
+
 
 
     // --- LOCATION DROPDOWN STATE (Generic Roles) ---
@@ -97,7 +99,8 @@ const Register = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [registeredIern, setRegisteredIern] = useState('');
 
-    // --- OTP TIMER EFFECT ---
+    // --- OTP TIMER EFFECT (REMOVED) ---
+
 
 
     // --- 1. LOAD CSV DATA ---
@@ -354,14 +357,14 @@ const Register = () => {
             }
 
             // --- STRICT DEPED EMAIL VALIDATION ---
-            const lowerEmail = authEmail.toLowerCase();
+            const lowerEmail = contactEmail.toLowerCase();
             if (!lowerEmail.endsWith('@deped.gov.ph')) {
                 alert("Restricted Access: Please use your official DepEd email address (@deped.gov.ph).");
                 return;
             }
 
             // Basic email format check (redundant but safe)
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail)) {
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
                 alert("Please enter a valid school email address.");
                 return;
             }
@@ -374,13 +377,13 @@ const Register = () => {
 
 
 
-        // STRICT EMAIL VALIDATION (Added for Bypass)
-        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
+        // STRICT EMAIL VALIDATION (Global Check)
+        if (!contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
 
-        // STRICT OTP ENFORCEMENT (COMMENTED OUT FOR TESTING)
+        // STRICT OTP ENFORCEMENT (User requested REMOVAL)
         // if (!isOtpVerified) {
         //     alert("Please verify your email via OTP before registering.");
         //     return;
