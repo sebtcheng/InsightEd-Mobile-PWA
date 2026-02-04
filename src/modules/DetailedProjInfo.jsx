@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition'; // Assuming you have this
 import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
-
+import LocationPickerMap from '../components/LocationPickerMap';
 import { TbPhoto } from "react-icons/tb";
 
 const DetailedProjInfo = () => {
@@ -200,6 +200,34 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Region" value={project.region} />
                                 <DetailItem label="Division" value={project.division} />
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Location Section */}
+                    <div>
+                        <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1">Project Location</h3>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Latitude</p>
+                                    <p className="text-sm font-mono font-semibold text-slate-800">{project.latitude || "N/A"}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Longitude</p>
+                                    <p className="text-sm font-mono font-semibold text-slate-800">{project.longitude || "N/A"}</p>
+                                </div>
+                            </div>
+                            
+                            {/* Map Preview */}
+                            {(project.latitude && project.longitude) && (
+                                <div className="rounded-xl overflow-hidden shadow-inner border border-slate-200 mt-2 h-48 relative z-0">
+                                     <LocationPickerMap 
+                                        latitude={project.latitude} 
+                                        longitude={project.longitude} 
+                                        disabled={true} // Read Only Mode
+                                     />
+                                </div>
+                            )}
                         </div>
                     </div>
 

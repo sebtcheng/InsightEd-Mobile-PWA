@@ -23,7 +23,8 @@ const app = express();
 
 
 
-// --- MIDDLEWARE ---
+
+// --- AUTH MIDDLEWARE ---
 app.use(cors({
   origin: [
     'http://localhost:5173',           // Vite Local Default
@@ -42,6 +43,25 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
+
+// --- DATABASE INIT ---
+const initDB = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_documents (
+        id SERIAL PRIMARY KEY,
+        project_id INT REFERENCES engineer_form(project_id),
+        doc_type TEXT NOT NULL, -- 'POW', 'DUPA', 'CONTRACT'
+        file_data TEXT, 
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("✅ DB Init: project_documents table verified.");
+  } catch (err) {
+    console.error("❌ DB Init Error:", err);
+  }
+};
+initDB();
 
 // --- VERCEL CRON ENDPOINT (MOVED TO TOP) ---
 // Support both /api/cron... (Local) and /cron... (Vercel)
@@ -469,8 +489,17 @@ const initOtpTable = async () => {
             ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
         `);
         console.log('✅ Checked/Added IPC column to engineer_form');
+
+        // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
+        await client.query(`
+            ALTER TABLE engineer_form 
+            ADD COLUMN IF NOT EXISTS latitude TEXT,
+            ADD COLUMN IF NOT EXISTS longitude TEXT;
+        `);
+        console.log('✅ Checked/Added Latitude & Longitude to engineer_form');
+
       } catch (migErr) {
-        console.error('❌ Failed to migrate IPC column:', migErr.message);
+        console.error('❌ Failed to migrate engineer_form columns:', migErr.message);
       }
 
       // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
@@ -1781,7 +1810,9 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
       data.uid,
       newIpc, // $17
-      resolvedEngineerName // $18
+      resolvedEngineerName, // $18
+      valueOrNull(data.latitude), // $19
+      valueOrNull(data.longitude) // $20
     ];
 
     const projectQuery = `
@@ -1790,8 +1821,8 @@ app.post('/api/save-project', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        engineer_id, ipc, engineer_name, latitude, longitude
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -1809,6 +1840,18 @@ app.post('/api/save-project', async (req, res) => {
 
       for (const imgBase64 of data.images) {
         await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+      }
+    }
+
+    // 5. Insert Documents (POW, DUPA, CONTRACT)
+    if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
+      const docQuery = `
+        INSERT INTO "project_documents" (project_id, doc_type, file_data)
+        VALUES ($1, $2, $3)
+      `;
+      for (const doc of data.documents) {
+        // doc = { type: 'POW', base64: '...' }
+        await client.query(docQuery, [newProjectId, doc.type, doc.base64]);
       }
     }
 
@@ -1895,6 +1938,9 @@ app.put('/api/update-project/:id', async (req, res) => {
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
+    const newLat = valueOrNull(data.latitude) || oldData.latitude;
+    const newLong = valueOrNull(data.longitude) || oldData.longitude;
+
 
     const insertValues = [
       oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
@@ -1903,7 +1949,9 @@ app.put('/api/update-project/:id', async (req, res) => {
       oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
-      finalUserName        // Update Name string
+      finalUserName,       // Update Name string
+      newLat,              // $19
+      newLong              // $20
     ];
 
     const insertQuery = `
@@ -1912,8 +1960,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        engineer_id, ipc, engineer_name, latitude, longitude
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *;
     `;
 
@@ -1986,7 +2034,8 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        latitude, longitude
       FROM LatestProjects
     `;
 
@@ -2041,7 +2090,8 @@ app.get('/api/projects/:id', async (req, res) => {
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        latitude, longitude
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -2066,7 +2116,8 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
+        latitude, longitude
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
     `;

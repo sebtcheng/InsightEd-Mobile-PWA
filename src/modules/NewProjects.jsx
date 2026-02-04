@@ -5,7 +5,23 @@ import Papa from 'papaparse';
 import { auth } from '../firebase'; 
 // --- IMPORT NEW DB LOGIC ---
 import { addEngineerToOutbox, getCachedProjects } from '../db';
+// --- CONSTANTS ---
+const DOC_TYPES = {
+  POW: "Program of Works",
+  DUPA: "DUPA",
+  CONTRACT: "Signed Contract"
+};
+
+const convertFullFileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+    });
+};
 import { compressImage } from '../utils/imageCompression';
+import LocationPickerMap from '../components/LocationPickerMap'; // Import Map Component
 
 // Helper component for Section Headers
 const SectionHeader = ({ title, icon }) => (
@@ -26,6 +42,12 @@ const NewProjects = () => {
     const fileInputRef = useRef(null);
     const [showUploadOptions, setShowUploadOptions] = useState(false);
     const [selectedFiles, setSelectedFiles] = useState([]);
+    const [previews, setPreviews] = useState([]);
+    const [documents, setDocuments] = useState({
+        POW: null,
+        DUPA: null,
+        CONTRACT: null
+    });
     
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]); 
@@ -134,21 +156,91 @@ const NewProjects = () => {
         batchOfFunds: '',
 
         // Remarks
-        otherRemarks: ''
+        otherRemarks: '',
+
+        // Location (New)
+        latitude: '',
+        longitude: ''
     });
+
+    // --- NEW: GEOLOCATION LOGIC ---
+    const handleGetLocation = () => {
+        if (!navigator.geolocation) {
+            alert("❌ Geolocation is not supported by your browser.");
+            return;
+        }
+
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        };
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude.toFixed(6);
+                const long = position.coords.longitude.toFixed(6);
+                
+                setFormData(prev => ({
+                    ...prev,
+                    latitude: lat,
+                    longitude: long
+                }));
+                // alert(`✅ Coordinates Captured!\nLat: ${lat}\nLong: ${long}`); // Removed alert to avoid annoyance with map
+            },
+            (error) => {
+                console.warn("Geolocation warning:", error);
+                
+                // Fallback / Detailed Error
+                let msg = "Unable to retrieve location.";
+                if (error.code === 1) msg = "❌ Location permission denied. Please enable location services.";
+                else if (error.code === 2) msg = "❌ Position unavailable. Check your GPS signal.";
+                else if (error.code === 3) msg = "❌ Location request timed out.";
+                
+                alert(msg);
+            },
+            options
+        );
+    };
+
+    const handleLocationSelect = (lat, lng) => {
+        setFormData(prev => ({
+            ...prev,
+            latitude: lat.toFixed(6),
+            longitude: lng.toFixed(6)
+        }));
+    };
 
     // --- NEW: FILE HANDLING FUNCTIONS ---
     const handleFileChange = (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length > 0) {
-            // CHECK: Limit to 2 photos max
-            if (selectedFiles.length + files.length > 2) {
-                alert("You can only upload a maximum of 2 photos.");
+        const files = e.target.files;
+        if (files) {
+            const newFiles = Array.from(files);
+            // Limit to 5 photos total
+            if (selectedFiles.length + newFiles.length > 5) {
+                alert("⚠️ MAX LIMIT REACHED\n\nYou can only upload a maximum of 5 site photos.");
                 return;
             }
-            setSelectedFiles(prev => [...prev, ...files]);
-            setShowUploadOptions(false);
+            setSelectedFiles((prev) => [...prev, ...newFiles]);
+            
+            const newPreviews = newFiles.map(file => URL.createObjectURL(file));
+            setPreviews(prev => [...prev, ...newPreviews]);
         }
+    };
+
+    const handleDocumentSelect = (e, type) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.type !== "application/pdf") {
+                alert("⚠️ INVALID FORMAT\n\nPlease upload a valid PDF file.");
+                return;
+            }
+            setDocuments(prev => ({ ...prev, [type]: file }));
+        }
+    };
+
+    const removeDocument = (type) => {
+        setDocuments(prev => ({ ...prev, [type]: null }));
     };
 
     const triggerFilePicker = (mode) => {
@@ -176,9 +268,17 @@ const NewProjects = () => {
                 ...prev,
                 schoolName: found.school_name,
                 region: found.region,
-                division: found.division
+                division: found.division,
+                // --- AUTO POPULATE COORDINATES ---
+                latitude: found.latitude || prev.latitude,
+                longitude: found.longitude || prev.longitude
             }));
-            alert("✅ School Found: " + found.school_name);
+            
+            let idMsg = `✅ School Found: ${found.school_name}`;
+            if (found.latitude && found.longitude) {
+                idMsg += `\n📍 Coordinates Auto-Detected!`;
+            }
+            alert(idMsg);
         } else {
             alert("❌ School ID not found in database.");
             setFormData(prev => ({
@@ -215,17 +315,6 @@ const NewProjects = () => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    // Helper function to convert File objects to Base64 strings
-    // (Moved up so it can be used inside handleSubmit)
-    const convertToBase64 = (file) => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = (error) => reject(error);
-      });
-    };
-
     // --- 4. FIXED SUBMIT LOGIC (BUNDLES IMAGES) ---
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -236,56 +325,94 @@ const NewProjects = () => {
             return;
         }
 
+        // CHECK: Required Fields
+        if (!formData.projectName || !formData.schoolName) {
+            alert("⚠️ MISSING DETAILS\n\nPlease provide at least the Project Name and School Name.");
+            return;
+        }
+
+        // CHECK: Mandatory Documents
+        // if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
+        //    alert("⚠️ DOCUMENTS REQUIRED\n\nPlease upload the Program of Works, DUPA, and Signed Contract before creating the project.");
+        //    return;
+        //}
+
         // CHECK: Mandatory Photo Upload
         if (selectedFiles.length === 0) {
             alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
             return;
         }
 
-        setIsSubmitting(true);
+        // CHECK: Mandatory Coordinates
+        if (!formData.latitude || !formData.longitude) {
+            alert("⚠️ LOCATION REQUIRED\n\nAccording to COA requirements, you must capture the project's coordinates.\nPlease use the 'Get Current Location' button.");
+            return;
+        }
 
-        // 1. PRE-PROCESS IMAGES (Compress and convert to Base64 strings immediately)
-        let imagePayload = [];
-        if (selectedFiles.length > 0) {
-            try {
-                // Using compression utility instead of manual convertToBase64
-                imagePayload = await Promise.all(selectedFiles.map(file => compressImage(file)));
-            } catch (err) {
-                console.error("Error compressing images", err);
-                alert("Error compressing images");
-                setIsSubmitting(false);
+        // CHECK: All Other Mandatory Fields
+        const requiredFields = [
+            { key: 'region', label: 'Region' },
+            { key: 'division', label: 'Division' },
+            { key: 'statusAsOfDate', label: 'Status Date' },
+            { key: 'targetCompletionDate', label: 'Target Completion Date' },
+            { key: 'contractorName', label: 'Contractor Name' },
+            { key: 'projectAllocation', label: 'Project Allocation' },
+            { key: 'batchOfFunds', label: 'Batch of Funds' },
+            { key: 'otherRemarks', label: 'Remarks' }
+        ];
+
+        for (const field of requiredFields) {
+            if (!formData[field.key]) {
+                alert(`⚠️ MISSING FIELD\n\nPlease enter the ${field.label}. All fields are mandatory.`);
                 return;
             }
         }
 
-        // 2. CONSTRUCT SINGLE PAYLOAD
-        // We use relative URL '/api/save-project' so it works both Localhost & Production
-        const payload = {
-            url: '/api/save-project', 
-            method: 'POST',
-            body: { 
-                ...formData, 
-                projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0), // Strip commas
-                uid: auth.currentUser?.uid,
-                modifiedBy: auth.currentUser?.displayName || 'Engineer',
-                images: imagePayload // <--- Images are now bundled HERE
-            },
-            formName: `Project: ${formData.projectName}`
-        };
+        setIsSubmitting(true);
 
-        // 3. OFFLINE CHECK
-        if (!navigator.onLine) {
-            // Because 'payload' now includes the Base64 images, 
-            // addEngineerToOutbox saves EVERYTHING (Text + Photos) in one go.
-            await addEngineerToOutbox(payload);
-            alert("📁 No internet. Project & Photos saved to Sync Center.");
-            setIsSubmitting(false);
-            navigate('/engineer-dashboard');
-            return;
-        }
-
-        // 4. ONLINE SUBMISSION
         try {
+            // 1. Process Images
+            const compressedImages = [];
+            for (const file of selectedFiles) {
+                const base64 = await compressImage(file);
+                compressedImages.push(base64);
+            }
+
+            // 2. Process Documents
+            const processedDocs = [];
+            if (documents.POW) processedDocs.push({ type: 'POW', base64: await convertFullFileToBase64(documents.POW) });
+            if (documents.DUPA) processedDocs.push({ type: 'DUPA', base64: await convertFullFileToBase64(documents.DUPA) });
+            if (documents.CONTRACT) processedDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
+
+            // 2. CONSTRUCT SINGLE PAYLOAD
+            // We use relative URL '/api/save-project' so it works both Localhost & Production
+            const payload = {
+                url: '/api/save-project', 
+                method: 'POST',
+                body: { 
+                    ...formData, 
+                    projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0), // Strip commas
+                    uid: auth.currentUser?.uid,
+                    modifiedBy: auth.currentUser?.displayName || 'Engineer',
+                    images: compressedImages, // <--- Images are now bundled HERE
+                    documents: processedDocs,
+                    statusAsOfDate: new Date().toISOString() // Set initial status date
+                },
+                formName: `Project: ${formData.projectName}`
+            };
+
+            // 3. OFFLINE CHECK
+            if (!navigator.onLine) {
+                // Because 'payload' now includes the Base64 images, 
+                // addEngineerToOutbox saves EVERYTHING (Text + Photos) in one go.
+                await addEngineerToOutbox(payload);
+                alert("📁 No internet. Project & Photos saved to Sync Center.");
+                setIsSubmitting(false);
+                navigate('/engineer-dashboard');
+                return;
+            }
+
+            // 4. ONLINE SUBMISSION
             const response = await fetch(payload.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -402,6 +529,59 @@ const NewProjects = () => {
                             </div>
                         </div>
 
+                        <SectionHeader title="Project Location" icon="📍" />
+                        <div className="space-y-4">
+                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                <div className="flex items-start gap-3 mb-4">
+                                    <div className="text-blue-600 text-xl">ℹ️</div>
+                                    <p className="text-xs text-blue-800 leading-relaxed">
+                                        <strong>COA Requirement:</strong> Drag the pin to the exact project site, or stand on-site and click "Get Current Location".
+                                    </p>
+                                </div>
+                                
+                                <div className="mb-4 rounded-xl overflow-hidden shadow-sm border border-slate-200">
+                                     <LocationPickerMap 
+                                        latitude={formData.latitude} 
+                                        longitude={formData.longitude} 
+                                        onLocationSelect={handleLocationSelect}
+                                        disabled={isDummy}
+                                     />
+                                </div>
+
+                                <div className="flex gap-3 mb-3">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
+                                        <input 
+                                            name="latitude" 
+                                            value={formData.latitude} 
+                                            readOnly 
+                                            placeholder="0.000000"
+                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none" 
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
+                                        <input 
+                                            name="longitude" 
+                                            value={formData.longitude} 
+                                            readOnly 
+                                            placeholder="0.000000"
+                                            className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none" 
+                                        />
+                                    </div>
+                                </div>
+
+                                <button 
+                                    type="button" 
+                                    onClick={handleGetLocation}
+                                    disabled={isDummy}
+                                    className="w-full py-3 bg-blue-600 text-white font-bold text-xs uppercase rounded-lg shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <span>📡</span> {formData.latitude ? 'Refine with GPS' : 'Get Current Location'}
+                                </button>
+                            </div>
+                        </div>
+
                         <SectionHeader title="Status and Progress" icon="📊" />
                         <div className="space-y-4">
                             <div>
@@ -479,14 +659,56 @@ const NewProjects = () => {
                             />
                         </div>
 
-                        {selectedFiles.length > 0 && (
-                            <div className="flex items-center gap-2 text-blue-600 bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
-                                <span className="text-lg">📸</span>
-                                <span className="text-xs font-bold">{selectedFiles.length} project image(s) attached</span>
-                            </div>
-                        )}
+                        {/* --- REQUIRED DOCUMENTS SECTION --- */}
+                        <div className="mt-4 pt-4 border-t border-slate-100">
+                             <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xl">📄</span>
+                                <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Prerequisite Documents</h3>
+                             </div>
+                             <p className="text-xs text-slate-400 -mt-2 mb-2">Each document must be a PDF file.</p>
 
-                        {/* --- ATTACH PHOTOS SECTION --- */}
+                             {Object.entries(DOC_TYPES).map(([key, label]) => (
+                                <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                                {label}
+                                            </p>
+                                            {documents[key] ? (
+                                                <p className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                                    {documents[key].name}
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] text-red-400 font-bold mt-0.5">* Required</p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            {documents[key] ? (
+                                                <button 
+                                                    onClick={() => removeDocument(key)}
+                                                    className="w-8 h-8 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
+                                                >
+                                                    ✕
+                                                </button>
+                                            ) : (
+                                                <label className="cursor-pointer px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-[10px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
+                                                    Select PDF
+                                                    <input 
+                                                        type="file" 
+                                                        accept=".pdf"
+                                                        className="hidden" 
+                                                        onChange={(e) => handleDocumentSelect(e, key)}
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                             ))}
+                        </div>
+
+                        {/* --- SITE PHOTOS SECTION --- */}
                         <div className="mt-4 pt-4 border-t border-slate-100">
                              <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Attach Site Photos</label>
                              {!isDummy && (
