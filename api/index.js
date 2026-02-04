@@ -67,6 +67,17 @@ const initDB = async () => {
       );
     `);
     console.log("✅ DB Init: project_documents table verified.");
+
+    // Ensure Specialization Columns Exist
+    await pool.query(`
+        ALTER TABLE school_profiles 
+        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0;
+    `);
+    console.log("✅ DB Init: Specialization columns verified.");
+
   } catch (err) {
     console.error("❌ DB Init Error:", err);
   }
@@ -2800,7 +2811,12 @@ app.get('/api/teacher-specialization/:uid', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
-    res.json({ exists: true, data: result.rows[0] });
+
+    // DEBUG LOG
+    const row = result.rows[0];
+    console.log(`[GET Specialization] Gen: ${row.spec_general_major}, ECE: ${row.spec_ece_major}`);
+
+    res.json({ exists: true, data: row });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
