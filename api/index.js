@@ -72,9 +72,7 @@ const initDB = async () => {
     await pool.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0;
     `);
     console.log("✅ DB Init: Specialization columns verified.");
 
@@ -2862,16 +2860,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 // --- 26. POST: Save Teacher Specialization ---
 app.post('/api/save-teacher-specialization', async (req, res) => {
   const d = req.body;
-  console.log("Saving Specialization. Gen:", d.spec_general_major, "ECE:", d.spec_ece_major);
   try {
-    // Ensure columns exist (Hotfix for missing migration)
-    await pool.query(`
-        ALTER TABLE school_profiles 
-        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0;
-    `);
     const query = `
             UPDATE school_profiles SET 
                 spec_english_major=$2, spec_english_teaching=$3,
@@ -2885,15 +2874,14 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_tle_major=$16, spec_tle_teaching=$17,
                 spec_guidance=$18, spec_librarian=$19,
                 spec_ict_coord=$20, spec_drrm_coord=$21,
-                spec_general_major=$22, spec_general_teaching=$23,
-                spec_ece_major=$24, spec_ece_teaching=$25,
-                spec_bio_sci_major=$26, spec_bio_sci_teaching=$27,
-                spec_phys_sci_major=$28, spec_phys_sci_teaching=$29,
-                spec_agri_fishery_major=$30, spec_agri_fishery_teaching=$31,
-                spec_others_major=$32, spec_others_teaching=$33,
+                spec_general_major=$22,
+                spec_ece_major=$23,
+                spec_bio_sci_major=$24, spec_bio_sci_teaching=$25,
+                spec_phys_sci_major=$26, spec_phys_sci_teaching=$27,
+                spec_agri_fishery_major=$28, spec_agri_fishery_teaching=$29,
+                spec_others_major=$30, spec_others_teaching=$31,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE submitted_by = $1
-            RETURNING spec_general_major, spec_ece_major;
+            WHERE submitted_by = $1;
         `;
     const values = [
       d.uid,
@@ -2907,8 +2895,8 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       d.spec_tle_major || 0, d.spec_tle_teaching || 0,
       d.spec_guidance || 0, d.spec_librarian || 0,
       d.spec_ict_coord || 0, d.spec_drrm_coord || 0,
-      d.spec_general_major || 0, d.spec_general_teaching || 0,
-      d.spec_ece_major || 0, d.spec_ece_teaching || 0,
+      d.spec_general_major || 0,
+      d.spec_ece_major || 0,
       d.spec_bio_sci_major || 0, d.spec_bio_sci_teaching || 0,
       d.spec_phys_sci_major || 0, d.spec_phys_sci_teaching || 0,
       d.spec_agri_fishery_major || 0, d.spec_agri_fishery_teaching || 0,
@@ -2917,8 +2905,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
 
-    console.log("✅ DB SAVE RESULT:", result.rows[0]);
-    res.json({ success: true, debug: result.rows[0] });
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

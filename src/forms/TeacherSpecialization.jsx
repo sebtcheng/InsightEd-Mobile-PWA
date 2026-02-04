@@ -22,8 +22,8 @@ const getInitialFields = () => ({
     spec_esp_major: 0, spec_esp_teaching: 0,
     spec_tle_major: 0, spec_tle_teaching: 0,
     // General Education (For Purely Elementary)
-    spec_general_major: 0, spec_general_teaching: 0,
-    spec_ece_major: 0, spec_ece_teaching: 0,
+    spec_general_major: 0,
+    spec_ece_major: 0,
     // New Secondary Fields
     spec_bio_sci_major: 0, spec_bio_sci_teaching: 0,
     spec_phys_sci_major: 0, spec_phys_sci_teaching: 0,
@@ -320,8 +320,8 @@ const TeacherSpecialization = () => {
         const { hasElementary, hasSecondary } = getSections();
 
         if (hasElementary) {
-            if (!isValidEntry(formData.spec_general_major)) valid = false; // Check only Total (Major)
-            if (!isValidEntry(formData.spec_ece_major)) valid = false;   // Check only Total (Major)
+            if (!isValidEntry(formData.spec_general_major)) valid = false; // Check only Total
+            if (!isValidEntry(formData.spec_ece_major)) valid = false;   // Check only Total
         }
 
         if (hasSecondary) {
