@@ -215,7 +215,8 @@ const SchoolForms = () => {
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl;
                 return (hasShift || hasAdm) ? 'completed' : 'pending';
             case 'stats':
-                return (schoolProfile.stat_sned_es > 0 || schoolProfile.stat_muslim_k > 0 || schoolProfile.stat_ip > 0) ? 'completed' : 'pending';
+                const hasStats = Object.keys(schoolProfile).some(key => key.startsWith('stat_') && Number(schoolProfile[key]) > 0);
+                return hasStats ? 'completed' : 'pending';
             default:
                 return 'pending';
         }

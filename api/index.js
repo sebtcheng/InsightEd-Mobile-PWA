@@ -2876,7 +2876,8 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_agri_fishery_major=$30, spec_agri_fishery_teaching=$31,
                 spec_others_major=$32, spec_others_teaching=$33,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE submitted_by = $1;
+            WHERE submitted_by = $1
+            RETURNING spec_general_major, spec_ece_major;
         `;
     const values = [
       d.uid,
@@ -2899,7 +2900,9 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     ];
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
-    res.json({ success: true });
+
+    console.log("✅ DB SAVE RESULT:", result.rows[0]);
+    res.json({ success: true, debug: result.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
