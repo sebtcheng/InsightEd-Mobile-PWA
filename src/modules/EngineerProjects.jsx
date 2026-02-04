@@ -10,6 +10,8 @@ import { doc, getDoc, query, collection, where, getDocs } from "firebase/firesto
 import { addEngineerToOutbox, cacheProjects, getCachedProjects } from "../db";
 import { compressImage } from "../utils/imageCompression";
 
+import LocationPickerMap from '../components/LocationPickerMap';
+
 // --- CONSTANTS ---
 const ProjectStatus = {
   UnderProcurement: "Under Procurement",
@@ -247,7 +249,14 @@ const EditProjectModal = ({
   const [formData, setFormData] = useState(null);
 
   useEffect(() => {
-    if (project) setFormData({ ...project });
+    if (project) {
+        setFormData({ 
+            ...project,
+            // Ensure fields exist to control inputs
+            latitude: project.latitude || '',
+            longitude: project.longitude || ''
+        });
+    }
   }, [project]);
 
   if (!isOpen || !formData) return null;
@@ -304,6 +313,50 @@ const EditProjectModal = ({
       }
       return newData;
     });
+  };
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+        alert("❌ Geolocation is not supported by your browser.");
+        return;
+    }
+
+    const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+    };
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude.toFixed(6);
+            const long = position.coords.longitude.toFixed(6);
+            
+            setFormData(prev => ({
+                ...prev,
+                latitude: lat,
+                longitude: long
+            }));
+            // alert(`✅ Coordinates Captured!\nLat: ${lat}\nLong: ${long}`);
+        },
+        (error) => {
+            console.warn("Geolocation warning:", error);
+            let msg = "Unable to retrieve location.";
+            if (error.code === 1) msg = "❌ Location permission denied.";
+            else if (error.code === 2) msg = "❌ Position unavailable.";
+            else if (error.code === 3) msg = "❌ Timeout.";
+            alert(msg);
+        },
+        options
+    );
+  };
+
+  const handleLocationSelect = (lat, lng) => {
+      setFormData(prev => ({
+          ...prev,
+          latitude: lat.toFixed(6),
+          longitude: lng.toFixed(6)
+      }));
   };
 
   const isDisabledPercentageInput =
@@ -372,6 +425,54 @@ const EditProjectModal = ({
                   }`}
               />
             </div>
+          </div>
+
+          
+          {/* --- LOCATION SECTION --- */}
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
+             <div className="flex justify-between items-center">
+                <label className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1">
+                   <span>📍</span> Project Coordinates
+                </label>
+                {!formData.latitude && <span className="text-[9px] text-red-500 font-bold animate-pulse">REQUIRED</span>}
+             </div>
+
+             <div className="rounded-xl overflow-hidden shadow-sm border border-blue-200">
+                <LocationPickerMap 
+                    latitude={formData.latitude} 
+                    longitude={formData.longitude} 
+                    onLocationSelect={handleLocationSelect}
+                />
+             </div>
+             
+             <div className="flex gap-3">
+                <div className="flex-1">
+                   <input 
+                      name="latitude" 
+                      value={formData.latitude} 
+                      readOnly 
+                      placeholder="Lat"
+                      className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none" 
+                   />
+                </div>
+                <div className="flex-1">
+                   <input 
+                      name="longitude" 
+                      value={formData.longitude} 
+                      readOnly 
+                      placeholder="Long"
+                      className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none" 
+                   />
+                </div>
+             </div>
+
+             <button 
+                 type="button" 
+                 onClick={handleGetLocation}
+                 className="w-full py-2 bg-blue-600 text-white font-bold text-[10px] uppercase rounded-lg shadow-md hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+             >
+                 <span>📡</span> {formData.latitude ? 'Refine with GPS' : 'Get Current Location'}
+             </button>
           </div>
 
           <div className="space-y-2">
@@ -473,6 +574,24 @@ const EditProjectModal = ({
           </button>
           <button
             onClick={() => {
+              // VALIDATION
+              const requiredFields = [
+                  { key: 'statusAsOfDate', label: 'Status Date' },
+                  { key: 'accomplishmentPercentage', label: 'Accomplishment %' },
+                  { key: 'otherRemarks', label: 'Remarks' }
+              ];
+              // Add more if needed based on what's editable. 
+              // Looking at the form, status, pct, date, remarks, photos are main.
+              // We already validate photos and location in handleSaveProject, but doing it here prevents closing the modal prematurely if we were to move logic.
+              // However, handleSaveProject in the parent handles the actual saving and has checking logic too.
+              // Let's rely on the parent's check for Photos/Location, but check form fields here.
+              
+              for (const field of requiredFields) {
+                   if (formData[field.key] === "" || formData[field.key] === null || formData[field.key] === undefined) {
+                       alert(`⚠️ MISSING FIELD\n\nPlease enter the ${field.label}.`);
+                       return;
+                   }
+              }
               onSave(formData);
             }}
             disabled={isUploading}
@@ -581,30 +700,32 @@ const EngineerProjects = () => {
 
             // 2. Network Request (Background Sync)
             try {
-              const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
-              if (!response.ok) throw new Error("Failed to fetch projects");
-              const data = await response.json();
+                const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
+                if (!response.ok) throw new Error("Failed to fetch projects");
+                const data = await response.json();
+                
+                currentProjects = data.map(item => ({
+                    id: item.id,
+                    projectName: item.projectName,
+                    schoolName: item.schoolName,
+                    schoolId: item.schoolId,
+                    status: item.status,
+                    accomplishmentPercentage: item.accomplishmentPercentage,
+                    projectAllocation: item.projectAllocation,
+                    targetCompletionDate: item.targetCompletionDate,
+                    statusAsOfDate: item.statusAsOfDate,
+                    otherRemarks: item.otherRemarks,
+                    contractorName: item.contractorName,
+                    ipc: item.ipc,
+                    latitude: item.latitude, // Added Latitude
+                    longitude: item.longitude // Added Longitude
+                }));
 
-              currentProjects = data.map(item => ({
-                id: item.id,
-                projectName: item.projectName,
-                schoolName: item.schoolName,
-                schoolId: item.schoolId,
-                status: item.status,
-                accomplishmentPercentage: item.accomplishmentPercentage,
-                projectAllocation: item.projectAllocation,
-                targetCompletionDate: item.targetCompletionDate,
-                statusAsOfDate: item.statusAsOfDate,
-                otherRemarks: item.otherRemarks,
-                contractorName: item.contractorName,
-                ipc: item.ipc // Added IPC mapping
-              }));
-
-              // Update Cache on success
-              await cacheProjects(currentProjects);
-
-              // Update state with fresh data
-              setProjects(currentProjects);
+                // Update Cache on success
+                await cacheProjects(currentProjects);
+                
+                // Update state with fresh data
+                setProjects(currentProjects);
 
             } catch (networkError) {
               console.warn("Network request failed:", networkError);
@@ -642,14 +763,20 @@ const EngineerProjects = () => {
   const handleSaveProject = async (updatedProject) => {
     const user = auth.currentUser;
     if (!user) return;
-
+    
     // CHECK: Mandatory Photo Upload
     if (selectedFiles.length === 0) {
-      alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project update.");
-      return;
+        alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project update.");
+        return;
     }
 
-    setIsUploading(true);
+    // CHECK: Mandatory Location
+    if (!updatedProject.latitude || !updatedProject.longitude) {
+        alert("⚠️ LOCATION REQUIRED\n\nPlease capture the project coordinates (Latitude/Longitude) before saving.");
+        return;
+    }
+
+    setIsUploading(true); 
     try {
       const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
       if (!navigator.onLine) {
