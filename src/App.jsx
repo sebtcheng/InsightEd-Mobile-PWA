@@ -1,5 +1,8 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+
+// ... (lines 3-118 remain same, but I can't express that in one chunk easily if imports are at top and usage at bottom. I'll use 2 chunks)
+
 import { AnimatePresence } from 'framer-motion'; // <--- IMPORT THIS
 
 // Auth

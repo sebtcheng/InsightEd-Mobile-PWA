@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/insighted/', // Ensure the slashes are there
   plugins: [
     react(),
     VitePWA({
@@ -10,9 +11,11 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       registerType: 'autoUpdate',
+      manifestFilename: 'manifest.json', // Set the output filename
       devOptions: {
-        enabled: true, // <--- Key fix for "Prompt Not Available"
+        enabled: true,
         type: 'module',
+        navigateFallback: 'index.html',
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'InsightEd1.png'],
       manifest: {
@@ -22,16 +25,17 @@ export default defineConfig({
         theme_color: '#004A99',
         background_color: '#ffffff',
         display: 'standalone',
-        start_url: '/',
+        start_url: './',
+        scope: './',
         icons: [
           {
-            src: '/InsightED app.png',
+            src: 'InsightED app.png', // Relative path
             sizes: '192x192', // Ensure your file is high res enough
             type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: '/InsightED app.png',
+            src: 'InsightED app.png', // Relative path
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'

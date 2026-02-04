@@ -28,20 +28,20 @@ const formatAllocation = (value) => {
 };
 
 const formatDateShort = (dateString) => {
-    if (!dateString) return "TBD";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "2-digit",
-    });
+  if (!dateString) return "TBD";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "2-digit",
+  });
 };
 
 // --- SUB-COMPONENTS ---
 
 const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQuery }) => {
   const navigate = useNavigate();
-  
+
   const getStatusColor = (status) => {
     switch (status) {
       case ProjectStatus.Completed:
@@ -122,16 +122,16 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       {/* IPC Badge */}
                       {p.ipc && (
                         <div className="group/ipc flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 px-2 py-1 rounded-md border border-blue-100 dark:border-blue-800 transition-colors cursor-help" title="InsightEd Project Code">
-                           <div className="w-1.5 h-1.5 rounded-full bg-[#004A99] dark:bg-blue-400 group-hover/ipc:animate-pulse"></div>
-                           <span className="text-[8px] font-black uppercase tracking-wider text-[#004A99]/70 dark:text-blue-300/70">IPC</span>
-                           <span className="text-[9px] font-bold font-mono text-[#004A99] dark:text-blue-300">{p.ipc}</span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#004A99] dark:bg-blue-400 group-hover/ipc:animate-pulse"></div>
+                          <span className="text-[8px] font-black uppercase tracking-wider text-[#004A99]/70 dark:text-blue-300/70">IPC</span>
+                          <span className="text-[9px] font-bold font-mono text-[#004A99] dark:text-blue-300">{p.ipc}</span>
                         </div>
                       )}
-                      
+
                       {/* School ID Badge */}
                       <div className="flex items-center gap-1.5 bg-slate-100/80 dark:bg-slate-700/50 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-600">
-                         <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">ID</span>
-                         <span className="text-[9px] font-bold font-mono text-slate-600 dark:text-slate-300">{p.schoolId}</span>
+                        <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">ID</span>
+                        <span className="text-[9px] font-bold font-mono text-slate-600 dark:text-slate-300">{p.schoolId}</span>
                       </div>
                     </div>
                   </td>
@@ -152,11 +152,11 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-center text-[9px] font-bold text-slate-400">
                           <div className="flex items-center gap-1">
-                             <span>PROGRESS</span>
-                             {/* LATE BADGE */ }
-                             {p.status === ProjectStatus.Completed && p.actualCompletionDate && p.targetCompletionDate && new Date(p.actualCompletionDate) > new Date(p.targetCompletionDate) && (
-                                <span className="text-[7px] bg-red-100 text-red-600 px-1 py-0.5 rounded border border-red-200">LATE</span>
-                             )}
+                            <span>PROGRESS</span>
+                            {/* LATE BADGE */}
+                            {p.status === ProjectStatus.Completed && p.actualCompletionDate && p.targetCompletionDate && new Date(p.actualCompletionDate) > new Date(p.targetCompletionDate) && (
+                              <span className="text-[7px] bg-red-100 text-red-600 px-1 py-0.5 rounded border border-red-200">LATE</span>
+                            )}
                           </div>
                           <span className={progress === 100 ? "text-emerald-500 dark:text-emerald-400" : "text-[#004A99] dark:text-blue-400"}>
                             {progress}%
@@ -164,9 +164,8 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                         </div>
                         <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden border border-slate-50 dark:border-slate-600">
                           <div
-                            className={`h-full rounded-full transition-all duration-1000 ease-out ${
-                              progress === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_8px_rgba(59,130,246,0.3)]"
-                            }`}
+                            className={`h-full rounded-full transition-all duration-1000 ease-out ${progress === 100 ? "bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_8px_rgba(59,130,246,0.3)]"
+                              }`}
                             style={{ width: `${progress}%` }}
                           ></div>
                         </div>
@@ -207,7 +206,7 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       >
                         VIEW <FiChevronRight size={12} />
                       </button>
-                      <button 
+                      <button
                         onClick={() => navigate(`/project-gallery/${p.id}`)}
                         className="w-full py-1.5 bg-amber-50/50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded-lg border border-amber-100 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/50 hover:shadow-md transition-all active:scale-95 flex items-center justify-center gap-1"
                       >
@@ -216,13 +215,12 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       <button
                         onClick={() => onEdit(p)}
                         disabled={isLocked}
-                        className={`w-full py-2 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${
-                          isLocked
-                            ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
-                            : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
-                        }`}
+                        className={`w-full py-2 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${isLocked
+                          ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
+                          : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
+                          }`}
                       >
-                       {isLocked ? "LOCKED" : "UPDATE"}
+                        {isLocked ? "LOCKED" : "UPDATE"}
                       </button>
                     </div>
                   </td>
@@ -237,16 +235,16 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
 };
 
 
-const EditProjectModal = ({ 
-  project, 
-  isOpen, 
-  onClose, 
-  onSave, 
-  onCameraClick, 
-  onGalleryClick, 
-  previews, 
-  onRemoveFile, 
-  isUploading 
+const EditProjectModal = ({
+  project,
+  isOpen,
+  onClose,
+  onSave,
+  onCameraClick,
+  onGalleryClick,
+  previews,
+  onRemoveFile,
+  isUploading
 }) => {
   const [formData, setFormData] = useState(null);
 
@@ -300,18 +298,18 @@ const EditProjectModal = ({
     const percent = Math.min(100, Math.max(0, Number(newVal)));
     setFormData((prev) => {
       let newData = { ...prev, accomplishmentPercentage: percent };
-      
+
       if (percent === 100) {
-          if (prev.status !== ProjectStatus.Completed)
-            newData.status = ProjectStatus.ForFinalInspection;
+        if (prev.status !== ProjectStatus.Completed)
+          newData.status = ProjectStatus.ForFinalInspection;
       } else if (percent >= 1 && percent < 100) {
-          if (
-            prev.status === ProjectStatus.Completed ||
-            prev.status === ProjectStatus.ForFinalInspection
-          )
-            newData.status = ProjectStatus.Ongoing;
+        if (
+          prev.status === ProjectStatus.Completed ||
+          prev.status === ProjectStatus.ForFinalInspection
+        )
+          newData.status = ProjectStatus.Ongoing;
       } else if (percent === 0) {
-          newData.status = ProjectStatus.NotYetStarted;
+        newData.status = ProjectStatus.NotYetStarted;
       }
       return newData;
     });
@@ -401,17 +399,17 @@ const EditProjectModal = ({
                   ))}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                   <FiSettings className="text-slate-400" />
+                  <FiSettings className="text-slate-400" />
                 </div>
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
-                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
-                 <div className="flex gap-1.5">
-                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage||0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
-                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage||0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
-                 </div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
+                  <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
+                </div>
               </div>
               <input
                 type="number"
@@ -421,11 +419,10 @@ const EditProjectModal = ({
                 min="0"
                 max="100"
                 disabled={isDisabledPercentageInput}
-                className={`w-full p-3 border rounded-2xl text-sm font-black text-center ${
-                  isDisabledPercentageInput
-                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                    : "bg-blue-50 text-[#004A99] border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                }`}
+                className={`w-full p-3 border rounded-2xl text-sm font-black text-center ${isDisabledPercentageInput
+                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                  : "bg-blue-50 text-[#004A99] border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  }`}
               />
             </div>
           </div>
@@ -492,27 +489,26 @@ const EditProjectModal = ({
           {/* CHECK: Conditional Actual Completion Date for Completed Status */}
           {formData.status === ProjectStatus.Completed && (
             <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
-               <div className="flex justify-between items-center ml-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actual Completion Date</label>
-                  {formData.actualCompletionDate && formData.targetCompletionDate && new Date(formData.actualCompletionDate) > new Date(formData.targetCompletionDate) && (
-                      <span className="text-[9px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 uppercase tracking-widest animate-pulse">
-                         ⚠️ Late Completion
-                      </span>
-                  )}
-               </div>
-               <input
+              <div className="flex justify-between items-center ml-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Actual Completion Date</label>
+                {formData.actualCompletionDate && formData.targetCompletionDate && new Date(formData.actualCompletionDate) > new Date(formData.targetCompletionDate) && (
+                  <span className="text-[9px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100 uppercase tracking-widest animate-pulse">
+                    ⚠️ Late Completion
+                  </span>
+                )}
+              </div>
+              <input
                 type="date"
                 name="actualCompletionDate"
                 value={formData.actualCompletionDate || ""}
                 onChange={handleChange}
-                className={`w-full p-3 border rounded-2xl text-sm font-bold shadow-sm transition-all outline-none ${
-                    formData.actualCompletionDate && formData.targetCompletionDate && new Date(formData.actualCompletionDate) > new Date(formData.targetCompletionDate)
-                    ? "bg-red-50 border-red-200 text-red-700 focus:ring-2 focus:ring-red-200"
-                    : "bg-emerald-50 border-emerald-200 text-emerald-700 focus:ring-2 focus:ring-emerald-200"
-                }`}
+                className={`w-full p-3 border rounded-2xl text-sm font-bold shadow-sm transition-all outline-none ${formData.actualCompletionDate && formData.targetCompletionDate && new Date(formData.actualCompletionDate) > new Date(formData.targetCompletionDate)
+                  ? "bg-red-50 border-red-200 text-red-700 focus:ring-2 focus:ring-red-200"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700 focus:ring-2 focus:ring-emerald-200"
+                  }`}
               />
               <p className="text-[9px] text-slate-400 ml-1 italic">
-                 Target was: {formatDateShort(formData.targetCompletionDate)}
+                Target was: {formatDateShort(formData.targetCompletionDate)}
               </p>
             </div>
           )}
@@ -530,20 +526,20 @@ const EditProjectModal = ({
           </div>
 
           <div className="space-y-3">
-             <div className="flex justify-between items-center ml-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Photos</label>
-                <span className="text-[10px] font-bold text-blue-500">{previews?.length || 0} Added</span>
-             </div>
-            
+            <div className="flex justify-between items-center ml-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Photos</label>
+              <span className="text-[10px] font-bold text-blue-500">{previews?.length || 0} Added</span>
+            </div>
+
             <div className="flex gap-4">
-              <button 
+              <button
                 onClick={onCameraClick}
                 className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 hover:border-blue-400 hover:text-blue-500 transition-all active:scale-95"
               >
                 <FiCamera size={20} />
                 <span className="text-[10px] font-black uppercase tracking-tighter">Snap Photo</span>
               </button>
-              <button 
+              <button
                 onClick={onGalleryClick}
                 className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 hover:border-blue-400 hover:text-blue-500 transition-all active:scale-95"
               >
@@ -557,7 +553,7 @@ const EditProjectModal = ({
                 {previews.map((url, index) => (
                   <div key={index} className="relative group aspect-square rounded-xl overflow-hidden shadow-sm ring-2 ring-white">
                     <img src={url} alt="preview" className="w-full h-full object-cover" />
-                    <button 
+                    <button
                       onClick={() => onRemoveFile(index)}
                       className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     >✕</button>
@@ -663,43 +659,43 @@ const EngineerProjects = () => {
           let currentProjects = [];
 
           if (userRole === 'Super Admin') {
-             // SUPER ADMIN: Firestore Query (ALL)
-             const q = query(collection(db, 'projects'));
-             const querySnapshot = await getDocs(q);
-             const mappedData = querySnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-             }));
-             
-             currentProjects = mappedData.map(item => ({
-                id: item.id,
-                projectName: item.projectName || "Untitled",
-                schoolName: item.schoolName || "Unknown School",
-                schoolId: item.schoolId,
-                status: item.status,
-                accomplishmentPercentage: item.accomplishmentPercentage,
-                projectAllocation: item.projectAllocation,
-                targetCompletionDate: item.targetCompletionDate,
-                statusAsOfDate: item.statusAsOfDate,
-                otherRemarks: item.otherRemarks,
-                contractorName: item.contractorName,
-                uid: item.uid
-             }));
+            // SUPER ADMIN: Firestore Query (ALL)
+            const q = query(collection(db, 'projects'));
+            const querySnapshot = await getDocs(q);
+            const mappedData = querySnapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+
+            currentProjects = mappedData.map(item => ({
+              id: item.id,
+              projectName: item.projectName || "Untitled",
+              schoolName: item.schoolName || "Unknown School",
+              schoolId: item.schoolId,
+              status: item.status,
+              accomplishmentPercentage: item.accomplishmentPercentage,
+              projectAllocation: item.projectAllocation,
+              targetCompletionDate: item.targetCompletionDate,
+              statusAsOfDate: item.statusAsOfDate,
+              otherRemarks: item.otherRemarks,
+              contractorName: item.contractorName,
+              uid: item.uid
+            }));
 
           } else {
 
             // ENGINEER: Stale-While-Revalidate Strategy
-            
+
             // 1. Immediate Cache Load (Fast Render)
             try {
-                const cachedData = await getCachedProjects();
-                if (cachedData && cachedData.length > 0) {
-                     setProjects(cachedData); 
-                     currentProjects = cachedData; // Prevent overwrite by empty array later
-                     setIsLoading(false); // Stop spinner if we have data
-                }
+              const cachedData = await getCachedProjects();
+              if (cachedData && cachedData.length > 0) {
+                setProjects(cachedData);
+                currentProjects = cachedData; // Prevent overwrite by empty array later
+                setIsLoading(false); // Stop spinner if we have data
+              }
             } catch (err) {
-                 console.warn("Cache read failed", err);
+              console.warn("Cache read failed", err);
             }
 
             // 2. Network Request (Background Sync)
@@ -732,11 +728,11 @@ const EngineerProjects = () => {
                 setProjects(currentProjects);
 
             } catch (networkError) {
-                console.warn("Network request failed:", networkError);
-                // If we didn't have cached data before, we rely on the fallback above or show empty state if truly offline & no cache
+              console.warn("Network request failed:", networkError);
+              // If we didn't have cached data before, we rely on the fallback above or show empty state if truly offline & no cache
             }
           }
-          
+
           setProjects(currentProjects);
 
         } catch (err) {
@@ -750,7 +746,7 @@ const EngineerProjects = () => {
   }, []);
 
   // Filtered list
-  const filteredProjects = projects.filter(p => 
+  const filteredProjects = projects.filter(p =>
     p.schoolName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.projectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     String(p.schoolId).includes(searchQuery)
@@ -782,63 +778,63 @@ const EngineerProjects = () => {
 
     setIsUploading(true); 
     try {
-        const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
-        if (!navigator.onLine) {
-            await addEngineerToOutbox({
-                url: `${API_BASE}/api/update-project/${updatedProject.id}`,
-                method: 'PUT',
-                body: body,
-                formName: `Update: ${updatedProject.schoolName}`
-            });
-            if (selectedFiles.length > 0) {
-                for (const file of selectedFiles) {
-                    try {
-                        const base64Image = await compressImage(file);
-                        await addEngineerToOutbox({
-                            url: `${API_BASE}/api/upload-image`,
-                            method: 'POST',
-                            body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid },
-                            formName: `Photo: ${updatedProject.schoolName}`
-                        });
-                    } catch (err) {
-                        console.error("Compression failed for file:", file.name, err);
-                    }
-                }
-            }
-            alert("⚠️ Offline: Changes cached to Sync Center.");
-            setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-            setEditModalOpen(false);
-            return;
-        }
-        const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+      const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
+      if (!navigator.onLine) {
+        await addEngineerToOutbox({
+          url: `${API_BASE}/api/update-project/${updatedProject.id}`,
+          method: 'PUT',
+          body: body,
+          formName: `Update: ${updatedProject.schoolName}`
         });
-        if (!response.ok) throw new Error("Update failed");
         if (selectedFiles.length > 0) {
-            for (const file of selectedFiles) {
-                try {
-                    const base64Image = await compressImage(file);
-                    await fetch(`${API_BASE}/api/upload-image`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid }),
-                    });
-                } catch (err) {
-                    console.error("Compression failed for file:", file.name, err);
-                }
+          for (const file of selectedFiles) {
+            try {
+              const base64Image = await compressImage(file);
+              await addEngineerToOutbox({
+                url: `${API_BASE}/api/upload-image`,
+                method: 'POST',
+                body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid },
+                formName: `Photo: ${updatedProject.schoolName}`
+              });
+            } catch (err) {
+              console.error("Compression failed for file:", file.name, err);
             }
+          }
         }
+        alert("⚠️ Offline: Changes cached to Sync Center.");
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-        alert("Success: Changes synced to database!");
-        setSelectedFiles([]); 
         setEditModalOpen(false);
+        return;
+      }
+      const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) throw new Error("Update failed");
+      if (selectedFiles.length > 0) {
+        for (const file of selectedFiles) {
+          try {
+            const base64Image = await compressImage(file);
+            await fetch(`${API_BASE}/api/upload-image`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid }),
+            });
+          } catch (err) {
+            console.error("Compression failed for file:", file.name, err);
+          }
+        }
+      }
+      setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+      alert("Success: Changes synced to database!");
+      setSelectedFiles([]);
+      setEditModalOpen(false);
     } catch (err) {
-        console.error("Save Error:", err);
-        alert("Sync error. Try again later.");
+      console.error("Save Error:", err);
+      alert("Sync error. Try again later.");
     } finally {
-        setIsUploading(false);
+      setIsUploading(false);
     }
   };
 
@@ -848,8 +844,8 @@ const EngineerProjects = () => {
 
     // CHECK: Limit to 2 photos max
     if (selectedFiles.length + files.length > 2) {
-        alert("You can only upload a maximum of 2 photos.");
-        return;
+      alert("You can only upload a maximum of 2 photos.");
+      return;
     }
 
     const validFiles = files.filter(file => file.size <= 5 * 1024 * 1024);
@@ -872,7 +868,7 @@ const EngineerProjects = () => {
           {/* Decorative Elements */}
           <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/5 rounded-full blur-3xl"></div>
           <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 bg-blue-400/10 rounded-full blur-2xl"></div>
-          
+
           <div className="relative z-10">
             <div className="flex justify-between items-center mb-6">
               <div>
@@ -890,52 +886,52 @@ const EngineerProjects = () => {
                 onClick={() => navigate("/new-project")}
                 className="group bg-white text-[#004A99] px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
               >
-                <FiPlus size={16} className="group-hover:rotate-90 transition-transform" /> 
+                <FiPlus size={16} className="group-hover:rotate-90 transition-transform" />
                 New Project
               </button>
             </div>
 
             {/* --- GLASSMORPHISM SEARCH BAR --- */}
             <div className="relative group transition-all duration-300">
-               <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                  <FiSearch className="text-white/40 group-focus-within:text-white transition-colors" />
-               </div>
-               <input 
-                  type="text"
-                  placeholder="Query schools, projects or ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder:text-white/30 text-xs px-12 py-4 rounded-2xl outline-none focus:ring-4 focus:ring-white/10 focus:bg-white/15 transition-all shadow-inner"
-               />
-               <div className="absolute inset-y-0 right-4 flex items-center">
-                  <div className="h-6 w-[1px] bg-white/10 mx-2"></div>
-                  <FiFilter className="text-white/40 hover:text-white cursor-pointer transition-colors" />
-               </div>
+              <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                <FiSearch className="text-white/40 group-focus-within:text-white transition-colors" />
+              </div>
+              <input
+                type="text"
+                placeholder="Query schools, projects or ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/10 backdrop-blur-xl border border-white/20 text-white placeholder:text-white/30 text-xs px-12 py-4 rounded-2xl outline-none focus:ring-4 focus:ring-white/10 focus:bg-white/15 transition-all shadow-inner"
+              />
+              <div className="absolute inset-y-0 right-4 flex items-center">
+                <div className="h-6 w-[1px] bg-white/10 mx-2"></div>
+                <FiFilter className="text-white/40 hover:text-white cursor-pointer transition-colors" />
+              </div>
             </div>
           </div>
         </div>
 
         {/* --- PROJECT LISTING --- */}
         <div className="px-5 -mt-12 relative z-20">
-            <ProjectTable
-              projects={filteredProjects}
-              onEdit={handleEditProject}
-              onView={handleViewProject}
-              isLoading={isLoading}
-              searchQuery={searchQuery}
-            />
-            
-            <div className="flex items-center justify-center gap-4 mt-4">
-               <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-[#004A99] rounded-full"></div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Swipe Details</span>
-               </div>
-               <div className="w-[1px] h-3 bg-slate-200"></div>
-               <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Live Updates</span>
-               </div>
+          <ProjectTable
+            projects={filteredProjects}
+            onEdit={handleEditProject}
+            onView={handleViewProject}
+            isLoading={isLoading}
+            searchQuery={searchQuery}
+          />
+
+          <div className="flex items-center justify-center gap-4 mt-4">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-[#004A99] rounded-full"></div>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Swipe Details</span>
             </div>
+            <div className="w-[1px] h-3 bg-slate-200"></div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Live Updates</span>
+            </div>
+          </div>
         </div>
 
         {/* --- HIDDEN INPUTS & MODALS --- */}
@@ -953,7 +949,7 @@ const EngineerProjects = () => {
           onRemoveFile={removeFile}
           isUploading={isUploading}
         />
-        
+
         <BottomNav userRole="Engineer" />
       </div>
     </PageTransition>

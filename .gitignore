@@ -21,7 +21,8 @@ dist-ssr
 *.sln
 *.sw?
 .Rproj.user
-.env               <-- ADD THIS (Protects your database password!)
-server/.env        <-- ADD THIS (Protects your backend secrets!)
+.env
+server/.env
 public/Oct2025-GMIS-Filled_Minified.csv
-api/service-account.json
+**/service-account.json
+**/service-account.json

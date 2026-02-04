@@ -144,6 +144,8 @@ const SchoolResources = () => {
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
+    const isDummy = location.state?.isDummy || false;
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -171,7 +173,7 @@ const SchoolResources = () => {
 
     const [schoolId, setSchoolId] = useState(null);
     const [formData, setFormData] = useState({});
-    const isDummy = location.state?.isDummy || false;
+    // const isDummy = location.state?.isDummy || false; // Moved up
     const [originalData, setOriginalData] = useState(null);
 
     const goBack = () => {
@@ -225,6 +227,16 @@ const SchoolResources = () => {
             if (user) {
                 // DEFAULT STATE
                 const defaultFormData = initialFields;
+
+                // Check Role for Read-Only and Fetch Logic
+                let isCORole = false;
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                        isCORole = (role === 'Central Office');
+                    }
+                } catch (e) { }
 
                 // Sync Cache Loading
                 const storedSchoolId = localStorage.getItem('schoolId');
@@ -295,7 +307,7 @@ const SchoolResources = () => {
                     if (!restored) {
                         let profileFetchUrl = `/api/school-by-user/${user.uid}`;
                         let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
-                        if (viewOnly && schoolIdParam) {
+                        if ((viewOnly || isCORole) && schoolIdParam) {
                             profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                             resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
@@ -723,13 +735,13 @@ const SchoolResources = () => {
 
                         <div className="flex bg-slate-100 p-1 rounded-xl">
                             <button
-                                onClick={() => !viewOnly && !isLocked && setCrType('Segmented')}
+                                onClick={() => !viewOnly && !isLocked && !isDummy && !isReadOnly && setCrType('Segmented')}
                                 className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${crType === 'Segmented' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                             >
                                 Male/Female
                             </button>
                             <button
-                                onClick={() => !viewOnly && !isLocked && setCrType('Shared')}
+                                onClick={() => !viewOnly && !isLocked && !isDummy && !isReadOnly && setCrType('Shared')}
                                 className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${crType === 'Shared' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
                             >
                                 Common/Shared
@@ -754,7 +766,7 @@ const SchoolResources = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">

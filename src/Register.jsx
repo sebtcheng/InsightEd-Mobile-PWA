@@ -23,8 +23,8 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // --- CONSTANTS ---
-const CSV_PATH = '/schools.csv';
-const OFFICES_CSV_PATH = '/Personnel Positions by Functional Division at RO and SDO Levels - Sheet1.csv';
+const CSV_PATH = `${import.meta.env.BASE_URL}schools.csv`;
+const OFFICES_CSV_PATH = `${import.meta.env.BASE_URL}Personnel Positions by Functional Division at RO and SDO Levels - Sheet1.csv`;
 
 import locationData from './locations.json';
 
@@ -50,7 +50,9 @@ const Register = () => {
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
-        email: '',
+        email: '', // Generic roles auth email
+        schoolEmail: '', // School Head: actual school email (used as Firebase auth email)
+        contactNumber: '', // School Head: 11-digit contact number
         password: '',
         confirmPassword: '',
         role: 'Regional Office', // Default
@@ -65,7 +67,9 @@ const Register = () => {
         barangay: ''
     });
 
-    // --- OTP STATE ---
+    // --- OTP STATE --- (REMOVED)
+
+
 
 
     // --- LOCATION DROPDOWN STATE (Generic Roles) ---
@@ -95,17 +99,20 @@ const Register = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [registeredIern, setRegisteredIern] = useState('');
 
-    // --- OTP TIMER EFFECT ---
+    // --- OTP TIMER EFFECT (REMOVED) ---
+
 
 
     // --- 1. LOAD CSV DATA ---
     useEffect(() => {
+        console.log("Attempting to load CSV from:", CSV_PATH);
         // Load Schools CSV
         Papa.parse(CSV_PATH, {
             download: true,
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
+                console.log("CSV Load Success, rows:", results.data.length);
                 if (results.data && results.data.length > 0) {
                     // Standardize Curricular Offering
                     const standardizedData = results.data.map(item => {
@@ -133,7 +140,8 @@ const Register = () => {
                 }
             },
             error: (err) => {
-                console.error("CSV Load Error:", err);
+                console.error("CSV Load Error Detailed:", err);
+                alert(`Failed to load School Database: ${err.message || 'Unknown Error'}`);
             }
         });
 
@@ -224,7 +232,9 @@ const Register = () => {
             ...formData,
             role: e.target.value,
             // Reset location fields on role change
-            region: '', division: '', province: '', city: '', barangay: '', office: '', position: ''
+            region: '', division: '', province: '', city: '', barangay: '', office: '', position: '',
+            // Reset role-specific fields
+            schoolEmail: '', contactNumber: ''
         });
         // Reset school selection if moving away
         setSelectedSchool(null);
@@ -240,17 +250,6 @@ const Register = () => {
         const school = availableSchools.find(s => s.school_id === schoolId);
         // Create a copy so we can modify latitude/longitude without affecting the source data
         setSelectedSchool({ ...school });
-
-        // Auto-Generate Email for School Head
-        if (school) {
-            setFormData(prev => ({
-                ...prev,
-                email: `${school.school_id}@deped.gov.ph`
-            }));
-            // NOTE: For School Head, we might NOT be able to verify this email if it doesn't exist yet.
-            // But user requested OTP for ALL roles. 
-            // If the email is real, they can verify. If not, they are stuck.
-        }
     };
 
     // --- OTP HANDLERS ---
@@ -328,21 +327,63 @@ const Register = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
 
+        // FAKE EMAIL STRATEGY:
+        // If School Head, Auth Email is [SchoolID]@insighted.app
+        // The "Real" email is stored in formData.schoolEmail and sent to backend
+        const authEmail = (formData.role === 'School Head')
+            ? `${selectedSchool.school_id}@insighted.app`
+            : (formData.email || '').trim();
+
+        const contactEmail = (formData.role === 'School Head')
+            ? (formData.schoolEmail || '').trim()
+            : authEmail; // For others, auth email is contact email
+
+        const contactDigits = (formData.contactNumber || '').replace(/\D/g, '');
+
         // Basic Validations
         if (formData.password !== formData.confirmPassword) {
             alert("Passwords do not match!");
             return;
         }
 
+        if (formData.role === 'School Head') {
+            if (!selectedSchool) {
+                alert("Please select a school.");
+                return;
+            }
+            if (!authEmail) {
+                alert("Please enter your school email address.");
+                return;
+            }
+
+            // --- STRICT DEPED EMAIL VALIDATION ---
+            const lowerEmail = contactEmail.toLowerCase();
+            if (!lowerEmail.endsWith('@deped.gov.ph')) {
+                alert("Restricted Access: Please use your official DepEd email address (@deped.gov.ph).");
+                return;
+            }
+
+            // Basic email format check (redundant but safe)
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+                alert("Please enter a valid school email address.");
+                return;
+            }
+
+            if (!contactDigits || contactDigits.length !== 11 || !contactDigits.startsWith('09')) {
+                alert("Please enter a valid 11-digit mobile number starting with 09.");
+                return;
+            }
+        }
 
 
-        // STRICT EMAIL VALIDATION (Added for Bypass)
-        if (!formData.email.toLowerCase().endsWith('@deped.gov.ph')) {
+
+        // STRICT EMAIL VALIDATION (Global Check)
+        if (!contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
 
-        // STRICT OTP ENFORCEMENT (COMMENTED OUT FOR TESTING)
+        // STRICT OTP ENFORCEMENT (User requested REMOVAL)
         // if (!isOtpVerified) {
         //     alert("Please verify your email via OTP before registering.");
         //     return;
@@ -358,11 +399,13 @@ const Register = () => {
                 if (!selectedSchool) throw new Error("Please select a school.");
 
                 // Backend Check
+                console.log("Step A: Checking existing school...");
                 const checkRes = await fetch('/api/check-existing-school', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ schoolId: selectedSchool.school_id })
                 });
+                console.log("Step A: Check response received", checkRes.status);
                 const checkData = await checkRes.json();
                 if (checkData.exists) {
                     throw new Error(checkData.message || "School already registered.");
@@ -372,15 +415,17 @@ const Register = () => {
             // STEP B: Firebase Auth Create (WITH ZOMBIE RECOVERY)
             let user;
             try {
-                const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+                console.log("Step B: Creating Firebase Auth user...", authEmail);
+                const userCredential = await createUserWithEmailAndPassword(auth, authEmail, formData.password);
                 user = userCredential.user;
+                console.log("Step B: Auth User Created:", user.uid);
             } catch (authError) {
                 if (authError.code === 'auth/email-already-in-use') {
                     // ATTEMPT RECOVERY: Try logging in to see if it's a "Zombie" account (No Firestore Data)
                     // If they entered the CORRECT password for the existing email, we can proceed to check if it's a zombie.
 
                     try {
-                        const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+                        const userCredential = await signInWithEmailAndPassword(auth, authEmail, formData.password);
                         user = userCredential.user;
                     } catch (loginError) {
                         // If login fails, we cannot proceed with Zombie recovery.
@@ -444,7 +489,8 @@ const Register = () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         uid: user.uid,
-                        email: formData.email,
+                        email: contactEmail, // <--- SAVE REAL EMAIL HERE
+                        contactNumber: contactDigits,
                         schoolData: finalSchoolData
                     })
                 });
@@ -459,6 +505,8 @@ const Register = () => {
                     email: user.email,
                     role: 'School Head',
                     schoolId: selectedSchool.school_id,
+                    loginId: selectedSchool.school_id,
+                    contactNumber: contactDigits,
                     firstName: "School Head",
                     lastName: selectedSchool.school_id,
                     iern: regData.iern, // From Backend
@@ -661,15 +709,75 @@ const Register = () => {
 
 
                                     {/* AUTO-GENERATED CREDENTIALS */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 opacity-80">
-                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Login Credentials (Auto)</label>
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Your Username (School ID)</label>
                                         <input
                                             type="text"
-                                            value={formData.email}
+                                            value={selectedSchool?.school_id || ''}
                                             readOnly
-                                            className="w-full bg-slate-200 border-none rounded-lg px-3 py-2 text-slate-500 text-sm font-mono mb-2 cursor-not-allowed"
+                                            className="w-full bg-slate-200 border-none rounded-lg px-3 py-2 text-slate-800 text-lg font-mono font-bold mb-2 cursor-not-allowed text-center tracking-widest"
                                         />
-                                        <p className="text-[10px] text-slate-400">Email is locked to School ID</p>
+                                        <p className="text-[10px] text-slate-500 text-center">You will use this ID to log in.</p>
+                                    </div>
+
+                                    {/* SCHOOL CONTACT DETAILS */}
+                                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                                        <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                            <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">2</span>
+                                            Account Recovery & Contact Info
+                                        </h3>
+
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Official School Email</label>
+                                                <div className="flex items-center w-full max-w-full">
+                                                    <input
+                                                        type="text"
+                                                        value={formData.schoolEmail ? formData.schoolEmail.split('@')[0] : ''}
+                                                        onChange={(e) => {
+                                                            const username = e.target.value.replace(/[^a-zA-Z0-9._-]/g, '');
+                                                            setFormData(prev => ({ ...prev, schoolEmail: username + '@deped.gov.ph' }));
+                                                        }}
+                                                        placeholder="username"
+                                                        className="flex-1 min-w-0 bg-white border border-r-0 border-slate-200 text-sm rounded-l-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden text-ellipsis"
+                                                        required
+                                                    />
+                                                    <span className="bg-slate-100 border border-l-0 border-slate-200 text-slate-500 text-xs sm:text-sm font-bold px-2 sm:px-3 py-3 rounded-r-xl select-none whitespace-nowrap">
+                                                        @deped.gov.ph
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 mt-1 ml-1">Used for password resets and notifications.</p>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Mobile Number</label>
+                                                <input
+                                                    name="contactNumber"
+                                                    inputMode="numeric"
+                                                    value={formData.contactNumber}
+                                                    onFocus={() => {
+                                                        if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
+                                                    }}
+                                                    onChange={(e) => {
+                                                        let val = e.target.value.replace(/\D/g, '');
+                                                        // STRICT ENFORCEMENT: Must start with 09
+                                                        if (!val.startsWith('09')) {
+                                                            if (val.startsWith('9')) val = '0' + val; // Auto-fix 9...
+                                                            else if (val.length < 2) val = '09'; // Prevent deleting 09
+                                                            else val = '09' + val.substring(2); // Re-attach if messed up middle?? No, safe default. 
+                                                        }
+                                                        // Ensure length limit
+                                                        val = val.slice(0, 11);
+                                                        setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                    }}
+                                                    placeholder="0912 345 6789"
+                                                    className="w-full bg-white border border-slate-200 text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                                                    maxLength={11}
+                                                    required
+                                                />
+                                                <p className="text-[10px] text-slate-400 mt-1 ml-1">Must be exactly 11 digits.</p>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {/* MAP & LOCATION CONFIRMATION */}

@@ -12,7 +12,7 @@ clientsClaim();
 // Register a navigation route that returns the cached 'index.html'
 // This handles requests for URLs like /dashboard or /profile when offline
 registerRoute(
-    new NavigationRoute(createHandlerBoundToURL('/index.html'))
+    new NavigationRoute(createHandlerBoundToURL('index.html'))
 );
 
 // 2. Your Custom Configuration

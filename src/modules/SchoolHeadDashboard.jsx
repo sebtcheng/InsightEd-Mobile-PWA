@@ -125,7 +125,7 @@ const SchoolHeadDashboard = () => {
         if (totalTeachers > 0) completedList.push("Teaching Personnel");
 
         // 8. Specialization
-        if (hasData('spec_', 'number')) completedList.push("Specialization");
+        if (hasData('spec_', 'number') || (schoolProfile.spec_general && schoolProfile.spec_general > 0)) completedList.push("Specialization");
 
         // 9. Resources
         const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
@@ -137,6 +137,7 @@ const SchoolHeadDashboard = () => {
         setStats(prev => ({
             ...prev,
             completedForms: completedList.length,
+            totalForms: 10,
             enrollment: schoolProfile.total_enrollment || 0
         }));
         setCompletedItems(completedList);

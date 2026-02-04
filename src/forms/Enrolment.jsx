@@ -40,6 +40,8 @@ const Enrolment = () => {
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
+    const isDummy = location.state?.isDummy || false;
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
 
     // State
     const [loading, setLoading] = useState(true);
@@ -110,6 +112,14 @@ const Enrolment = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Check Role for Read-Only
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                    }
+                } catch (e) { }
+
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
                 if (storedSchoolId) setSchoolId(storedSchoolId);
@@ -163,7 +173,10 @@ const Enrolment = () => {
 
                     if (!restored) {
                         let fetchUrl = `/api/enrolment/${user.uid}`;
-                        if (viewOnly && schoolIdParam) fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        const role = localStorage.getItem('userRole');
+                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
 
                         if (!cachedData) setLoading(true);
 
@@ -399,7 +412,7 @@ const Enrolment = () => {
                                         type="text" inputMode="numeric" pattern="[0-9]*"
                                         value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
-                                        disabled={isLocked || viewOnly}
+                                        disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
                                         onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
@@ -425,7 +438,7 @@ const Enrolment = () => {
                                         type="text" inputMode="numeric" pattern="[0-9]*"
                                         value={formData[item.k] === '' || formData[item.k] === null ? '' : formData[item.k]}
                                         onChange={(e) => handleChange(item.k, e.target.value)}
-                                        disabled={isLocked || viewOnly}
+                                        disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                         className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm hover:border-blue-200"
                                         onFocus={() => formData[item.k] === 0 && handleChange(item.k, '')}
                                         onBlur={() => (formData[item.k] === '' || formData[item.k] === null) && handleChange(item.k, 0)}
@@ -465,11 +478,11 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">{row.l}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[row.k11] === '' || formData[row.k11] === null ? '' : formData[row.k11]} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[row.k11] === 0 && handleChange(row.k11, '')} onBlur={() => (formData[row.k11] === '' || formData[row.k11] === null) && handleChange(row.k11, 0)} />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[row.k11] === '' || formData[row.k11] === null ? '' : formData[row.k11]} onChange={(e) => handleChange(row.k11, e.target.value)} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[row.k11] === 0 && handleChange(row.k11, '')} onBlur={() => (formData[row.k11] === '' || formData[row.k11] === null) && handleChange(row.k11, 0)} />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[row.k12] === '' || formData[row.k12] === null ? '' : formData[row.k12]} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[row.k12] === 0 && handleChange(row.k12, '')} onBlur={() => (formData[row.k12] === '' || formData[row.k12] === null) && handleChange(row.k12, 0)} />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[row.k12] === '' || formData[row.k12] === null ? '' : formData[row.k12]} onChange={(e) => handleChange(row.k12, e.target.value)} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-full h-10 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[row.k12] === 0 && handleChange(row.k12, '')} onBlur={() => (formData[row.k12] === '' || formData[row.k12] === null) && handleChange(row.k12, 0)} />
                                             </td>
                                         </tr>
                                     ))}
@@ -498,15 +511,15 @@ const Enrolment = () => {
                                             <td className="py-2 pl-2 font-bold text-slate-600 text-xs">Grade {g}</td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_math_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[`aral_math_g${g}`] === 0 && handleChange(`aral_math_g${g}`, '')} onBlur={() => (formData[`aral_math_g${g}`] === '' || formData[`aral_math_g${g}`] === null) && handleChange(`aral_math_g${g}`, 0)} />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_math_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_math_g${g}`, e.target.value)} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-full h-10 text-center font-bold text-indigo-700 bg-indigo-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[`aral_math_g${g}`] === 0 && handleChange(`aral_math_g${g}`, '')} onBlur={() => (formData[`aral_math_g${g}`] === '' || formData[`aral_math_g${g}`] === null) && handleChange(`aral_math_g${g}`, 0)} />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_read_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[`aral_read_g${g}`] === 0 && handleChange(`aral_read_g${g}`, '')} onBlur={() => (formData[`aral_read_g${g}`] === '' || formData[`aral_read_g${g}`] === null) && handleChange(`aral_read_g${g}`, 0)} />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_read_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_read_g${g}`, e.target.value)} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-full h-10 text-center font-bold text-pink-700 bg-pink-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[`aral_read_g${g}`] === 0 && handleChange(`aral_read_g${g}`, '')} onBlur={() => (formData[`aral_read_g${g}`] === '' || formData[`aral_read_g${g}`] === null) && handleChange(`aral_read_g${g}`, 0)} />
                                             </td>
                                             <td className="p-1 align-top">
                                                 <p className="text-[9px] text-slate-400 font-medium mb-1">Total (All Sections)</p>
-                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_sci_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[`aral_sci_g${g}`] === 0 && handleChange(`aral_sci_g${g}`, '')} onBlur={() => (formData[`aral_sci_g${g}`] === '' || formData[`aral_sci_g${g}`] === null) && handleChange(`aral_sci_g${g}`, 0)} />
+                                                <input type="text" inputMode="numeric" pattern="[0-9]*" value={formData[`aral_sci_g${g}`] ?? ''} onChange={(e) => handleChange(`aral_sci_g${g}`, e.target.value)} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-full h-10 text-center font-bold text-teal-700 bg-teal-50/30 border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-200 outline-none text-sm hover:bg-white transition-all" onFocus={() => formData[`aral_sci_g${g}`] === 0 && handleChange(`aral_sci_g${g}`, '')} onBlur={() => (formData[`aral_sci_g${g}`] === '' || formData[`aral_sci_g${g}`] === null) && handleChange(`aral_sci_g${g}`, 0)} />
                                             </td>
                                         </tr>
                                     ))}
@@ -521,7 +534,7 @@ const Enrolment = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">

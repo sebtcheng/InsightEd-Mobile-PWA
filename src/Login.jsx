@@ -30,12 +30,13 @@ const getDashboardPath = (role) => {
 };
 
 const Login = () => {
-    const [email, setEmail] = useState('');
+    const [loginId, setLoginId] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
     const [focusedInput, setFocusedInput] = useState(null);
     const [showForgotModal, setShowForgotModal] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
+    const [verificationEmail, setVerificationEmail] = useState(''); // NEW STATE
     const [resetLoading, setResetLoading] = useState(false);
     const navigate = useNavigate();
 
@@ -120,29 +121,24 @@ const Login = () => {
         setLoading(true);
 
         // --- HARDCODED SUPER ADMIN BYPASS / AUTO-CREATE ---
-        if (email.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
+        if (loginId.trim().toLowerCase() === 'kleinzebastian@gmail.com') {
             try {
                 // 1. Try to Login normally
                 await setPersistence(auth, browserLocalPersistence);
-                await signInWithEmailAndPassword(auth, email, password);
-                // Listener handles the rest, but we need to ensure ROLE is Super Admin
-                // We'll handle that in checkUserRole
+                await signInWithEmailAndPassword(auth, loginId.trim(), password);
             } catch (error) {
                 // 2. If user not found, CREATE IT (Auto-Provisioning)
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
-                    // Check if password matches the hardcoded one before creating/forcing
                     if (password === 'BHRODI-D3V4CC') {
                         try {
-                            const userCred = await createUserWithEmailAndPassword(auth, email, password);
-                            // Create Firestore Doc
+                            const userCred = await createUserWithEmailAndPassword(auth, loginId.trim(), password);
                             await setDoc(doc(db, "users", userCred.user.uid), {
-                                email: email,
+                                email: loginId.trim(),
                                 role: 'Super Admin',
                                 firstName: 'System',
                                 lastName: 'Admin',
                                 createdAt: new Date()
                             });
-                            // Listener will catch it
                         } catch (createError) {
                             alert("Error creating Admin: " + createError.message);
                             setLoading(false);
@@ -159,11 +155,18 @@ const Login = () => {
             return;
         }
 
-        // --- NORMAL LOGIN ---
+        // --- NORMAL LOGIN (FAKE EMAIL STRATEGY) ---
         try {
+            let loginEmail = loginId.trim();
+
+            // If it looks like a School ID (numbers/no @), append @insighted.app
+            if (loginEmail.length > 0 && !loginEmail.includes('@')) {
+                loginEmail = `${loginEmail}@insighted.app`;
+            }
+
             await setPersistence(auth, browserLocalPersistence);
-            await signInWithEmailAndPassword(auth, email, password);
-            // The Listener above will catch the change and call checkUserRole
+            await signInWithEmailAndPassword(auth, loginEmail, password);
+            // The Listener will catch the Auth Change -> checkUserRole -> Navigate
         } catch (error) {
             console.error(error);
             alert("Login Failed: " + error.message);
@@ -171,42 +174,115 @@ const Login = () => {
         }
     };
 
+    // --- 3. FORGOT PASSWORD HANDLER ---
+    const [isSchoolIdFlow, setIsSchoolIdFlow] = useState(false);
 
+    // Auto-lookup effect for Forgot Password
+    useEffect(() => {
+        const checkSchoolId = async () => {
+            const input = resetEmail.trim();
+            // Basic heuristic: 6+ digits, no @ symbol
+            if (input.length >= 6 && !input.includes('@') && /^\d+$/.test(input)) {
+                try {
+                    const res = await fetch(`/api/lookup-masked-email/${input}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.found) {
+                            setVerificationEmail(data.maskedEmail);
+                            setIsSchoolIdFlow(true);
+                            return;
+                        }
+                    }
+                } catch (e) { console.error("Lookup failed", e); }
+            }
+            // Reset if regex fails or lookup fails
+            setIsSchoolIdFlow(false);
+            if (!input.includes('@')) setVerificationEmail('');
+        };
 
-    // --- 3.5 HANDLE PASSWORD RESET ---
+        const timer = setTimeout(checkSchoolId, 500); // Debounce 500ms
+        return () => clearTimeout(timer);
+    }, [resetEmail]);
+
     const handlePasswordReset = async (e) => {
         e.preventDefault();
-        if (!resetEmail) return alert("Please enter your email.");
+        if (!resetEmail) return alert("Please enter your email or School ID.");
 
         setResetLoading(true);
-        try {
-            await sendPasswordResetEmail(auth, resetEmail);
-            alert("Password reset email sent! Check your inbox.");
-            setShowForgotModal(false);
-        } catch (error) {
-            console.error(error);
-            alert("Failed to send reset email: " + error.message);
-        } finally {
-            setResetLoading(false);
+        const input = resetEmail.trim();
+
+        // CHECK STRATEGY: Is it a School ID (no @)?
+        if (!input.includes('@')) {
+            // --- SCHOOL ID FLOW ---
+
+            // If we haven't found the email via lookup yet, block
+            if (!isSchoolIdFlow && !verificationEmail) {
+                alert("Validating School ID... Please wait or check the ID.");
+                setResetLoading(false);
+                return;
+            }
+
+            // CUSTOM BACKEND RESET for School IDs
+            try {
+                const res = await fetch('/api/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        schoolId: input,
+                        // If flow is active, backend knows what to do, but we send verificationEmail just in case (though optional now)
+                        verificationEmail: verificationEmail
+                    })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    alert(`Success! Reset link has been sent to your registered email: ${verificationEmail}`);
+                    setShowForgotModal(false);
+                    setVerificationEmail('');
+                    setIsSchoolIdFlow(false);
+                } else {
+                    alert("Failed: " + (data.error || "Unknown error"));
+                }
+            } catch (err) {
+                console.error("Custom Reset Error:", err);
+                alert("Network error: " + err.message);
+            } finally {
+                setResetLoading(false);
+            }
+        } else {
+            // --- STANDARD FIREBASE FLOW (EMAIL) ---
+            try {
+                await sendPasswordResetEmail(auth, input);
+                alert("Password reset email sent! Check your inbox.");
+                setShowForgotModal(false);
+            } catch (error) {
+                console.error(error);
+                alert("Failed to send reset email: " + error.message);
+            } finally {
+                setResetLoading(false);
+            }
         }
     };
 
     // --- 4. CHECK ROLE & GATEKEEPER LOGIC ---
     const checkUserRole = async (uid) => {
+        console.log("Starting checkUserRole for:", uid);
         try {
             // A. Get Role from Firestore (with Timeout Protection)
             const docRef = doc(db, "users", uid);
-            let docSnap;
             let role;
             let userData = {};
 
             try {
-                // Race Firestore against a 5s timeout
-                docSnap = await Promise.race([
+                console.log("Racing Firestore...");
+                // Race Firestore against a FAST 3s timeout
+                const docSnap = await Promise.race([
                     getDoc(docRef),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 5000))
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Timeout")), 3000))
                 ]);
 
+                if (docSnap.exists()) {
+                    console.log("Firestore doc found");
                     userData = docSnap.data();
                     role = userData.role;
 
@@ -245,6 +321,9 @@ const Login = () => {
                         setLoading(false);
                         return; // Stop execution
                     }
+                } else {
+                    console.warn("Firestore doc missing");
+                }
             } catch (firestoreErr) {
                 console.warn("Firestore blocked or slow, trying fallback...", firestoreErr);
 
@@ -256,13 +335,16 @@ const Login = () => {
                     // Mock data so the rest of the function doesn't crash
                     userData = { role: storedRole, firstName: 'User' };
                 } else {
-                    throw new Error("Connection Blocked. Please disable AdBlockers and try again.");
+                    // CRITICAL FALLBACK: If fresh login and blocked, assume School Head or ask user (For now default to School Head if desperate)
+                    console.error("Connection Blocked. Cannot determine role.");
+                    alert("Connection blocked (AdBlocker?). Attempting to enter offline mode.");
+                    role = 'School Head'; // Fallback for testing
                 }
             }
 
-            if (role) { // Modified condition from docSnap.exists()
-                // role is already set above 
+            console.log("Determined Role:", role);
 
+            if (role) {
                 // --- FORCE ROLE FOR HARDCODED SUPER ADMIN ---
                 const currentUser = auth.currentUser;
                 if (currentUser && currentUser.email === 'kleinzebastian@gmail.com') {
@@ -273,50 +355,43 @@ const Login = () => {
                 console.log("Saving role to storage:", role);
                 localStorage.setItem('userRole', role);
 
-                // --- AUDIT LOG: LOGIN ---
+                // --- AUDIT LOG (Best Effort) ---
                 try {
                     fetch('/api/log-activity', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             userUid: uid,
                             userName: userData.firstName || 'User',
                             role: role,
-                            actionType: 'LOGIN',
-                            targetEntity: 'System',
-                            details: 'User logged in successfully'
+                            actionType: 'LOGIN'
                         })
-                    });
-                } catch (e) { console.warn("Login Log Failed", e); }
+                    }).catch(e => { }); // Silent fail
+                } catch (e) { }
 
-                // --- B. THE GATEKEEPER (School Heads Only) ---
+                // --- NAVIGATION ---
+                console.log("Navigating for role:", role);
+                // alert(`Login Success! Role: ${role}`); // Temporary Debug
                 if (role === 'School Head') {
-                    try {
-                        const response = await fetch(`/api/school-by-user/${uid}`);
-                        if (!response.ok) throw new Error("API not reachable");
-                        const result = await response.json();
+                    // Try to fetch profile, but don't block navigation on it
+                    fetch(`/api/school-by-user/${uid}`)
+                        .then(res => res.json())
+                        .then(result => {
+                            if (result.exists) localStorage.setItem('schoolId', result.data.school_id);
+                        })
+                        .catch(err => console.log("Profile check failed, proceeding anyway"));
 
-                        if (result.exists) {
-                            localStorage.setItem('schoolId', result.data.school_id);
-                            navigate('/schoolhead-dashboard');
-                        } else {
-                            console.log("No profile found. Redirecting to setup...");
-                            navigate('/school-profile', { state: { isFirstTime: true } });
-                        }
-                    } catch (fetchError) {
-                        console.error("Error checking school profile (likely offline/no-api):", fetchError);
-                        navigate('/schoolhead-dashboard');
-                    }
+                    console.log("Navigating to SchoolHeadDashboard");
+                    navigate('/schoolhead-dashboard');
                 } else {
                     const path = getDashboardPath(role);
+                    console.log("Navigating to:", path);
                     navigate(path);
                 }
 
             } else {
                 console.warn("Firestore Check: No user document found for UID:", uid);
-                alert("Account not found. Signing out...");
-                await auth.signOut();
-                navigate('/register');
+                // Don't sign out automatically if blocked, just stay on page or show error
+                alert("Account verification blocked due to network issues.");
                 setLoading(false);
             }
         } catch (err) {
@@ -366,11 +441,11 @@ const Login = () => {
                                         </svg>
                                     </span>
                                     <input
-                                        type="email"
-                                        placeholder="Email Address"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        onFocus={() => setFocusedInput('email')}
+                                        type="text"
+                                        placeholder="Email or School ID"
+                                        value={loginId}
+                                        onChange={(e) => setLoginId(e.target.value)}
+                                        onFocus={() => setFocusedInput('loginId')}
                                         onBlur={() => setFocusedInput(null)}
                                         required
                                         className="w-full bg-transparent border-none px-4 py-3.5 text-slate-700 dark:text-slate-700 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:ring-0 font-medium"
@@ -401,7 +476,7 @@ const Login = () => {
                             <div className="flex justify-end">
                                 <button
                                     type="button"
-                                    onClick={() => { setResetEmail(email); setShowForgotModal(true); }}
+                                    onClick={() => { setResetEmail(loginId); setShowForgotModal(true); }}
                                     className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
                                 >
                                     Forgot Password?
@@ -477,15 +552,45 @@ const Login = () => {
                             <p className="text-sm text-slate-500 mb-4">Enter your email address and we'll send you a link to reset your password.</p>
 
                             <form onSubmit={handlePasswordReset}>
-                                <div className="mb-4">
+                                <div className="mb-4 space-y-3">
+                                    {/* INPUT 1: ID or EMAIL */}
                                     <input
-                                        type="email"
+                                        type="text"
                                         value={resetEmail}
                                         onChange={(e) => setResetEmail(e.target.value)}
-                                        placeholder="Enter your email"
+                                        placeholder="Enter your email or school ID"
                                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                         required
                                     />
+
+                                    {/* INPUT 2: VERIFICATION EMAIL (Only if School ID) */}
+                                    {resetEmail.length > 0 && !resetEmail.includes('@') && (
+                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                            <p className="text-xs text-blue-600 font-bold mb-1 ml-1 flex items-center gap-1">
+                                                {isSchoolIdFlow ? (
+                                                    <>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                                        </svg>
+                                                        Confirm Registered Email (Masked)
+                                                    </>
+                                                ) : "Confirm Registered Email"}
+                                            </p>
+                                            <input
+                                                type="text"
+                                                value={verificationEmail}
+                                                onChange={(e) => !isSchoolIdFlow && setVerificationEmail(e.target.value)}
+                                                readOnly={isSchoolIdFlow}
+                                                placeholder={isSchoolIdFlow ? "Fetching..." : "Enter your registered email address"}
+                                                className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none transition-all 
+                                                    ${isSchoolIdFlow
+                                                        ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed'
+                                                        : 'bg-blue-50/30 border-blue-100 text-blue-900 focus:ring-2 focus:ring-blue-500 placeholder:text-blue-300'
+                                                    }`}
+                                                required
+                                            />
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-3">

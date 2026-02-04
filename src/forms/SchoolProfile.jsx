@@ -18,6 +18,7 @@ const SchoolProfile = () => {
 
     const isFirstTime = location.state?.isFirstTime || false;
     const isDummy = location.state?.isDummy || false; // NEW: Dummy Mode Check
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const monitorSchoolId = queryParams.get('schoolId');
@@ -178,7 +179,7 @@ const SchoolProfile = () => {
         // A. CSV Fetch - Independent
         const loadDirectory = async () => {
             try {
-                const csvResponse = await fetch('/schools.csv');
+                const csvResponse = await fetch(`${import.meta.env.BASE_URL}schools.csv`);
                 if (csvResponse.ok) {
                     const contentType = csvResponse.headers.get("content-type");
                     if (contentType && contentType.includes("html")) throw new Error("CSV file not found (HTML returned)");
@@ -234,6 +235,14 @@ const SchoolProfile = () => {
             if (!isMounted) return;
             if (!user) { navigate('/'); return; }
 
+            // Check Role for Read-Only
+            try {
+                const role = localStorage.getItem('userRole');
+                if (role === 'Central Office' || isDummy) {
+                    setIsReadOnly(true);
+                }
+            } catch (e) { }
+
             // STEP 1: IMMEDIATE CACHE LOAD
             let loadedFromCache = false;
             let loadedOffering = '';
@@ -279,7 +288,8 @@ const SchoolProfile = () => {
 
             // STEP 2: BACKGROUND FETCH
             try {
-                const fetchUrl = viewOnly && monitorSchoolId
+                const role = localStorage.getItem('userRole');
+                const fetchUrl = (viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId
                     ? `/api/monitoring/school-detail/${monitorSchoolId}`
                     : `/api/school-by-user/${user.uid}`;
 
@@ -649,7 +659,7 @@ const SchoolProfile = () => {
                             </div>
                         )}
                         <form onSubmit={(e) => { e.preventDefault(); setAck1(false); setAck2(false); setShowSaveModal(true); }}>
-                            <fieldset disabled={isOffline || viewOnly || isLocked || isDummy} className="disabled:opacity-95">
+                            <fieldset disabled={isOffline || viewOnly || isLocked || isDummy || isReadOnly} className="disabled:opacity-95">
 
                                 {/* 1. IDENTITY */}
                                 <div className={sectionClass}>
@@ -660,8 +670,8 @@ const SchoolProfile = () => {
                                         <div>
                                             <label className={labelClass}>School ID (6-Digit)</label>
                                             <div className="flex gap-2">
-                                                <input type="text" name="schoolId" value={formData.schoolId} onChange={handleChange} onBlur={handleIdBlur} placeholder="100001" maxLength="6" className={`${inputClass} text-center text-xl tracking-widest font-bold ${hasSavedData ? 'bg-gray-200 cursor-not-allowed' : ''}`} required disabled={hasSavedData || isDummy} />
-                                                <button type="button" onClick={handleIdBlur} disabled={hasSavedData || isDummy} className="bg-blue-600 text-white px-4 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-sm">
+                                                <input type="text" name="schoolId" value={formData.schoolId} onChange={handleChange} onBlur={handleIdBlur} placeholder="100001" maxLength="6" className={`${inputClass} text-center text-xl tracking-widest font-bold ${hasSavedData ? 'bg-gray-200 cursor-not-allowed' : ''}`} required disabled={hasSavedData || isDummy || isReadOnly} />
+                                                <button type="button" onClick={handleIdBlur} disabled={hasSavedData || isDummy || isReadOnly} className="bg-blue-600 text-white px-4 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-sm">
                                                     Validate
                                                 </button>
                                             </div>
@@ -780,7 +790,7 @@ const SchoolProfile = () => {
                                             latitude={formData.latitude}
                                             longitude={formData.longitude}
                                             onLocationSelect={(lat, lng) => setFormData(prev => ({ ...prev, latitude: lat, longitude: lng }))}
-                                            disabled={isDummy || viewOnly || isLocked || isOffline}
+                                            disabled={isDummy || viewOnly || isLocked || isOffline || isReadOnly}
                                             userLocation={currentUserLocation}
                                         />
                                     </div>
@@ -803,7 +813,7 @@ const SchoolProfile = () => {
                                 </div>
                             </fieldset>
 
-                            {!viewOnly && !isDummy && (
+                            {!viewOnly && !isDummy && !isReadOnly && (
                                 <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                                     <div className="max-w-4xl mx-auto flex gap-3">
                                         {isOffline ? (
@@ -846,7 +856,7 @@ const SchoolProfile = () => {
                         </form>
                     </div>
 
-                    {(viewOnly || isDummy) && (
+                    {(viewOnly || isDummy || isReadOnly) && (
                         <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
                             <div className="max-w-4xl mx-auto">
                                 <button

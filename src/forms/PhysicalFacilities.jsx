@@ -44,6 +44,8 @@ const PhysicalFacilities = () => {
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
+    const isDummy = location.state?.isDummy || false;
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -81,6 +83,14 @@ const PhysicalFacilities = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Check Role for Read-Only
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                    }
+                } catch (e) { }
+
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
                 if (storedSchoolId) setSchoolId(storedSchoolId);
@@ -131,7 +141,8 @@ const PhysicalFacilities = () => {
                     // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         let fetchUrl = `/api/physical-facilities/${user.uid}`;
-                        if (viewOnly && schoolIdParam) {
+                        const role = localStorage.getItem('userRole');
+                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -336,17 +347,17 @@ const PhysicalFacilities = () => {
                     <p className="text-[10px] text-slate-400 mt-2 font-medium">Overall count in the school</p>
                 </div>
 
-                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
-                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? 0} onChange={handleChange} disabled={isLocked || viewOnly} />
+                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
+                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
+                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
+                <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
 
             </div>
 
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">

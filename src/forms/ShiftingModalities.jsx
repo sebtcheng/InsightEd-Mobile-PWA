@@ -68,6 +68,8 @@ const ShiftingModalities = () => {
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
+    const isDummy = location.state?.isDummy || false;
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -104,7 +106,6 @@ const ShiftingModalities = () => {
         adm_mdl: false, adm_odl: false, adm_tvi: false, adm_blended: false, adm_others: ''
     });
 
-    const isDummy = location.state?.isDummy || false;
     const [originalData, setOriginalData] = useState(null);
     const goBack = () => {
         if (isDummy) {
@@ -119,6 +120,14 @@ const ShiftingModalities = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Check Role for Read-Only
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                    }
+                } catch (e) { }
+
                 // STEP 1: PREPARE DEFAULTS
                 const LEVELS = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
                 const defaultShifts = {};
@@ -227,7 +236,8 @@ const ShiftingModalities = () => {
                     // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/learning-modalities/${user.uid}`;
-                        if (viewOnly && schoolIdParam) {
+                        const role = localStorage.getItem('userRole');
+                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -460,13 +470,13 @@ const ShiftingModalities = () => {
                                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Elementary</span>
                             </div>
                             {/* Passed props to external GradeRow */}
-                            <GradeRow label="Kinder" lvl="kinder" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 1" lvl="g1" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 2" lvl="g2" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 3" lvl="g3" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 4" lvl="g4" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 5" lvl="g5" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 6" lvl="g6" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Kinder" lvl="kinder" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 1" lvl="g1" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 2" lvl="g2" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 3" lvl="g3" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 4" lvl="g4" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 5" lvl="g5" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 6" lvl="g6" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
                         </div>
                     )}
 
@@ -476,10 +486,10 @@ const ShiftingModalities = () => {
                                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Junior High School</span>
                             </div>
-                            <GradeRow label="Grade 7" lvl="g7" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 8" lvl="g8" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 9" lvl="g9" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 10" lvl="g10" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 7" lvl="g7" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 8" lvl="g8" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 9" lvl="g9" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 10" lvl="g10" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
                         </div>
                     )}
 
@@ -489,8 +499,8 @@ const ShiftingModalities = () => {
                                 <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
                                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Senior High School</span>
                             </div>
-                            <GradeRow label="Grade 11" lvl="g11" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
-                            <GradeRow label="Grade 12" lvl="g12" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly} />
+                            <GradeRow label="Grade 11" lvl="g11" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
+                            <GradeRow label="Grade 12" lvl="g12" shifts={shifts} modes={modes} onShiftChange={handleShiftChange} onModeChange={handleModeChange} isLocked={isLocked} viewOnly={viewOnly || isReadOnly || isDummy} />
                         </div>
                     )}
                 </div>
@@ -508,24 +518,24 @@ const ShiftingModalities = () => {
                     </div>
 
                     <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                        <input type="checkbox" name="adm_mdl" checked={adms.adm_mdl} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <input type="checkbox" name="adm_mdl" checked={adms.adm_mdl} onChange={handleAdmCheck} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
                         <span className="text-sm font-bold text-slate-700">Modular Distance Learning (MDL)</span>
                     </label>
                     <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                        <input type="checkbox" name="adm_odl" checked={adms.adm_odl} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <input type="checkbox" name="adm_odl" checked={adms.adm_odl} onChange={handleAdmCheck} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
                         <span className="text-sm font-bold text-slate-700">Online Distance Learning (ODL)</span>
                     </label>
                     <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                        <input type="checkbox" name="adm_tvi" checked={adms.adm_tvi} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <input type="checkbox" name="adm_tvi" checked={adms.adm_tvi} onChange={handleAdmCheck} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
                         <span className="text-sm font-bold text-slate-700">TV-Based Instruction (TVI/RBI)</span>
                     </label>
                     <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                        <input type="checkbox" name="adm_blended" checked={adms.adm_blended} onChange={handleAdmCheck} disabled={isLocked || viewOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
+                        <input type="checkbox" name="adm_blended" checked={adms.adm_blended} onChange={handleAdmCheck} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500" />
                         <span className="text-sm font-bold text-slate-700">Blended Learning</span>
                     </label>
                     <div className="mt-4">
                         <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Others (Please Specify)</label>
-                        <input type="text" value={adms.adm_others} onChange={handleAdmText} disabled={isLocked || viewOnly} className="w-full p-4 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="e.g. Homeschooling" />
+                        <input type="text" value={adms.adm_others} onChange={handleAdmText} disabled={isLocked || viewOnly || isDummy || isReadOnly} className="w-full p-4 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="e.g. Homeschooling" />
                     </div>
                 </div>
             </div>
@@ -533,7 +543,7 @@ const ShiftingModalities = () => {
             {/* --- STANDARDIZED FOOTER            {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">

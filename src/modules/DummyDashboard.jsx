@@ -25,9 +25,9 @@ const DummyDashboard = () => {
         };
         fetchUser();
     }, []);
-    
+
     // Default to 'school' if no type is passed
-    const formType = location.state?.type || 'school'; 
+    const formType = location.state?.type || 'school';
 
     const SCHOOL_FORMS = [
         { name: "School Profile", route: "/school-profile", icon: TbSchool, color: "bg-blue-100 text-blue-600" },
@@ -38,6 +38,8 @@ const DummyDashboard = () => {
         { name: "Shifting & Modality", route: "/shifting-modalities", icon: TbActivity, color: "bg-amber-100 text-amber-600" },
         { name: "School Resources", route: "/school-resources", icon: TbBooks, color: "bg-emerald-100 text-emerald-600" },
         { name: "Teacher Specialization", route: "/teacher-specialization", icon: TbUsers, color: "bg-cyan-100 text-cyan-600" },
+        { name: "Learner Statistics", route: "/learner-statistics", icon: TbActivity, color: "bg-teal-100 text-teal-600" },
+        { name: "Physical Facilities", route: "/physical-facilities", icon: TbBuildingSkyscraper, color: "bg-cyan-100 text-cyan-600" },
     ];
 
     const ENGINEER_FORMS = [
@@ -46,7 +48,7 @@ const DummyDashboard = () => {
 
     const FORMS_TO_DISPLAY = formType === 'engineer' ? ENGINEER_FORMS : SCHOOL_FORMS;
     const TITLE = formType === 'engineer' ? 'Sample Engineer Forms' : 'Sample School Forms';
-    const DESCRIPTION = formType === 'engineer' 
+    const DESCRIPTION = formType === 'engineer'
         ? 'Select a form below to view exactly what Engineers see when submitting their reports.'
         : 'Select a form below to view exactly what School Heads see when submitting their data.';
     const ICON = formType === 'engineer' ? TbHammer : TbSchool;

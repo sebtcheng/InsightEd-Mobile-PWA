@@ -4,24 +4,19 @@ import pg from 'pg';
 import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
 import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
-import nodemailer from 'nodemailer'; // --- NODEMAILER ---
 
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 
-// Load environment variables
-dotenv.config();
+// 1. THIS MUST BE FIRST
+require('dotenv').config(); 
 
-// --- EMAIL TRANSPORTER ---
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// 2. Now you can check the variable
+console.log("DEBUG: DATABASE_URL is:", process.env.DATABASE_URL ? "FOUND" : "NOT FOUND");
+
+// 3. Then start your server/database logic
 
 // Destructure Pool from pg
 const { Pool } = pg;
@@ -33,14 +28,15 @@ const app = express();
 
 
 
-
-// --- AUTH MIDDLEWARE ---
+// --- MIDDLEWARE ---
 app.use(cors({
   origin: [
     'http://localhost:5173',           // Vite Local Default
     'http://localhost:5174',           // Vite Local Alternate
     'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
-    'https://insight-ed-frontend.vercel.app'
+    'https://insight-ed-frontend.vercel.app',
+'https://stride.deped.gov.ph',
+'http://stride.deped.gov.ph'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
@@ -53,25 +49,6 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
-
-// --- DATABASE INIT ---
-const initDB = async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS project_documents (
-        id SERIAL PRIMARY KEY,
-        project_id INT REFERENCES engineer_form(project_id),
-        doc_type TEXT NOT NULL, -- 'POW', 'DUPA', 'CONTRACT'
-        file_data TEXT, 
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log("✅ DB Init: project_documents table verified.");
-  } catch (err) {
-    console.error("❌ DB Init Error:", err);
-  }
-};
-initDB();
 
 // --- VERCEL CRON ENDPOINT (MOVED TO TOP) ---
 // Support both /api/cron... (Local) and /cron... (Vercel)
@@ -297,8 +274,6 @@ const initOtpTable = async () => {
                 disabled BOOLEAN DEFAULT FALSE
             );
         `);
-        // --- 1e. FORGOT PASSWORD (CUSTOM) ---
-
         // If table exists, ensure columns exist
         await client.query(`
             ALTER TABLE users 
@@ -378,9 +353,6 @@ const initOtpTable = async () => {
         ADD COLUMN IF NOT EXISTS classes_grade_12 INTEGER DEFAULT 0,
 
         -- Class Size Analysis
-        ADD COLUMN IF NOT EXISTS cnt_less_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_kinder INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_less_g1 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_within_g1 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_above_g1 INTEGER DEFAULT 0,
@@ -464,23 +436,7 @@ const initOtpTable = async () => {
         ADD COLUMN IF NOT EXISTS spec_guidance INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_librarian INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0,
-        -- General Education for Elementary
-        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
-        -- New Elementary Field
-        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0,
-        -- New Secondary Fields
-        ADD COLUMN IF NOT EXISTS spec_bio_sci_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_bio_sci_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_phys_sci_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_phys_sci_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_agri_fishery_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_agri_fishery_teaching INTEGER DEFAULT 0,
-        -- New Others Field
-        ADD COLUMN IF NOT EXISTS spec_others_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0;
       `);
         console.log('✅ Checked/Added Teacher Specialization columns');
       } catch (migErr) {
@@ -520,17 +476,8 @@ const initOtpTable = async () => {
             ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
         `);
         console.log('✅ Checked/Added IPC column to engineer_form');
-
-        // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
-        await client.query(`
-            ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS latitude TEXT,
-            ADD COLUMN IF NOT EXISTS longitude TEXT;
-        `);
-        console.log('✅ Checked/Added Latitude & Longitude to engineer_form');
-
       } catch (migErr) {
-        console.error('❌ Failed to migrate engineer_form columns:', migErr.message);
+        console.error('❌ Failed to migrate IPC column:', migErr.message);
       }
 
       // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
@@ -666,17 +613,6 @@ const initOtpTable = async () => {
         console.error('❌ Failed to init system_settings table:', tableErr.message);
       }
 
-      // --- MIGRATION: ADD DISABLED COLUMN TO USERS ---
-      try {
-        await client.query(`
-          ALTER TABLE users 
-          ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
-        `);
-        console.log('✅ Checked/Added disabled column to users table');
-      } catch (migErr) {
-        console.error('❌ Failed to migrate disabled column:', migErr.message);
-      }
-
     } finally {
       client.release();
     }
@@ -685,92 +621,7 @@ const initOtpTable = async () => {
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   }
-})(); // End of DB Init IIFE
-
-// --- 1f. MASKED EMAIL LOOKUP (FORGOT PASSWORD) ---
-app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-  try {
-    const result = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1", [schoolId]);
-    if (result.rows.length === 0 || !result.rows[0].email) {
-      return res.status(404).json({ error: "School ID not found" });
-    }
-
-    const email = result.rows[0].email;
-    const [username, domain] = email.split('@');
-
-    // Masking Logic: "c***@gmail.com"
-    const maskedUsername = username.length > 2
-      ? username[0] + '*'.repeat(username.length - 1)
-      : username[0] + '*'; // Fallback for short names
-
-    const maskedEmail = `${maskedUsername}@${domain}`;
-    res.json({ found: true, maskedEmail });
-  } catch (err) {
-    console.error("Lookup Error:", err);
-    res.status(500).json({ error: "Server Error" });
-  }
-});
-
-// --- 1e. FORGOT PASSWORD (CUSTOM) ---
-app.post('/api/forgot-password', async (req, res) => {
-  // verificationEmail is OPTIONAL now (legacy/fallback support)
-  const { schoolId } = req.body;
-
-  if (!schoolId) {
-    return res.status(400).json({ error: "School ID is required." });
-  }
-
-  try {
-    // 1. Lookup User by School ID 
-    const profileRes = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1", [schoolId]);
-
-    if (profileRes.rows.length === 0) {
-      return res.status(404).json({ error: "School ID not found." });
-    }
-
-    const realEmail = profileRes.rows[0].email;
-    if (!realEmail) {
-      return res.status(400).json({ error: "No contact email found for this School ID." });
-    }
-
-    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail}`);
-
-    // 3. Generate Reset Link for the FAKE Auth Email
-    const fakeAuthEmail = `${schoolId}@insighted.app`;
-    const actionCodeSettings = {
-      url: 'https://insight-ed-mobile-pwa.vercel.app', // OR your local URL if dev
-      handleCodeInApp: false,
-    };
-
-    const link = await admin.auth().generatePasswordResetLink(fakeAuthEmail, actionCodeSettings);
-
-    // 4. Send Email via Nodemailer
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: realEmail,
-      subject: 'InsightEd Password Reset',
-      html: `
-                <h3>Password Reset Request</h3>
-                <p>We received a request to reset the password for School ID: <b>${schoolId}</b>.</p>
-                <p>Click the link below to verify your email and invoke the reset logic:</p>
-                <a href="${link}">Reset Password</a>
-                <p>If you did not request this, please ignore this email.</p>
-            `
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log("Password reset email sent successfully.");
-    res.json({ success: true, message: `Reset link sent to ${realEmail}` });
-
-  } catch (error) {
-    console.error("Forgot Password Error:", error);
-    if (error.code === 'auth/user-not-found') {
-      return res.status(404).json({ error: "Account not setup in Authentication system yet." });
-    }
-    res.status(500).json({ error: error.message });
-  }
-});
+})();
 
 // ==================================================================
 //                        HELPER FUNCTIONS
@@ -932,34 +783,25 @@ app.get('/api/admin/users', async (req, res) => {
 });
 
 // POST Toggle User Status (Enable/Disable)
-// POST Toggle User Status (Enable/Disable)
 app.post('/api/admin/users/:uid/status', async (req, res) => {
   const { uid } = req.params;
-  const { disabled, adminUid } = req.body;
+  const { disabled } = req.body;
 
   if (typeof disabled !== 'boolean') {
     return res.status(400).json({ error: "Disabled status must be a boolean" });
   }
 
   try {
-    // 1. Update Firebase Auth (Best Effort)
-    try {
-      await admin.auth().updateUser(uid, { disabled });
-    } catch (authErr) {
-      console.warn(`⚠️ Firebase Auth update failed (likely missing credentials), creating DB-only ban: ${authErr.message}`);
-    }
+    // 1. Update Firebase Auth
+    await admin.auth().updateUser(uid, { disabled });
 
-    // 2. Update DB (Critical Source of Truth) AND Get user email for log
-    const result = await pool.query('UPDATE users SET disabled = $1 WHERE uid = $2 RETURNING email', [disabled, uid]);
-    const targetEmail = result.rows.length > 0 ? result.rows[0].email : uid;
+    // 2. Update DB
+    await pool.query('UPDATE users SET disabled = $1 WHERE uid = $2', [disabled, uid]);
 
-    // 3. Log Activity
-    if (adminUid) {
-      const adminName = await getUserFullName(adminUid) || 'Admin';
-      const action = disabled ? 'DISABLE_USER' : 'ENABLE_USER';
-      await logActivity(adminUid, adminName, 'Admin', action, targetEmail, `User ${targetEmail} was ${disabled ? 'disabled' : 'enabled'}`);
-    }
-
+    // 3. Log
+    // (Assuming userUid comes from auth middleware/header, implemented loosely here for simplicity, 
+    // ideally should extract requester from token)
+    // For now, we'll log as 'System/Admin' if not provided
     console.log(`✅ User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
 
     res.json({ success: true });
@@ -969,34 +811,18 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
   }
 });
 
-
-
-// DELETE User
 // DELETE User
 app.delete('/api/admin/users/:uid', async (req, res) => {
   const { uid } = req.params;
-  const { adminUid } = req.query;
 
   try {
-    // 0. Get Target Info (Before Delete)
-    const userRes = await pool.query('SELECT email FROM users WHERE uid = $1', [uid]);
-    const targetEmail = userRes.rows.length > 0 ? userRes.rows[0].email : uid;
+    // 1. Delete from Firebase Auth
+    await admin.auth().deleteUser(uid);
 
-    // 1. Delete from Firebase Auth (Best Effort)
-    try {
-      await admin.auth().deleteUser(uid);
-    } catch (authErr) {
-      console.warn(`⚠️ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
-    }
-
-    // 2. Delete from DB (Critical Source of Truth)
+    // 2. Delete from DB (Users table)
+    // Note: Dependent records (logs, etc.) might need handling depending on FK constraints.
+    // Assuming simple deletion for now.
     await pool.query('DELETE FROM users WHERE uid = $1', [uid]);
-
-    // 3. Log Activity
-    if (adminUid) {
-      const adminName = await getUserFullName(adminUid) || 'Admin';
-      await logActivity(adminUid, adminName, 'Admin', 'DELETE_USER', targetEmail, `User ${targetEmail} was permanently deleted`);
-    }
 
     console.log(`✅ User ${uid} deleted permanently.`);
     res.json({ success: true });
@@ -1006,42 +832,11 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
   }
 });
 
-
-
 // ==================================================================
 //                        OTP & AUTH ROUTES
 // ==================================================================
 
 // Initialize OTP Table
-// (omitted for brevity)
-
-// --- USER VALIDATION ENDPOINT (STRICT LOGIN CHECK) ---
-app.get('/api/auth/validate/:uid', async (req, res) => {
-  const { uid } = req.params;
-  try {
-    const result = await pool.query('SELECT uid, disabled, role FROM users WHERE uid = $1', [uid]);
-
-    if (result.rows.length === 0) {
-      // User not found in SQL DB (Implicitly Deleted)
-      return res.json({ valid: false, reason: 'not_found' });
-    }
-
-    const user = result.rows[0];
-    if (user.disabled) {
-      return res.json({ valid: false, reason: 'disabled' });
-    }
-
-    // User exists and is active
-    res.json({ valid: true, role: user.role });
-
-  } catch (err) {
-    console.error("Validation Error:", err);
-    // Fail safe: If error, allow login but log it? Or block?
-    // Safer to block if we can't verify:
-    res.status(500).json({ error: "Validation failed" });
-  }
-});
-
 
 
 // --- POST: Send OTP (Real Email via Nodemailer) ---
@@ -1150,51 +945,6 @@ app.post('/api/verify-otp', async (req, res) => {
   } catch (err) {
     console.error("Verify Error:", err);
     return res.status(500).json({ success: false, message: "Server Verification Error" });
-  }
-});
-
-// --- 2a. GET: Check User by School ID ---
-app.get('/api/user-by-school/:schoolId', async (req, res) => {
-  const { schoolId } = req.params;
-
-  try {
-    // Check if school exists and get user ID
-    const schoolRes = await pool.query(
-      "SELECT submitted_by FROM school_profiles WHERE school_id = $1",
-      [schoolId]
-    );
-
-    if (schoolRes.rows.length === 0) {
-      return res.status(404).json({ error: "School not found" });
-    }
-
-    const uid = schoolRes.rows[0].submitted_by;
-
-    // Get user details from users table
-    const userRes = await pool.query(
-      "SELECT * FROM users WHERE uid = $1",
-      [uid]
-    );
-
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const user = userRes.rows[0];
-    res.json({
-      success: true,
-      user: {
-        uid: user.uid,
-        email: user.email,
-        role: user.role,
-        first_name: user.first_name,
-        last_name: user.last_name
-      }
-    });
-
-  } catch (error) {
-    console.error("Error fetching user by school ID:", error);
-    res.status(500).json({ error: "Failed to fetch user" });
   }
 });
 
@@ -1971,9 +1721,7 @@ app.post('/api/save-project', async (req, res) => {
       valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
       data.uid,
       newIpc, // $17
-      resolvedEngineerName, // $18
-      valueOrNull(data.latitude), // $19
-      valueOrNull(data.longitude) // $20
+      resolvedEngineerName // $18
     ];
 
     const projectQuery = `
@@ -1982,8 +1730,8 @@ app.post('/api/save-project', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name, latitude, longitude
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        engineer_id, ipc, engineer_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -2001,18 +1749,6 @@ app.post('/api/save-project', async (req, res) => {
 
       for (const imgBase64 of data.images) {
         await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
-      }
-    }
-
-    // 5. Insert Documents (POW, DUPA, CONTRACT)
-    if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
-      const docQuery = `
-        INSERT INTO "project_documents" (project_id, doc_type, file_data)
-        VALUES ($1, $2, $3)
-      `;
-      for (const doc of data.documents) {
-        // doc = { type: 'POW', base64: '...' }
-        await client.query(docQuery, [newProjectId, doc.type, doc.base64]);
       }
     }
 
@@ -2099,9 +1835,6 @@ app.put('/api/update-project/:id', async (req, res) => {
     const newStatusAsOf = valueOrNull(data.statusAsOfDate) || oldData.status_as_of;
     const newRemarks = valueOrNull(data.otherRemarks) || oldData.other_remarks;
     const newActualDate = valueOrNull(data.actualCompletionDate) || oldData.actual_completion_date;
-    const newLat = valueOrNull(data.latitude) || oldData.latitude;
-    const newLong = valueOrNull(data.longitude) || oldData.longitude;
-
 
     const insertValues = [
       oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
@@ -2110,9 +1843,7 @@ app.put('/api/update-project/:id', async (req, res) => {
       oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
-      finalUserName,       // Update Name string
-      newLat,              // $19
-      newLong              // $20
+      finalUserName        // Update Name string
     ];
 
     const insertQuery = `
@@ -2121,8 +1852,8 @@ app.put('/api/update-project/:id', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name, latitude, longitude
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        engineer_id, ipc, engineer_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *;
     `;
 
@@ -2195,8 +1926,7 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
-        latitude, longitude
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
       FROM LatestProjects
     `;
 
@@ -2251,8 +1981,7 @@ app.get('/api/projects/:id', async (req, res) => {
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
-        latitude, longitude
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
       FROM "engineer_form" WHERE project_id = $1;
     `;
     const result = await pool.query(query, [id]);
@@ -2277,8 +2006,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
         TO_CHAR(status_as_of, 'YYYY-MM-DD') AS "statusAsOfDate",
         TO_CHAR(target_completion_date, 'YYYY-MM-DD') AS "targetCompletionDate",
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
-        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
-        latitude, longitude
+        TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed"
       FROM engineer_form WHERE TRIM(school_id) = TRIM($1)
       ORDER BY project_id DESC;
     `;
@@ -2379,7 +2107,6 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
                 classes_grade_7, classes_grade_8, classes_grade_9, classes_grade_10,
                 classes_grade_11, classes_grade_12,
                 
-                cnt_less_kinder, cnt_within_kinder, cnt_above_kinder,
                 cnt_less_g1, cnt_within_g1, cnt_above_g1,
                 cnt_less_g2, cnt_within_g2, cnt_above_g2,
                 cnt_less_g3, cnt_within_g3, cnt_above_g3,
@@ -2415,7 +2142,6 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
         grade_9: row.classes_grade_9, grade_10: row.classes_grade_10,
         grade_11: row.classes_grade_11, grade_12: row.classes_grade_12,
 
-        cnt_less_kinder: row.cnt_less_kinder, cnt_within_kinder: row.cnt_within_kinder, cnt_above_kinder: row.cnt_above_kinder,
         cnt_less_g1: row.cnt_less_g1, cnt_within_g1: row.cnt_within_g1, cnt_above_g1: row.cnt_above_g1,
         cnt_less_g2: row.cnt_less_g2, cnt_within_g2: row.cnt_within_g2, cnt_above_g2: row.cnt_above_g2,
         cnt_less_g3: row.cnt_less_g3, cnt_within_g3: row.cnt_within_g3, cnt_above_g3: row.cnt_above_g3,
@@ -2450,7 +2176,6 @@ app.post('/api/save-organized-classes', async (req, res) => {
                 classes_grade_7 = $9, classes_grade_8 = $10, classes_grade_9 = $11,
                 classes_grade_10 = $12, classes_grade_11 = $13, classes_grade_12 = $14,
                 
-                cnt_less_kinder = $51, cnt_within_kinder = $52, cnt_above_kinder = $53,
                 cnt_less_g1 = $15, cnt_within_g1 = $16, cnt_above_g1 = $17,
                 cnt_less_g2 = $18, cnt_within_g2 = $19, cnt_above_g2 = $20,
                 cnt_less_g3 = $21, cnt_within_g3 = $22, cnt_above_g3 = $23,
@@ -2486,9 +2211,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
       data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
       data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
       data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
-      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
-
-      data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0
+      data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0
     ]);
 
     if (result.rowCount === 0) {
@@ -2840,12 +2563,6 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_tle_major=$16, spec_tle_teaching=$17,
                 spec_guidance=$18, spec_librarian=$19,
                 spec_ict_coord=$20, spec_drrm_coord=$21,
-                spec_general_major=$22, spec_general_teaching=$23,
-                spec_ece_major=$24, spec_ece_teaching=$25,
-                spec_bio_sci_major=$26, spec_bio_sci_teaching=$27,
-                spec_phys_sci_major=$28, spec_phys_sci_teaching=$29,
-                spec_agri_fishery_major=$30, spec_agri_fishery_teaching=$31,
-                spec_others_major=$32, spec_others_teaching=$33,
                 updated_at = CURRENT_TIMESTAMP
             WHERE submitted_by = $1;
         `;
@@ -2860,13 +2577,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       d.spec_esp_major || 0, d.spec_esp_teaching || 0,
       d.spec_tle_major || 0, d.spec_tle_teaching || 0,
       d.spec_guidance || 0, d.spec_librarian || 0,
-      d.spec_ict_coord || 0, d.spec_drrm_coord || 0,
-      d.spec_general_major || 0, d.spec_general_teaching || 0,
-      d.spec_ece_major || 0, d.spec_ece_teaching || 0,
-      d.spec_bio_sci_major || 0, d.spec_bio_sci_teaching || 0,
-      d.spec_phys_sci_major || 0, d.spec_phys_sci_teaching || 0,
-      d.spec_agri_fishery_major || 0, d.spec_agri_fishery_teaching || 0,
-      d.spec_others_major || 0, d.spec_others_teaching || 0
+      d.spec_ict_coord || 0, d.spec_drrm_coord || 0
     ];
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
@@ -3540,14 +3251,6 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Always start if strictly detected as main, OR if explicitly forced by env (fallback)
-// Debugging Startup Logic
-console.log('--- Startup Debug Info ---');
-console.log('Executed File:', process.argv[1]);
-console.log('Current File:', fileURLToPath(import.meta.url));
-console.log('Is Main Module?', isMainModule);
-console.log('Force Start Env?', process.env.START_SERVER);
-console.log('--------------------------');
-
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
 

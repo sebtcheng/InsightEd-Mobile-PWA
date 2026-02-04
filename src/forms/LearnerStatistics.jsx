@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiSave, FiUsers, FiArrowLeft, FiGrid, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import { TbActivity } from 'react-icons/tb';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../firebase';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
@@ -11,7 +11,7 @@ import SuccessModal from '../components/SuccessModal';
 const getGrades = () => ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'];
 
 // --- SUB-COMPONENT (Moved Outside to prevent re-renders) ---
-const GridSection = ({ label, category, icon, color, formData, onGridChange, isLocked }) => {
+const GridSection = ({ label, category, icon, color, formData, onGridChange, isLocked, description }) => {
     const grades = getGrades();
 
     // Helper to get value specifically for this component instance
@@ -48,6 +48,7 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
                     <div>
                         <h2 className="text-base font-bold text-slate-800">{label}</h2>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Per Grade Level</p>
+                        {description && <p className="text-[10px] text-slate-500 font-medium leading-tight max-w-md mt-1">{description}</p>}
                     </div>
                 </div>
                 {/* Read-only Totals Badge */}
@@ -110,9 +111,15 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
 const LearnerStatistics = () => {
     const navigate = useNavigate();
     // Use location to determine viewOnly mode
-    const location = window.location;
-    const queryParams = new URLSearchParams(location.search);
-    const viewOnly = queryParams.get('viewOnly') === 'true';
+    const location = useLocation();
+    const isDummy = location.state?.isDummy || false;
+
+    // Determine Read-Only Status
+    // We need to wait for auth to confirm role, but for isDummy it's immediate
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+
+    const queryParams = new URLSearchParams(window.location.search);
+    const viewOnly = queryParams.get('viewOnly') === 'true'; // Legacy viewOnly
     const monitorSchoolId = queryParams.get('schoolId');
 
     const [loading, setLoading] = useState(true);
@@ -182,6 +189,27 @@ const LearnerStatistics = () => {
             const user = auth.currentUser;
             if (!user) return;
 
+            // Check Role for Read-Only
+            // We can also check this from a global context if available, but fetching from token/profile is safe
+            // Assuming the passed user object or fetching from DB. 
+            // Since we are already fetching data, we might as well check the role if not stored.
+            // However, simpler is to check if we are in 'monitoring' mode via props or context?
+            // For now, let's trust the 'Central Office' check if we had user data.
+            // But 'auth.currentUser' doesn't have the role in standard firebase auth profile usually, 
+            // unless custom claims. We usually store it in local state or DB.
+            // The safest bet without fetching user doc again (if not passed) is to check localStorage 
+            // if we trust it, or fetch.
+            // EXISTING CODE doesn't fetch user role here explicitly for logic, but let's see.
+            // The file `DummyDashboard` passes `isDummy`. 
+            // We'll rely on `isDummy` and also check `localStorage.getItem('userRole')` if available 
+            // or fetch the user doc if needed. Use a quick check:
+            try {
+                const role = localStorage.getItem('userRole');
+                if (role === 'Central Office' || isDummy) {
+                    setIsReadOnly(true);
+                }
+            } catch (e) { }
+
             const storedSchoolId = localStorage.getItem('schoolId');
             const storedOffering = localStorage.getItem('schoolOffering');
 
@@ -243,7 +271,14 @@ const LearnerStatistics = () => {
 
                 // 2. FETCH FROM API (If not restored)
                 if (!restored) {
-                    const res = await fetch(`/api/learner-statistics/${user.uid}`);
+                    let fetchUrl = `/api/learner-statistics/${user.uid}`;
+                    // Check logic for CO/Monitoring
+                    const role = localStorage.getItem('userRole');
+                    if ((viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId) {
+                        fetchUrl = `/api/monitoring/school-detail/${monitorSchoolId}`;
+                    }
+
+                    const res = await fetch(fetchUrl);
                     const result = await res.json();
                     if (result.exists) {
                         const fallbackOffering = result.data.curricular_offering || storedOffering || '';
@@ -522,20 +557,22 @@ const LearnerStatistics = () => {
                 <GridSection
                     label="SNEd (Special Needs)"
                     category="sned"
+                    description="Learner who is receiving specialized support services based on the educational support required (e.g., needs a sign language interpreter, needs Braille materials)."
                     icon={<TbActivity />}
                     color="text-purple-600"
                     formData={formData}
                     onGridChange={handleGridChange}
-                    isLocked={isLocked}
+                    isLocked={isLocked || isReadOnly}
                 />
                 <GridSection
                     label="Learners with Disability"
                     category="disability"
+                    description="Learner with specific condition or impairment based on medical diagnosis or observed functional difficulty (e.g., difficulty walking, low vision)."
                     icon={<TbActivity />}
                     color="text-amber-600"
                     formData={formData}
                     onGridChange={handleGridChange}
-                    isLocked={isLocked}
+                    isLocked={isLocked || isReadOnly}
                 />
                 <GridSection
                     label="ALS Learners"
@@ -544,7 +581,7 @@ const LearnerStatistics = () => {
                     color="text-green-600"
                     formData={formData}
                     onGridChange={handleGridChange}
-                    isLocked={isLocked}
+                    isLocked={isLocked || isReadOnly}
                 />
 
                 {/* --- MUSLIM LEARNERS --- */}
@@ -555,7 +592,7 @@ const LearnerStatistics = () => {
                     color="text-emerald-600"
                     formData={formData}
                     onGridChange={handleGridChange}
-                    isLocked={isLocked}
+                    isLocked={isLocked || isReadOnly}
                 />
 
                 {/* --- GROUPS --- */}
@@ -566,7 +603,7 @@ const LearnerStatistics = () => {
                     color="text-blue-600"
                     formData={formData}
                     onGridChange={handleGridChange}
-                    isLocked={isLocked}
+                    isLocked={isLocked || isReadOnly}
                 />
                 <GridSection
                     label="Displaced Learners"
@@ -575,7 +612,7 @@ const LearnerStatistics = () => {
                     color="text-rose-600"
                     formData={formData}
                     onGridChange={handleGridChange}
-                    isLocked={isLocked}
+                    isLocked={isLocked || isReadOnly}
                 />
 
                 {/* --- STATUS --- */}
@@ -591,6 +628,7 @@ const LearnerStatistics = () => {
                 <GridSection
                     label="Overage"
                     category="overage"
+                    description={<>Learner who is <span className="font-bold text-slate-600">two (2) or more years</span> older than the standard expected age for that grade level.</>}
                     icon={<FiGrid />}
                     color="text-orange-600"
                     formData={formData}
@@ -609,7 +647,7 @@ const LearnerStatistics = () => {
             </div>
 
             {/* --- FLOATING ACTION BAR --- */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50">
+            <div className={`fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50 ${isReadOnly ? 'hidden' : ''}`}>
                 <div className="max-w-4xl mx-auto flex gap-3">
                     {isLocked ? (
                         <button

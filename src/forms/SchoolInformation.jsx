@@ -16,6 +16,7 @@ const SchoolInformation = () => {
     // --- STATE MANAGEMENT ---
     const location = useLocation();
     const isDummy = location.state?.isDummy || false; // NEW: Dummy Mode Check
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
@@ -113,6 +114,14 @@ const SchoolInformation = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Check Role for Read-Only
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                    }
+                } catch (e) { }
+
                 // STEP 1: IMMEDIATE CACHE LOAD
                 let loadedFromCache = false;
                 const CACHE_KEY = `CACHE_SCHOOL_INFO_${user.uid}`;
@@ -163,7 +172,8 @@ const SchoolInformation = () => {
                     // STEP 3: BACKGROUND FETCH
                     if (!restored) {
                         let fetchUrl = `/api/school-head/${user.uid}`;
-                        if (viewOnly && schoolIdParam) {
+                        const role = localStorage.getItem('userRole');
+                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -379,7 +389,7 @@ const SchoolInformation = () => {
                             )}
                         </div>
                         <p className="text-blue-100 text-xs font-medium mt-1">
-                            {viewOnly ? "Monitor View (Read-Only)" : (lastUpdated ? `Last Verified: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage personnel record')}
+                            {(viewOnly || isReadOnly) ? "Monitor View (Read-Only)" : (lastUpdated ? `Last Verified: ${new Date(lastUpdated).toLocaleDateString()}` : 'Manage personnel record')}
                         </p>
                     </div>
                 </div>
@@ -411,7 +421,7 @@ const SchoolInformation = () => {
                             onFocus={handleItemNumberFocus}
                             placeholder="e.g. OSEC-DECSB-ADA1-27-2004"
                             className={`${inputClass} !border-blue-200 text-blue-700`}
-                            disabled={isLocked || viewOnly || isDummy}
+                            disabled={isLocked || viewOnly || isDummy || isReadOnly}
                         />
                         {isSearching && (
                             <div className="absolute right-4 bottom-3 animate-spin text-blue-500">
@@ -419,7 +429,7 @@ const SchoolInformation = () => {
                             </div>
                         )}
                     </div>
-                    {!isLocked && !viewOnly && !isDummy && (
+                    {!isLocked && !viewOnly && !isDummy && !isReadOnly && (
                         <p className="text-[10px] text-blue-400 mt-2 font-medium ml-1">
                             💡 Enter Item Number and tap outside to autofill details.
                         </p>
@@ -442,17 +452,17 @@ const SchoolInformation = () => {
                         <div className="space-y-1">
                             <label className={labelClass}>First Name</label>
                             <p className="text-[10px] text-slate-400 font-medium mb-1.5">Given name as it appears on your appointment.</p>
-                            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
+                            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                         </div>
                         <div className="space-y-1">
                             <label className={labelClass}>Middle Name</label>
                             <p className="text-[10px] text-slate-400 font-medium mb-1.5">Mother's maiden name (Full, not initial).</p>
-                            <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
+                            <input type="text" name="middleName" value={formData.middleName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                         </div>
                         <div className="space-y-1">
                             <label className={labelClass}>Last Name</label>
                             <p className="text-[10px] text-slate-400 font-medium mb-1.5">Family name / Surname.</p>
-                            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy} />
+                            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                         </div>
                     </div>
                 </div>
@@ -474,7 +484,7 @@ const SchoolInformation = () => {
                         <div className="space-y-1">
                             <label className={labelClass}>Position Title</label>
                             <p className="text-[10px] text-slate-400 font-medium mb-1.5">Select your official designation per appointment.</p>
-                            <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy}>
+                            <select name="positionTitle" value={formData.positionTitle} onChange={handleChange} className={inputClass} disabled={isLocked || viewOnly || isDummy || isReadOnly}>
                                 <option value="">Select Position...</option>
                                 {positionOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                             </select>
@@ -488,7 +498,7 @@ const SchoolInformation = () => {
                                     value={formData.dateHired ? parseInt(formData.dateHired.split('-')[1]) - 1 : ''}
                                     onChange={(e) => handleDateChange('month', e.target.value)}
                                     className={`${inputClass} flex-[2] min-w-0`}
-                                    disabled={isLocked || viewOnly || isDummy}
+                                    disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                 >
                                     <option value="" disabled>Month</option>
                                     {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -499,7 +509,7 @@ const SchoolInformation = () => {
                                     value={formData.dateHired ? parseInt(formData.dateHired.split('-')[2]) : ''}
                                     onChange={(e) => handleDateChange('day', e.target.value)}
                                     className={`${inputClass} flex-1 min-w-[70px]`}
-                                    disabled={isLocked || viewOnly || isDummy}
+                                    disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                 >
                                     <option value="" disabled>Day</option>
                                     {days.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -510,7 +520,7 @@ const SchoolInformation = () => {
                                     value={formData.dateHired ? parseInt(formData.dateHired.split('-')[0]) : ''}
                                     onChange={(e) => handleDateChange('year', e.target.value)}
                                     className={`${inputClass} flex-[1.5] min-w-[80px]`}
-                                    disabled={isLocked || viewOnly || isDummy}
+                                    disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                 >
                                     <option value="" disabled>Year</option>
                                     {years.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -524,7 +534,7 @@ const SchoolInformation = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">

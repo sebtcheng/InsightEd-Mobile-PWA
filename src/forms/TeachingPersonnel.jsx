@@ -40,6 +40,8 @@ const TeachingPersonnel = () => {
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
+    const isDummy = location.state?.isDummy || false;
+    const [isReadOnly, setIsReadOnly] = useState(isDummy);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -83,7 +85,7 @@ const TeachingPersonnel = () => {
         teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
         teach_exp_40_45: 0,
     });
-    const isDummy = location.state?.isDummy || false;
+
     const [originalData, setOriginalData] = useState(null);
 
     const goBack = () => {
@@ -98,6 +100,14 @@ const TeachingPersonnel = () => {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
+                // Check Role for Read-Only
+                try {
+                    const role = localStorage.getItem('userRole');
+                    if (role === 'Central Office' || isDummy) {
+                        setIsReadOnly(true);
+                    }
+                } catch (e) { }
+
                 const storedSchoolId = localStorage.getItem('schoolId');
                 const storedOffering = localStorage.getItem('schoolOffering');
                 if (storedSchoolId) setSchoolId(storedSchoolId);
@@ -170,7 +180,8 @@ const TeachingPersonnel = () => {
                     // B. Network Fetch
                     if (!restored) {
                         let fetchUrl = `/api/teaching-personnel/${user.uid}`;
-                        if (viewOnly && schoolIdParam) {
+                        const role = localStorage.getItem('userRole');
+                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -468,13 +479,13 @@ const TeachingPersonnel = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <TeacherInput label="Kinder" name="teach_kinder" value={formData.teach_kinder ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 1" name="teach_g1" value={formData.teach_g1 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 2" name="teach_g2" value={formData.teach_g2 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 3" name="teach_g3" value={formData.teach_g3 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 4" name="teach_g4" value={formData.teach_g4 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 5" name="teach_g5" value={formData.teach_g5 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 6" name="teach_g6" value={formData.teach_g6 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Kinder" name="teach_kinder" value={formData.teach_kinder ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 1" name="teach_g1" value={formData.teach_g1 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 2" name="teach_g2" value={formData.teach_g2 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 3" name="teach_g3" value={formData.teach_g3 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 4" name="teach_g4" value={formData.teach_g4 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 5" name="teach_g5" value={formData.teach_g5 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 6" name="teach_g6" value={formData.teach_g6 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                             </div>
                         </div>
                     )}
@@ -491,10 +502,10 @@ const TeachingPersonnel = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <TeacherInput label="Grade 7" name="teach_g7" value={formData.teach_g7 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 8" name="teach_g8" value={formData.teach_g8 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 9" name="teach_g9" value={formData.teach_g9 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 10" name="teach_g10" value={formData.teach_g10 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 7" name="teach_g7" value={formData.teach_g7 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 8" name="teach_g8" value={formData.teach_g8 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 9" name="teach_g9" value={formData.teach_g9 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 10" name="teach_g10" value={formData.teach_g10 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                             </div>
                         </div>
                     )}
@@ -511,8 +522,8 @@ const TeachingPersonnel = () => {
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <TeacherInput label="Grade 11" name="teach_g11" value={formData.teach_g11 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 12" name="teach_g12" value={formData.teach_g12 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 11" name="teach_g11" value={formData.teach_g11 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 12" name="teach_g12" value={formData.teach_g12 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                             </div>
                         </div>
                     )}
@@ -530,9 +541,9 @@ const TeachingPersonnel = () => {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mb-8">
-                                <TeacherInput label="Grade 1 & 2" name="teach_multi_1_2" value={formData.teach_multi_1_2 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 3 & 4" name="teach_multi_3_4" value={formData.teach_multi_3_4 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                                <TeacherInput label="Grade 5 & 6" name="teach_multi_5_6" value={formData.teach_multi_5_6 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                <TeacherInput label="Grade 1 & 2" name="teach_multi_1_2" value={formData.teach_multi_1_2 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 3 & 4" name="teach_multi_3_4" value={formData.teach_multi_3_4 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                                <TeacherInput label="Grade 5 & 6" name="teach_multi_5_6" value={formData.teach_multi_5_6 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                             </div>
 
                             <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
@@ -547,7 +558,7 @@ const TeachingPersonnel = () => {
                                             ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-[1.02]'
                                             : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                                             }`}
-                                        disabled={isLocked || viewOnly}
+                                        disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                     >
                                         Yes
                                     </button>
@@ -558,7 +569,7 @@ const TeachingPersonnel = () => {
                                             ? 'bg-slate-700 text-white border-slate-700 shadow-md transform scale-[1.02]'
                                             : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                                             }`}
-                                        disabled={isLocked || viewOnly}
+                                        disabled={isLocked || viewOnly || isDummy || isReadOnly}
                                     >
                                         No
                                     </button>
@@ -566,7 +577,7 @@ const TeachingPersonnel = () => {
 
                                 {formData.teach_multi_3plus_flag && (
                                     <div className="mt-6 animate-in slide-in-from-top-2 fade-in duration-300">
-                                        <TeacherInput label="How many teachers?" name="teach_multi_3plus_count" value={formData.teach_multi_3plus_count ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                                        <TeacherInput label="How many teachers?" name="teach_multi_3plus_count" value={formData.teach_multi_3plus_count ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                                     </div>
                                 )}
                             </div>
@@ -584,16 +595,16 @@ const TeachingPersonnel = () => {
                             </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" value={formData.teach_exp_0_1 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" value={formData.teach_exp_2_5 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" value={formData.teach_exp_6_10 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" value={formData.teach_exp_11_15 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" value={formData.teach_exp_16_20 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" value={formData.teach_exp_21_25 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" value={formData.teach_exp_26_30 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" value={formData.teach_exp_31_35 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" value={formData.teach_exp_36_40 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
-                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" value={formData.teach_exp_40_45 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly} />
+                            <TeacherInput label="0-1 Years" name="teach_exp_0_1" value={formData.teach_exp_0_1 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="2-5 Years" name="teach_exp_2_5" value={formData.teach_exp_2_5 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="6-10 Years" name="teach_exp_6_10" value={formData.teach_exp_6_10 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="11-15 Years" name="teach_exp_11_15" value={formData.teach_exp_11_15 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="16-20 Years" name="teach_exp_16_20" value={formData.teach_exp_16_20 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="21-25 Years" name="teach_exp_21_25" value={formData.teach_exp_21_25 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="26-30 Years" name="teach_exp_26_30" value={formData.teach_exp_26_30 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="31-35 Years" name="teach_exp_31_35" value={formData.teach_exp_31_35 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="36-40 Years" name="teach_exp_36_40" value={formData.teach_exp_36_40 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="40-45 Years" name="teach_exp_40_45" value={formData.teach_exp_40_45 ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
                         </div>
                     </div>
                 </form>
@@ -602,7 +613,7 @@ const TeachingPersonnel = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {viewOnly ? (
+                    {(viewOnly || isReadOnly) ? (
                         <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
