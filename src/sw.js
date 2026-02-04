@@ -6,7 +6,13 @@ import { clientsClaim } from 'workbox-core';
 // This automatically loads the correct file list from Vite (index-XH23.js, etc.)
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
-self.skipWaiting();
+
+// Listen for the 'SKIP_WAITING' message from the client
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+});
 clientsClaim();
 
 // Register a navigation route that returns the cached 'index.html'

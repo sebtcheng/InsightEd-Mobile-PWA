@@ -1584,6 +1584,25 @@ app.post('/api/save-school', async (req, res) => {
   }
 });
 
+// --- 4b. GET: Fetch Full School Profile ---
+app.get('/api/school-profile/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    // Return standard format expected by frontend
+    res.json({
+      exists: true,
+      data: result.rows[0],
+      school_id: result.rows[0].school_id,
+      curricular_offering: result.rows[0].curricular_offering
+    });
+  } catch (err) {
+    console.error("Fetch School Profile Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 // --- 5. POST: Save School Head Info (Updated to match Enrolment logic) ---
 app.post('/api/save-school-head', async (req, res) => {
   const data = req.body;
@@ -2827,10 +2846,20 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 // --- 26. POST: Save Teacher Specialization ---
 app.post('/api/save-teacher-specialization', async (req, res) => {
   const d = req.body;
+  console.log("Saving Specialization. Gen:", d.spec_general_major, "ECE:", d.spec_ece_major);
   try {
+    // Ensure columns exist (Hotfix for missing migration)
+    await pool.query(`
+        ALTER TABLE school_profiles 
+        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0;
+    `);
     const query = `
             UPDATE school_profiles SET 
                 spec_english_major=$2, spec_english_teaching=$3,
+
                 spec_filipino_major=$4, spec_filipino_teaching=$5,
                 spec_math_major=$6, spec_math_teaching=$7,
                 spec_science_major=$8, spec_science_teaching=$9,

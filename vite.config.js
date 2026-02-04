@@ -11,6 +11,7 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       registerType: 'autoUpdate',
+      injectRegister: null, // <--- Disable auto injection to use manual registration in Context
       manifestFilename: 'manifest.json', // Set the output filename
       devOptions: {
         enabled: true,
