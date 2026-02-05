@@ -269,11 +269,56 @@ const MonitoringDashboard = () => {
         if (userData?.role === 'Regional Office') {
             setLoadingDistrict(true);
             try {
-                // Fetch ALL schools in this division
+                // Fetch ALL schools in this division (API Data)
                 const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(userData.region)}&division=${encodeURIComponent(division)}`);
+                let apiSchools = [];
                 if (res.ok) {
-                    setDistrictSchools(await res.json());
+                    apiSchools = await res.json();
                 }
+
+                // MERGE: Combine CSV Master List with API Data
+                // Filter CSV for this region/division
+                const masterList = schoolData.filter(s => 
+                    normalizeLocationName(s.region) === normalizeLocationName(userData.region) &&
+                    normalizeLocationName(s.division) === normalizeLocationName(division)
+                );
+
+                // Map to unified format
+                const mergedSchools = masterList.map(csvSchool => {
+                    // Find matching API record (by School ID preferred, or Name)
+                    const apiMatch = apiSchools.find(api => 
+                        api.school_id === csvSchool.school_id || 
+                        normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
+                    );
+
+                    if (apiMatch) {
+                        return apiMatch; // Return the full API record if validation exists
+                    } else {
+                        // Return Mock Object for Missing Schools
+                        return {
+                            school_name: csvSchool.school_name,
+                            school_id: csvSchool.school_id,
+                            district: csvSchool.district,
+                            // Set all statuses to false
+                            profile_status: false,
+                            head_status: false,
+                            enrollment_status: false,
+                            classes_status: false,
+                            shifting_status: false,
+                            personnel_status: false,
+                            specialization_status: false,
+                            resources_status: false,
+                            learner_stats_status: false,
+                            facilities_status: false, 
+                            submitted_by: null
+                        };
+                    }
+                });
+
+                // Sort by name
+                mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
+                setDistrictSchools(mergedSchools);
+
             } catch (err) {
                 console.error(err);
             } finally {
@@ -302,10 +347,49 @@ const MonitoringDashboard = () => {
                 const division = userData.role === 'Central Office' ? coDivision : userData.division;
 
                 const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}`);
+                let apiSchools = [];
                 if (res.ok) {
-                    const data = await res.json();
-                    setDistrictSchools(data);
+                    apiSchools = await res.json();
                 }
+
+                // MERGE: Combine CSV Master List with API Data
+                const masterList = schoolData.filter(s => 
+                    normalizeLocationName(s.region) === normalizeLocationName(region) &&
+                    normalizeLocationName(s.division) === normalizeLocationName(division) &&
+                    normalizeLocationName(s.district) === normalizeLocationName(district)
+                );
+
+                const mergedSchools = masterList.map(csvSchool => {
+                    const apiMatch = apiSchools.find(api => 
+                        api.school_id === csvSchool.school_id || 
+                        normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
+                    );
+
+                    if (apiMatch) {
+                        return apiMatch;
+                    } else {
+                         return {
+                            school_name: csvSchool.school_name,
+                            school_id: csvSchool.school_id,
+                            district: csvSchool.district,
+                            profile_status: false,
+                            head_status: false,
+                            enrollment_status: false,
+                            classes_status: false,
+                            shifting_status: false,
+                            personnel_status: false,
+                            specialization_status: false,
+                            resources_status: false,
+                            learner_stats_status: false,
+                            facilities_status: false, 
+                            submitted_by: null
+                        };
+                    }
+                });
+                
+                mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
+                setDistrictSchools(mergedSchools);
+
             } catch (error) {
                 console.error("Failed to fetch district schools:", error);
             } finally {
