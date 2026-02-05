@@ -101,7 +101,13 @@ const Enrolment = () => {
     const [formData, setFormData] = useState(initialFields);
     const [originalData, setOriginalData] = useState(initialFields);
 
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate('/dummy-forms', { state: { type: 'school' } });
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- VISIBILITY HELPERS ---
     const showElem = () => curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10") || !curricularOffering;

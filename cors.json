@@ -8,12 +8,7 @@
             "PUT",
             "POST",
             "DELETE",
-            "HEAD",
-            "OPTIONS"
-        ],
-        "responseHeader": [
-            "Content-Type",
-            "x-goog-resumable"
+            "HEAD"
         ],
         "maxAgeSeconds": 3600
     }

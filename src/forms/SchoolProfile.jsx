@@ -69,7 +69,7 @@ const SchoolProfile = () => {
     const [originalData, setOriginalData] = useState(null);
     const goBack = () => {
         if (isDummy) {
-            navigate(-1);
+            navigate('/dummy-forms', { state: { type: 'school' } });
         } else if (viewOnly) {
             navigate('/jurisdiction-schools');
         } else {

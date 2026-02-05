@@ -90,7 +90,7 @@ const OrganizedClasses = () => {
 
     const goBack = () => {
         if (isDummy) {
-            navigate(-1);
+            navigate('/dummy-forms', { state: { type: 'school' } });
         } else {
             navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
         }

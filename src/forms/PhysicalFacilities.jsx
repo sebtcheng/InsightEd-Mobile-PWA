@@ -77,7 +77,13 @@ const PhysicalFacilities = () => {
         build_classrooms_demolition: 0
     };
 
-    const goBack = () => navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+    const goBack = () => {
+        if (isDummy) {
+            navigate('/dummy-forms', { state: { type: 'school' } });
+        } else {
+            navigate(viewOnly ? '/jurisdiction-schools' : '/school-forms');
+        }
+    };
 
     // --- FETCH DATA (Refactored for Sync Cache) ---
     useEffect(() => {

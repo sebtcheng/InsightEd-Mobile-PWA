@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { TbChevronLeft, TbSchool, TbUsers, TbBooks, TbActivity, TbHammer, TbClipboardList, TbBuildingSkyscraper, TbReportAnalytics, TbMapSearch } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck } from "react-icons/lu";
+import { FiArrowLeft } from "react-icons/fi";
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
@@ -62,20 +63,25 @@ const DummyDashboard = () => {
         <PageTransition>
             <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24">
                 {/* Header */}
-                <div className="bg-[#004A99] pt-14 pb-12 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
+                {/* Header */}
+                <div className="bg-[#004A99] pt-10 pb-12 px-6 rounded-b-[2.5rem] shadow-xl relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-8 opacity-10">
                         <ICON size={120} className="text-white" />
                     </div>
 
-                    <h1 className="text-2xl font-bold text-white mb-2 mt-4 relative z-10">{TITLE}</h1>
-                    <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20">
-                        <p className="text-white text-xs font-bold uppercase tracking-wider">
-                            Read-Only Preview
+                    <div className="relative z-10">
+
+
+                        <h1 className="text-2xl font-bold text-white mb-2">{TITLE}</h1>
+                        <div className="inline-block bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20">
+                            <p className="text-white text-xs font-bold uppercase tracking-wider">
+                                Read-Only Preview
+                            </p>
+                        </div>
+                        <p className="text-blue-100 text-sm mt-4 max-w-xs opactiy-90">
+                            {DESCRIPTION}
                         </p>
                     </div>
-                    <p className="text-blue-100 text-sm mt-4 max-w-xs relative z-10 opactiy-90">
-                        {DESCRIPTION}
-                    </p>
                 </div>
 
                 {/* Content */}

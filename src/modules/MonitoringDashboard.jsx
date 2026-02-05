@@ -46,6 +46,8 @@ const MonitoringDashboard = () => {
     const [districtSchools, setDistrictSchools] = useState([]); // Schools for Drill-down
     const [loadingDistrict, setLoadingDistrict] = useState(false);
     const [schoolSort, setSchoolSort] = useState('pct-desc'); // Sort state for schools
+    const [schoolSearch, setSchoolSearch] = useState(''); // NEW: Search state
+    const [schoolPage, setSchoolPage] = useState(1); // NEW: Pagination state
 
     // NEW: Store Aggregated CSV Totals
     const [csvRegionalTotals, setCsvRegionalTotals] = useState({});
@@ -260,6 +262,8 @@ const MonitoringDashboard = () => {
     const handleDivisionChange = async (division) => {
         setCoDivision(division);
         setCoDistrict(''); // Reset district
+        setSchoolSearch(''); // Reset search
+        setSchoolPage(1); // Reset pagination
 
         // NEW: For Regional Office, fetch schools immediately (Skip District)
         if (userData?.role === 'Regional Office') {
@@ -286,6 +290,8 @@ const MonitoringDashboard = () => {
 
     const handleDistrictChange = async (district) => {
         setCoDistrict(district);
+        setSchoolSearch(''); // Reset search
+        setSchoolPage(1); // Reset pagination
 
         if (district) {
             setLoadingDistrict(true);
@@ -961,69 +967,97 @@ const MonitoringDashboard = () => {
                                                 // Actually, the user asked for a sort feature. I must add state.
                                                 // I will use a ref or just hardcode a default for this step and then add the state variable in `MonitoringDashboard` top level.
 
-                                                // Let's modify the code to assume `schoolSort` state exists. I will add it in a subsequent tool call.
-                                                const sortedSchools = [...schoolsWithStats].sort((a, b) => {
+                                                // FILTER & SORT
+                                                const filteredSchools = schoolsWithStats.filter(s => 
+                                                    s.school_name?.toLowerCase().includes(schoolSearch.toLowerCase()) || 
+                                                    s.school_id?.includes(schoolSearch)
+                                                );
+
+                                                const sortedSchools = [...filteredSchools].sort((a, b) => {
                                                     if (schoolSort === 'name-asc') return a.school_name.localeCompare(b.school_name);
                                                     if (schoolSort === 'pct-desc') return b.percentage - a.percentage;
                                                     if (schoolSort === 'pct-asc') return a.percentage - b.percentage;
                                                     return 0;
                                                 });
 
+                                                // PAGINATION
+                                                const ITEMS_PER_PAGE = 10;
+                                                const totalPages = Math.ceil(sortedSchools.length / ITEMS_PER_PAGE);
+                                                const startIndex = (schoolPage - 1) * ITEMS_PER_PAGE;
+                                                const paginatedSchools = sortedSchools.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
                                                 return (
                                                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                                                         {/* Header with Back Button */}
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-3">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        if (userData?.role === 'Regional Office') {
-                                                                            handleDivisionChange(''); // Back to Division List
-                                                                        } else {
-                                                                            handleDistrictChange(''); // Back to District List
-                                                                        }
-                                                                    }}
-                                                                    className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
-                                                                >
-                                                                    <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
-                                                                </button>
-                                                                <div>
-                                                                    <h3 className="font-black text-xl text-slate-800 dark:text-white">
-                                                                        {userData?.role === 'Regional Office' ? coDivision : coDistrict}
-                                                                    </h3>
-                                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">School List</p>
+                                                        <div className="flex flex-col gap-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-3">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            if (userData?.role === 'Regional Office') {
+                                                                                handleDivisionChange(''); // Back to Division List
+                                                                            } else {
+                                                                                handleDistrictChange(''); // Back to District List
+                                                                            }
+                                                                        }}
+                                                                        className="p-2 bg-slate-100 dark:bg-slate-700 rounded-full hover:bg-slate-200 transition"
+                                                                    >
+                                                                        <FiArrowLeft size={18} className="text-slate-600 dark:text-slate-300" />
+                                                                    </button>
+                                                                    <div>
+                                                                        <h3 className="font-black text-xl text-slate-800 dark:text-white">
+                                                                            {userData?.role === 'Regional Office' ? coDivision : coDistrict}
+                                                                        </h3>
+                                                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sortedSchools.length} Schools</p>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Sort Controls */}
+                                                                <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
+                                                                    <button
+                                                                        onClick={() => setSchoolSort('name-asc')}
+                                                                        className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'name-asc' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}
+                                                                        title="Sort A-Z"
+                                                                    >
+                                                                        A-Z
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setSchoolSort('pct-desc')}
+                                                                        className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-desc' ? 'bg-white dark:bg-slate-600 shadow text-emerald-600 dark:text-emerald-300' : 'text-slate-400'}`}
+                                                                        title="Sort % High-Low"
+                                                                    >
+                                                                        % High
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setSchoolSort('pct-asc')}
+                                                                        className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-asc' ? 'bg-white dark:bg-slate-600 shadow text-rose-600 dark:text-rose-300' : 'text-slate-400'}`}
+                                                                        title="Sort % Low-High"
+                                                                    >
+                                                                        % Low
+                                                                    </button>
                                                                 </div>
                                                             </div>
-
-                                                            {/* Sort Controls */}
-                                                            <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1">
-                                                                <button
-                                                                    onClick={() => setSchoolSort('name-asc')}
-                                                                    className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'name-asc' ? 'bg-white dark:bg-slate-600 shadow text-blue-600 dark:text-blue-300' : 'text-slate-400'}`}
-                                                                    title="Sort A-Z"
-                                                                >
-                                                                    A-Z
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setSchoolSort('pct-desc')}
-                                                                    className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-desc' ? 'bg-white dark:bg-slate-600 shadow text-emerald-600 dark:text-emerald-300' : 'text-slate-400'}`}
-                                                                    title="Sort % High-Low"
-                                                                >
-                                                                    % High
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setSchoolSort('pct-asc')}
-                                                                    className={`p-1.5 rounded-md text-xs font-bold transition ${schoolSort === 'pct-asc' ? 'bg-white dark:bg-slate-600 shadow text-rose-600 dark:text-rose-300' : 'text-slate-400'}`}
-                                                                    title="Sort % Low-High"
-                                                                >
-                                                                    % Low
-                                                                </button>
+                                                            
+                                                            {/* Search Box */}
+                                                            <div className="relative">
+                                                                <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Search school name or ID..." 
+                                                                    value={schoolSearch}
+                                                                    onChange={(e) => {
+                                                                        setSchoolSearch(e.target.value);
+                                                                        setSchoolPage(1); // Reset to page 1 on search
+                                                                    }}
+                                                                    className="w-full bg-slate-100 dark:bg-slate-700 border-none rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:font-normal placeholder:text-slate-400"
+                                                                />
                                                             </div>
                                                         </div>
 
-                                                        {/* Unified School List */}
-                                                        <div className="space-y-3">
-                                                            {sortedSchools.map((s) => (
-                                                                <div key={s.school_id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group">
+                                                        {/* Unified School List (Paginated) */}
+                                                        <div className="space-y-3 min-h-[400px]">
+                                                            {paginatedSchools.map((s) => (
+                                                                <div key={s.school_id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
                                                                     <div className="flex-1 min-w-0 pr-4">
                                                                         <div className="flex items-center gap-2 mb-2">
                                                                             <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors truncate">{s.school_name}</h4>
@@ -1058,7 +1092,36 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </div>
                                                             ))}
+                                                            
+                                                            {paginatedSchools.length === 0 && (
+                                                                <div className="text-center py-10 text-slate-400 italic">
+                                                                    No schools found.
+                                                                </div>
+                                                            )}
                                                         </div>
+
+                                                        {/* Pagination Controls */}
+                                                        {totalPages > 1 && (
+                                                            <div className="flex justify-center items-center gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                                                                <button
+                                                                    onClick={() => setSchoolPage(prev => Math.max(prev - 1, 1))}
+                                                                    disabled={schoolPage === 1}
+                                                                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors text-slate-600 dark:text-slate-300"
+                                                                >
+                                                                    Previous
+                                                                </button>
+                                                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                                                    Page {schoolPage} of {totalPages}
+                                                                </span>
+                                                                <button
+                                                                    onClick={() => setSchoolPage(prev => Math.min(prev + 1, totalPages))}
+                                                                    disabled={schoolPage === totalPages}
+                                                                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors text-slate-600 dark:text-slate-300"
+                                                                >
+                                                                    Next
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             }

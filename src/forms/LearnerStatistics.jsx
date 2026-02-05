@@ -531,7 +531,7 @@ const LearnerStatistics = () => {
 
                 <div className="relative z-10 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => navigate(-1)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                        <button onClick={() => isDummy ? navigate('/dummy-forms', { state: { type: 'school' } }) : navigate(-1)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
                             <FiArrowLeft size={24} />
                         </button>
                         <div>
