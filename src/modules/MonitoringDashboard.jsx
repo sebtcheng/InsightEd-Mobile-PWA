@@ -4,7 +4,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
-import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw } from 'react-icons/fi';
+import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight } from 'react-icons/fi';
 import { TbTrophy, TbSchool } from 'react-icons/tb';
 
 import Papa from 'papaparse';
@@ -1286,23 +1286,43 @@ const MonitoringDashboard = () => {
 
                                                         {/* Pagination Controls */}
                                                         {totalPages > 1 && (
-                                                            <div className="flex justify-center items-center gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                                                            <div className="flex justify-center items-center gap-3 mt-6 pt-6 border-t border-slate-100 dark:border-slate-700">
+                                                                <button
+                                                                    onClick={() => setSchoolPage(1)}
+                                                                    disabled={schoolPage === 1}
+                                                                    className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-lg text-slate-500 hover:border-blue-500 hover:text-blue-600 disabled:opacity-30 disabled:hover:border-slate-100 dark:disabled:hover:border-slate-700 disabled:cursor-not-allowed transition-all active:scale-90"
+                                                                    title="First Page"
+                                                                >
+                                                                    <FiChevronsLeft size={16} />
+                                                                </button>
                                                                 <button
                                                                     onClick={() => setSchoolPage(prev => Math.max(prev - 1, 1))}
                                                                     disabled={schoolPage === 1}
-                                                                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors text-slate-600 dark:text-slate-300"
+                                                                    className="px-4 py-2 flex items-center gap-2 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:border-blue-500 hover:text-blue-600 disabled:opacity-30 disabled:hover:border-slate-100 dark:disabled:hover:border-slate-700 disabled:cursor-not-allowed transition-all active:scale-95"
                                                                 >
-                                                                    Previous
+                                                                    <FiChevronLeft size={14} />
+                                                                    <span>Prev</span>
                                                                 </button>
-                                                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                                                                    Page {schoolPage} of {totalPages}
-                                                                </span>
+                                                                
+                                                                <div className="bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-lg text-xs font-black text-slate-600 dark:text-slate-300">
+                                                                     {schoolPage} <span className="text-slate-400 font-bold mx-1">/</span> {totalPages}
+                                                                </div>
+
                                                                 <button
                                                                     onClick={() => setSchoolPage(prev => Math.min(prev + 1, totalPages))}
                                                                     disabled={schoolPage === totalPages}
-                                                                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors text-slate-600 dark:text-slate-300"
+                                                                    className="px-4 py-2 flex items-center gap-2 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:border-blue-500 hover:text-blue-600 disabled:opacity-30 disabled:hover:border-slate-100 dark:disabled:hover:border-slate-700 disabled:cursor-not-allowed transition-all active:scale-95"
                                                                 >
-                                                                    Next
+                                                                    <span>Next</span>
+                                                                    <FiChevronRight size={14} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setSchoolPage(totalPages)}
+                                                                    disabled={schoolPage === totalPages}
+                                                                    className="w-8 h-8 flex items-center justify-center bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-lg text-slate-500 hover:border-blue-500 hover:text-blue-600 disabled:opacity-30 disabled:hover:border-slate-100 dark:disabled:hover:border-slate-700 disabled:cursor-not-allowed transition-all active:scale-90"
+                                                                    title="Last Page"
+                                                                >
+                                                                    <FiChevronsRight size={16} />
                                                                 </button>
                                                                 <button
                                                                     onClick={() => setSchoolPage(totalPages)}
