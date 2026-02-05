@@ -19,6 +19,7 @@ import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Impor
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import NotificationCenter from '../components/NotificationCenter';
+import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import Context
 
 const SchoolHeadDashboard = () => {
     const navigate = useNavigate();
@@ -28,6 +29,9 @@ const SchoolHeadDashboard = () => {
     const [userName, setUserName] = useState('School Head');
     const [schoolProfile, setSchoolProfile] = useState(null);
     const [headProfile, setHeadProfile] = useState(null);
+
+    // Service Worker Update Context
+    const { isUpdateAvailable, updateApp } = useServiceWorker();
 
     // Stats State
     const [stats, setStats] = useState({
@@ -452,6 +456,37 @@ const SchoolHeadDashboard = () => {
                                 </div>
                             );
                         })()}
+
+                        {/* --- NEW UPDATE MODAL --- */}
+                        {isUpdateAvailable && (
+                            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-emerald-200 dark:border-emerald-900/40">
+                                    {/* Glowing Background Effect */}
+                                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+
+                                    <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 mb-2 shadow-sm animate-pulse">
+                                        <FiCheckSquare size={36} />
+                                    </div>
+
+                                    <div className="text-center space-y-2">
+                                        <h2 className="text-xl font-bold text-slate-800 dark:text-white leading-tight">
+                                            Update Available
+                                        </h2>
+                                        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                                            A new version of the app is ready. <br />Please reload to apply the latest changes.
+                                        </p>
+                                    </div>
+
+                                    <button
+                                        onClick={() => updateApp()}
+                                        className="w-full py-3.5 bg-[#004A99] hover:bg-blue-800 text-white font-bold rounded-xl shadow-lg shadow-blue-900/20 hover:shadow-xl hover:scale-[1.02] transition-all active:scale-95"
+                                    >
+                                        Reload Now
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* 1. Quick Stats Row */}
                         <div className="grid grid-cols-3 gap-3">

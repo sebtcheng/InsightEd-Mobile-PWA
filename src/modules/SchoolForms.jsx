@@ -156,6 +156,10 @@ const SchoolForms = () => {
                             setSchoolProfile(profileJson.data);
                             // Cache for offline usage
                             localStorage.setItem('fullSchoolProfile', JSON.stringify(profileJson.data));
+
+                            // PREMIUM OPTIMIZATION: Cache critical keys globally
+                            if (profileJson.data.school_id) localStorage.setItem('schoolId', profileJson.data.school_id);
+                            if (profileJson.data.curricular_offering) localStorage.setItem('schoolOffering', profileJson.data.curricular_offering);
                         }
                     }
 
@@ -193,9 +197,17 @@ const SchoolForms = () => {
                 const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
                 return totalTeachers > 0 ? 'completed' : 'pending';
             case 'specialization':
-                return ((schoolProfile.spec_math_major > 0) || (schoolProfile.spec_english_major > 0)) ? 'completed' : 'pending';
+                const specFields = [
+                    'spec_general_major', 'spec_ece_major',
+                    'spec_english_major', 'spec_filipino_major', 'spec_math_major',
+                    'spec_science_major', 'spec_ap_major', 'spec_mapeh_major',
+                    'spec_esp_major', 'spec_tle_major', 'spec_bio_sci_major',
+                    'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
+                ];
+                const hasSpecialization = specFields.some(field => (schoolProfile[field] || 0) > 0);
+                return hasSpecialization ? 'completed' : 'pending';
             case 'resources':
-                return ((schoolProfile.res_armchairs_good > 0) || (schoolProfile.res_toilets_male > 0)) ? 'completed' : 'pending';
+                return ((schoolProfile.res_electricity_source || schoolProfile.res_water_source || schoolProfile.res_buildable_space || schoolProfile.sha_category || schoolProfile.res_armchair_func > 0 || schoolProfile.res_armchairs_good > 0 || schoolProfile.res_toilets_male > 0)) ? 'completed' : 'pending';
             case 'facilities':
                 return (schoolProfile.build_classrooms_total > 0) ? 'completed' : 'pending';
             case 'infra':
@@ -203,7 +215,8 @@ const SchoolForms = () => {
                 const hasAdm = schoolProfile.adm_mdl || schoolProfile.adm_odl;
                 return (hasShift || hasAdm) ? 'completed' : 'pending';
             case 'stats':
-                return (schoolProfile.stat_sned_es > 0 || schoolProfile.stat_muslim_k > 0 || schoolProfile.stat_ip > 0) ? 'completed' : 'pending';
+                const hasStats = Object.keys(schoolProfile).some(key => key.startsWith('stat_') && Number(schoolProfile[key]) > 0);
+                return hasStats ? 'completed' : 'pending';
             default:
                 return 'pending';
         }

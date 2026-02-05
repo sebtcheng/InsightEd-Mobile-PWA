@@ -22,8 +22,8 @@ const getInitialFields = () => ({
     spec_esp_major: 0, spec_esp_teaching: 0,
     spec_tle_major: 0, spec_tle_teaching: 0,
     // General Education (For Purely Elementary)
-    spec_general_major: 0, spec_general_teaching: 0,
-    spec_ece_major: 0, spec_ece_teaching: 0,
+    spec_general_major: 0,
+    spec_ece_major: 0,
     // New Secondary Fields
     spec_bio_sci_major: 0, spec_bio_sci_teaching: 0,
     spec_phys_sci_major: 0, spec_phys_sci_teaching: 0,
@@ -116,10 +116,10 @@ const TeacherSpecialization = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
     const [userRole, setUserRole] = useState("School Head");
-    const [schoolId, setSchoolId] = useState(null);
+    const [schoolId, setSchoolId] = useState(localStorage.getItem('schoolId'));
     const [formData, setFormData] = useState(getInitialFields());
     const [originalData, setOriginalData] = useState(null);
-    const [offering, setOffering] = useState('');
+    const [offering, setOffering] = useState(localStorage.getItem('schoolOffering') || '');
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -320,8 +320,8 @@ const TeacherSpecialization = () => {
         const { hasElementary, hasSecondary } = getSections();
 
         if (hasElementary) {
-            if (!isValidEntry(formData.spec_general_major)) valid = false; // Check only Total (Major)
-            if (!isValidEntry(formData.spec_ece_major)) valid = false;   // Check only Total (Major)
+            if (!isValidEntry(formData.spec_general_major)) valid = false; // Check only Total
+            if (!isValidEntry(formData.spec_ece_major)) valid = false;   // Check only Total
         }
 
         if (hasSecondary) {
@@ -395,6 +395,13 @@ const TeacherSpecialization = () => {
             setIsSaving(false);
         }
     };
+
+    // --- LOADING SPINNER ---
+    if (loading) return (
+        <div className="min-h-screen grid place-items-center bg-slate-50">
+            <div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">

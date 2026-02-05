@@ -67,6 +67,10 @@ const initDB = async () => {
       );
     `);
     console.log("✅ DB Init: project_documents table verified.");
+
+    // Redundant block removed - handled in main migration IIFE
+
+
   } catch (err) {
     console.error("❌ DB Init Error:", err);
   }
@@ -1584,6 +1588,25 @@ app.post('/api/save-school', async (req, res) => {
   }
 });
 
+// --- 4b. GET: Fetch Full School Profile ---
+app.get('/api/school-profile/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    // Return standard format expected by frontend
+    res.json({
+      exists: true,
+      data: result.rows[0],
+      school_id: result.rows[0].school_id,
+      curricular_offering: result.rows[0].curricular_offering
+    });
+  } catch (err) {
+    console.error("Fetch School Profile Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 // --- 5. POST: Save School Head Info (Updated to match Enrolment logic) ---
 app.post('/api/save-school-head', async (req, res) => {
   const data = req.body;
@@ -2182,7 +2205,10 @@ app.get('/api/projects', async (req, res) => {
 
     let sql = `
       WITH LatestProjects AS (
-          SELECT DISTINCT ON (ipc) *
+          SELECT DISTINCT ON (ipc) 
+            project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name,
+            accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
+            status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
@@ -2334,11 +2360,12 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 21. GET: Fetch All Images for a Project ---
+// --- 21. GET: Fetch Project Images (METADATA ONLY) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
-    const query = `SELECT id, image_data, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
+    // OPTIMIZATION: Removed image_data from selection
+    const query = `SELECT id, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
     const result = await pool.query(query, [projectId]);
     res.json(result.rows);
   } catch (err) {
@@ -2347,12 +2374,31 @@ app.get('/api/project-images/:projectId', async (req, res) => {
   }
 });
 
-// --- 22. GET: Fetch All Images for an Engineer ---
+// --- 21b. GET: Fetch Single Image Content (BLOB) ---
+app.get('/api/image/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const query = `SELECT image_data FROM engineer_image WHERE id = $1`;
+    const result = await pool.query(query, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+
+    res.json({ id, image_data: result.rows[0].image_data });
+  } catch (err) {
+    console.error("❌ Error fetching image blob:", err.message);
+    res.status(500).json({ error: "Failed to fetch image" });
+  }
+});
+
+// --- 22. GET: Fetch All Images for an Engineer (METADATA ONLY) ---
 app.get('/api/engineer-images/:engineerId', async (req, res) => {
   const { engineerId } = req.params;
   try {
+    // OPTIMIZATION: Removed image_data, added id for on-demand fetch
     const query = `
-      SELECT ei.id, ei.image_data, ei.created_at, ef.school_name 
+      SELECT ei.id, ei.created_at, ef.school_name 
       FROM engineer_image ei
       LEFT JOIN engineer_form ef ON ei.project_id = ef.project_id
       WHERE ei.uploaded_by = $1 
@@ -2775,13 +2821,36 @@ app.post('/api/save-school-resources', async (req, res) => {
   }
 });
 
+// --- DEBUG: Manual Schema Fix Endpoint ---
+app.get('/api/debug/fix-specialization-schema', async (req, res) => {
+  try {
+    const query = `
+      ALTER TABLE school_profiles 
+      ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0;
+    `;
+    await pool.query(query);
+    res.json({
+      success: true,
+      message: "Manual schema fix executed. Columns 'spec_general_major' and 'spec_ece_major' ensured."
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Fix failed: " + err.message });
+  }
+});
+
 // --- 23. GET: Teacher Specialization Data ---
 app.get('/api/teacher-specialization/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
     const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
-    res.json({ exists: true, data: result.rows[0] });
+
+    // DEBUG LOG
+    const row = result.rows[0];
+    console.log(`[GET Specialization] Gen: ${row.spec_general_major}, ECE: ${row.spec_ece_major}`);
+
+    res.json({ exists: true, data: row });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2831,6 +2900,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
     const query = `
             UPDATE school_profiles SET 
                 spec_english_major=$2, spec_english_teaching=$3,
+
                 spec_filipino_major=$4, spec_filipino_teaching=$5,
                 spec_math_major=$6, spec_math_teaching=$7,
                 spec_science_major=$8, spec_science_teaching=$9,
@@ -2840,12 +2910,12 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_tle_major=$16, spec_tle_teaching=$17,
                 spec_guidance=$18, spec_librarian=$19,
                 spec_ict_coord=$20, spec_drrm_coord=$21,
-                spec_general_major=$22, spec_general_teaching=$23,
-                spec_ece_major=$24, spec_ece_teaching=$25,
-                spec_bio_sci_major=$26, spec_bio_sci_teaching=$27,
-                spec_phys_sci_major=$28, spec_phys_sci_teaching=$29,
-                spec_agri_fishery_major=$30, spec_agri_fishery_teaching=$31,
-                spec_others_major=$32, spec_others_teaching=$33,
+                spec_general_major=$22,
+                spec_ece_major=$23,
+                spec_bio_sci_major=$24, spec_bio_sci_teaching=$25,
+                spec_phys_sci_major=$26, spec_phys_sci_teaching=$27,
+                spec_agri_fishery_major=$28, spec_agri_fishery_teaching=$29,
+                spec_others_major=$30, spec_others_teaching=$31,
                 updated_at = CURRENT_TIMESTAMP
             WHERE submitted_by = $1;
         `;
@@ -2861,15 +2931,21 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       d.spec_tle_major || 0, d.spec_tle_teaching || 0,
       d.spec_guidance || 0, d.spec_librarian || 0,
       d.spec_ict_coord || 0, d.spec_drrm_coord || 0,
-      d.spec_general_major || 0, d.spec_general_teaching || 0,
-      d.spec_ece_major || 0, d.spec_ece_teaching || 0,
+      d.spec_general_major || 0,
+      d.spec_ece_major || 0,
       d.spec_bio_sci_major || 0, d.spec_bio_sci_teaching || 0,
       d.spec_phys_sci_major || 0, d.spec_phys_sci_teaching || 0,
       d.spec_agri_fishery_major || 0, d.spec_agri_fishery_teaching || 0,
       d.spec_others_major || 0, d.spec_others_teaching || 0
     ];
+
+    // DEBUG LOGGING
+    console.log(`[Specialization Save] UID: ${d.uid}`);
+    console.log(`[Specialization Save] General Major: ${d.spec_general_major}, ECE Major: ${d.spec_ece_major}`);
+
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
+
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2892,8 +2968,18 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COUNT(CASE WHEN classes_kinder IS NOT NULL THEN 1 END) as organizedclasses,
         COUNT(CASE WHEN shift_kinder IS NOT NULL THEN 1 END) as shifting,
         COUNT(CASE WHEN teach_kinder > 0 THEN 1 END) as personnel,
-        COUNT(CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 END) as specialization,
-        COUNT(CASE WHEN res_armchairs_good > 0 OR res_toilets_male > 0 THEN 1 END) as resources,
+        COUNT(CASE WHEN 
+          spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+          spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+          spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+          spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+          spec_agri_fishery_major > 0 OR spec_others_major > 0 
+        THEN 1 END) as specialization,
+        COUNT(CASE WHEN 
+          res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+          res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+          res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+        THEN 1 END) as resources,
         SUM(CASE WHEN (
            (CASE WHEN school_name IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN total_enrollment > 0 THEN 1 ELSE 0 END) + 
@@ -2901,9 +2987,25 @@ app.get('/api/monitoring/stats', async (req, res) => {
            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
            (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+             spec_agri_fishery_major > 0 OR spec_others_major > 0 
+           THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+           THEN 1 ELSE 0 END) + 
+>>>>>>> main
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools_count
       FROM school_profiles
@@ -2946,9 +3048,25 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
            (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
            (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
            (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
            (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
+           (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+             spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+             spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+             spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+             spec_agri_fishery_major > 0 OR spec_others_major > 0 
+           THEN 1 ELSE 0 END) + 
+           (CASE WHEN 
+             res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+             res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+             res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+           THEN 1 ELSE 0 END) + 
+>>>>>>> main
            (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
         ) = 10 THEN 1 ELSE 0 END) as completed_schools
       FROM school_profiles
@@ -3002,44 +3120,88 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
   }
 });
 
-// --- 26. GET: List Schools in Jurisdiction ---
+// --- 26. GET: List Schools in Jurisdiction (Paginated) ---
 app.get('/api/monitoring/schools', async (req, res) => {
-  const { region, division } = req.query;
+  const { region, division, page, limit, search } = req.query;
   try {
-    let query = `
-    SELECT
-    sp.school_name,
-      sp.school_id,
-      sp.total_enrollment,
-      (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
-  (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
-    (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
-      (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
-        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
-          (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-            (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-              (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
-              (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
-              (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
-                sp.submitted_by
-      FROM school_profiles sp
-      WHERE TRIM(sp.region) = TRIM($1)
-  `;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const offset = (pageNum - 1) * limitNum;
+
+    // Base WHERE
+    let whereClauses = [`TRIM(sp.region) = TRIM($1)`];
     let params = [region];
 
     if (division) {
-      query += ` AND TRIM(sp.division) = TRIM($2)`;
+      whereClauses.push(`TRIM(sp.division) = TRIM($${params.length + 1})`);
       params.push(division);
     }
 
     if (req.query.district) {
-      query += ` AND TRIM(sp.district) = TRIM($${params.length + 1})`;
+      whereClauses.push(`TRIM(sp.district) = TRIM($${params.length + 1})`);
       params.push(req.query.district);
     }
 
-    query += ` ORDER BY school_name ASC`;
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    if (search) {
+      whereClauses.push(`(sp.school_name ILIKE $${params.length + 1} OR sp.school_id ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+
+    // common SELECT fields
+    const selectFields = `
+      sp.school_name,
+      sp.school_id,
+      sp.total_enrollment,
+      (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
+      (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
+      (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+      (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
+      (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+      (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+      (CASE WHEN 
+        sp.spec_general_major > 0 OR sp.spec_ece_major > 0 OR sp.spec_english_major > 0 OR 
+        sp.spec_filipino_major > 0 OR sp.spec_math_major > 0 OR sp.spec_science_major > 0 OR 
+        sp.spec_ap_major > 0 OR sp.spec_mapeh_major > 0 OR sp.spec_esp_major > 0 OR 
+        sp.spec_tle_major > 0 OR sp.spec_bio_sci_major > 0 OR sp.spec_phys_sci_major > 0 OR 
+        sp.spec_agri_fishery_major > 0 OR sp.spec_others_major > 0 
+      THEN true ELSE false END) as specialization_status,
+      (CASE WHEN 
+        sp.res_electricity_source IS NOT NULL OR sp.res_water_source IS NOT NULL OR 
+        sp.res_buildable_space IS NOT NULL OR sp.sha_category IS NOT NULL OR 
+        sp.res_armchair_func > 0 OR sp.res_armchairs_good > 0 OR sp.res_toilets_male > 0 
+      THEN true ELSE false END) as resources_status,
+      (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
+      (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
+      sp.submitted_by
+    `;
+
+    // COUNT Query
+    const countQuery = `SELECT COUNT(*) as total FROM school_profiles sp WHERE ${whereClauses.join(' AND ')}`;
+    const countRes = await pool.query(countQuery, params); // Use same params (including search)
+    const totalItems = parseInt(countRes.rows[0].total);
+
+    // DATA Query
+    const dataQuery = `
+      SELECT ${selectFields}
+      FROM school_profiles sp
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY sp.school_name ASC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    // Add pagination params
+    const queryParams = [...params, limitNum, offset];
+
+    const result = await pool.query(dataQuery, queryParams);
+
+    // Return structured response
+    res.json({
+      data: result.rows,
+      total: totalItems,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalItems / limitNum)
+    });
   } catch (err) {
     console.error("Jurisdiction Schools Error:", err);
     res.status(500).json({ error: "Failed to fetch schools", details: err.message });
@@ -3165,9 +3327,25 @@ app.get('/api/leaderboard', async (req, res) => {
             (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + --Classes
               (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + --Learner Stats
                 (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Shifting
+<<<<<<< kleinbranch
                   (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + --Personnel
                     (CASE WHEN spec_math_major > 0 THEN 1 ELSE 0 END) + --Specialization
                       (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + --Resources
+=======
+                  (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + --Personnel
+                    (CASE WHEN 
+                      spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+                      spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+                      spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+                      spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+                      spec_agri_fishery_major > 0 OR spec_others_major > 0  
+                    THEN 1 ELSE 0 END) + --Specialization
+                      (CASE WHEN 
+                        res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+                        res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+                        res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+                      THEN 1 ELSE 0 END) + --Resources
+>>>>>>> main
                         (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END) --Physical Facilities
                 ) * 100.0 / 10.0`;
 
@@ -3256,9 +3434,25 @@ app.get('/api/monitoring/regions', async (req, res) => {
             (CASE WHEN classes_kinder > 0 THEN 1 ELSE 0 END) + 
             (CASE WHEN stat_ip IS NOT NULL OR stat_displaced IS NOT NULL THEN 1 ELSE 0 END) + 
             (CASE WHEN shift_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+<<<<<<< kleinbranch
             (CASE WHEN teach_kinder > 0 THEN 1 ELSE 0 END) + 
             (CASE WHEN spec_math_major > 0 OR spec_guidance > 0 THEN 1 ELSE 0 END) + 
             (CASE WHEN res_water_source IS NOT NULL OR res_toilets_male > 0 THEN 1 ELSE 0 END) + 
+=======
+            (CASE WHEN teach_kinder IS NOT NULL THEN 1 ELSE 0 END) + 
+            (CASE WHEN 
+              spec_general_major > 0 OR spec_ece_major > 0 OR spec_english_major > 0 OR 
+              spec_filipino_major > 0 OR spec_math_major > 0 OR spec_science_major > 0 OR 
+              spec_ap_major > 0 OR spec_mapeh_major > 0 OR spec_esp_major > 0 OR 
+              spec_tle_major > 0 OR spec_bio_sci_major > 0 OR spec_phys_sci_major > 0 OR 
+              spec_agri_fishery_major > 0 OR spec_others_major > 0 
+            THEN 1 ELSE 0 END) + 
+            (CASE WHEN 
+              res_electricity_source IS NOT NULL OR res_water_source IS NOT NULL OR 
+              res_buildable_space IS NOT NULL OR sha_category IS NOT NULL OR 
+              res_armchair_func > 0 OR res_armchairs_good > 0 OR res_toilets_male > 0 
+            THEN 1 ELSE 0 END) + 
+>>>>>>> main
             (CASE WHEN build_classrooms_total IS NOT NULL THEN 1 ELSE 0 END)
           ) = 10 THEN 1 ELSE 0 END) as completed_schools
         FROM school_profiles

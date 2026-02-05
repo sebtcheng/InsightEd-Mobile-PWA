@@ -7,9 +7,10 @@ import BottomNav from './BottomNav';
 
 import PageTransition from '../components/PageTransition';
 import { useTheme } from '../context/ThemeContext'; // Import Hook
+import { useServiceWorker } from '../context/ServiceWorkerContext'; // Import SW Hook
 
 // Icons
-import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare } from "react-icons/fi";
+import { FiUser, FiInfo, FiMoon, FiLogOut, FiChevronRight, FiChevronLeft, FiSave, FiEdit3, FiHelpCircle, FiChevronDown, FiChevronUp, FiStar, FiMessageSquare, FiCheckCircle, FiRefreshCw, FiDownloadCloud } from "react-icons/fi";
 
 
 const FAQ_DATA = [
@@ -43,6 +44,7 @@ const FAQ_DATA = [
 const UserProfile = () => {
     const navigate = useNavigate();
     const { isDarkMode, toggleTheme } = useTheme();
+    const { checkForUpdates, isUpdateAvailable, updateApp } = useServiceWorker();
 
     // --- STATE MANAGEMENT ---
     const [userData, setUserData] = useState(null);
@@ -54,6 +56,10 @@ const UserProfile = () => {
     const [activeTab, setActiveTab] = useState('settings'); // 'settings', 'profile', 'about', 'faq'
     const [isEditing, setIsEditing] = useState(false);
     const [loading, setLoading] = useState(false);
+
+    // Update Check State
+    const [checkingForUpdate, setCheckingForUpdate] = useState(false);
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
 
     // FAQ Accordion State
     const [openFaqIndex, setOpenFaqIndex] = useState(null);
@@ -216,7 +222,7 @@ const UserProfile = () => {
                 ratings: feedbackRatings,
                 comment: feedbackComment,
                 timestamp: serverTimestamp(),
-                appVersion: '1.0.0'
+                appVersion: '1.0.1'
             });
 
             alert("Thank you for your feedback! We appreciate your input.");
@@ -230,6 +236,76 @@ const UserProfile = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCheckUpdate = async () => {
+        setCheckingForUpdate(true);
+        // Simulate a small delay for UX so the user sees the "Checking..." state
+        setTimeout(async () => {
+            const updateFound = await checkForUpdates();
+            setCheckingForUpdate(false);
+
+            // Always show the modal - the render function will decide what to show based on isUpdateAvailable
+            // If updateFound is true, isUpdateAvailable should eventually become true via context listeners
+            setShowUpdateModal(true);
+        }, 1500);
+    };
+
+    const renderUpdateModal = () => {
+        if (!showUpdateModal) return null;
+
+        // Determine content based on whether an update is waiting
+        // We use isUpdateAvailable from context which should be true if an update is waiting/installed
+        const updateReady = isUpdateAvailable;
+
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-in fade-in duration-200">
+                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-xs shadow-2xl transform transition-all scale-100">
+                    <div className="text-center">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${updateReady ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-50 text-[#004A99] dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                            {updateReady ? <FiDownloadCloud size={32} /> : <FiCheckCircle size={32} />}
+                        </div>
+
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">
+                            {updateReady ? "Update Available!" : "You're up to date!"}
+                        </h3>
+
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 w-full">
+                            {updateReady
+                                ? "A new version of InsightEd is ready. Reload to apply changes."
+                                : "You are currently using the latest version of InsightEd."}
+                        </p>
+
+                        {updateReady ? (
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => {
+                                        updateApp();
+                                        setShowUpdateModal(false);
+                                    }}
+                                    className="w-full py-2.5 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20"
+                                >
+                                    Update Now
+                                </button>
+                                <button
+                                    onClick={() => setShowUpdateModal(false)}
+                                    className="w-full py-2.5 bg-transparent text-gray-500 rounded-xl font-medium hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                                >
+                                    Later
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setShowUpdateModal(false)}
+                                className="w-full py-2.5 bg-[#004A99] text-white rounded-xl font-semibold hover:bg-blue-800 transition-colors"
+                            >
+                                Awesome!
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
     };
 
 
@@ -476,13 +552,12 @@ const UserProfile = () => {
                                             onClick={() => setFeedbackRatings(prev => ({ ...prev, [cat.id]: star }))}
                                             className="bg-transparent border-0 cursor-pointer focus:outline-none transition-transform active:scale-90 hover:scale-110"
                                         >
-                                            <FiStar 
-                                                size={28} 
-                                                className={`transition-colors duration-200 ${
-                                                    star <= feedbackRatings[cat.id] 
-                                                        ? 'fill-amber-400 text-amber-400' 
-                                                        : 'text-slate-200 dark:text-slate-600'
-                                                }`} 
+                                            <FiStar
+                                                size={28}
+                                                className={`transition-colors duration-200 ${star <= feedbackRatings[cat.id]
+                                                    ? 'fill-amber-400 text-amber-400'
+                                                    : 'text-slate-200 dark:text-slate-600'
+                                                    }`}
                                             />
                                         </button>
                                     ))}
@@ -502,7 +577,7 @@ const UserProfile = () => {
                         />
                     </div>
 
-                    <button 
+                    <button
                         onClick={handleSubmitFeedback}
                         disabled={loading}
                         className="w-full py-3 bg-[#004A99] hover:bg-blue-800 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
@@ -576,6 +651,40 @@ const UserProfile = () => {
                     </div>
                 </div>
 
+                {/* Check for Updates */}
+                <button
+                    disabled={checkingForUpdate}
+                    onClick={isUpdateAvailable ? updateApp : handleCheckUpdate}
+                    className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                >
+                    <div className="flex items-center gap-4">
+                        <div className={`w-9 h-9 rounded-lg flex justify-center items-center ${isUpdateAvailable ? 'bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300'}`}>
+                            {checkingForUpdate ? (
+                                <FiRefreshCw size={20} className="animate-spin" />
+                            ) : isUpdateAvailable ? (
+                                <FiDownloadCloud size={20} />
+                            ) : (
+                                <FiRefreshCw size={20} />
+                            )}
+                        </div>
+                        <div className="text-left">
+                            <span className="text-[15px] font-medium text-gray-700 dark:text-gray-200 block">
+                                {isUpdateAvailable ? "Update Available" : "Check for Updates"}
+                            </span>
+                            {isUpdateAvailable && (
+                                <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold uppercase tracking-wide">
+                                    Tap to Install
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    {checkingForUpdate ? (
+                        <span className="text-xs text-gray-400">Checking...</span>
+                    ) : (
+                        <FiChevronRight size={20} className="text-gray-300 dark:text-gray-500" />
+                    )}
+                </button>
+
                 {/* FAQ Menu Item */}
                 <button className="w-full flex justify-between items-center px-5 py-4 border-b border-gray-50 dark:border-slate-700 bg-transparent cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors" onClick={() => setActiveTab('faq')}>
                     <div className="flex items-center gap-4">
@@ -619,7 +728,7 @@ const UserProfile = () => {
                 </button>
             </div>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.0</p>
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.2</p>
         </div>
     );
 
@@ -654,6 +763,8 @@ const UserProfile = () => {
                     {activeTab === 'faq' && renderFAQ()}
                     {activeTab === 'feedback' && renderFeedback()}
                     {activeTab === 'about' && renderAbout()}
+
+                    {renderUpdateModal()}
 
                 </div>
 
