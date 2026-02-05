@@ -2,16 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import Papa from 'papaparse';
-import { auth } from '../firebase';
+import { auth, storage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // --- IMPORT NEW DB LOGIC ---
 import { addEngineerToOutbox, getCachedProjects } from '../db';
 // --- CONSTANTS ---
 const DOC_TYPES = {
-  POW: "Program of Works",
-  DUPA: "DUPA",
-  CONTRACT: "Signed Contract"
+    POW: "Program of Works",
+    DUPA: "DUPA",
+    CONTRACT: "Signed Contract"
 };
 
+// Kept for offline fallback provided logic exists elsewhere, or for images if needed (though images use compressImage)
 const convertFullFileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -139,7 +141,7 @@ const NewProjects = () => {
         schoolName: '',
         projectName: '',
         schoolId: '',
-
+        
         // Status & Progress
         status: 'Not Yet Started',
         accomplishmentPercentage: 0,
@@ -186,7 +188,6 @@ const NewProjects = () => {
                     latitude: lat,
                     longitude: long
                 }));
-                // alert(`✅ Coordinates Captured!\nLat: ${lat}\nLong: ${long}`); // Removed alert to avoid annoyance with map
             },
             (error) => {
                 console.warn("Geolocation warning:", error);
@@ -228,6 +229,11 @@ const NewProjects = () => {
         }
     };
 
+    const removeFile = (index) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+        setPreviews(prev => prev.filter((_, i) => i !== index));
+    };
+
     const handleDocumentSelect = (e, type) => {
         const file = e.target.files[0];
         if (file) {
@@ -235,6 +241,7 @@ const NewProjects = () => {
                 alert("⚠️ INVALID FORMAT\n\nPlease upload a valid PDF file.");
                 return;
             }
+            // Store raw file object for upload
             setDocuments(prev => ({ ...prev, [type]: file }));
         }
     };
@@ -300,13 +307,10 @@ const NewProjects = () => {
         }
         // Auto-comma for Project Allocation
         if (name === 'projectAllocation') {
-            // 1. Remove non-numeric (keep decimals if needed, but usually just integers for allocation)
-            // Let's assume integers for simplicity as per common request, or handle '.'
             const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
             if (!raw) {
                 value = '';
             } else {
-                // Prevent multiple decimals
                 const parts = raw.split('.');
                 parts[0] = Number(parts[0]).toLocaleString('en-US');
                 value = parts.join('.');
@@ -315,7 +319,7 @@ const NewProjects = () => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    // --- 4. FIXED SUBMIT LOGIC (BUNDLES IMAGES) ---
+    // --- 4. SUBMIT LOGIC (3-STEP PROCESS) ---
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -325,31 +329,27 @@ const NewProjects = () => {
             return;
         }
 
-        // CHECK: Required Fields
+        // --- VALIDATIONS ---
         if (!formData.projectName || !formData.schoolName) {
             alert("⚠️ MISSING DETAILS\n\nPlease provide at least the Project Name and School Name.");
             return;
         }
 
-        // CHECK: Mandatory Documents
-        // if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
-        //    alert("⚠️ DOCUMENTS REQUIRED\n\nPlease upload the Program of Works, DUPA, and Signed Contract before creating the project.");
-        //    return;
-        //}
+        if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
+            alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
+            return;
+        }
 
-        // CHECK: Mandatory Photo Upload
         if (selectedFiles.length === 0) {
             alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
             return;
         }
 
-        // CHECK: Mandatory Coordinates
         if (!formData.latitude || !formData.longitude) {
             alert("⚠️ LOCATION REQUIRED\n\nAccording to COA requirements, you must capture the project's coordinates.\nPlease use the 'Get Current Location' button.");
             return;
         }
 
-        // CHECK: All Other Mandatory Fields
         const requiredFields = [
             { key: 'region', label: 'Region' },
             { key: 'division', label: 'Division' },
@@ -371,67 +371,146 @@ const NewProjects = () => {
         setIsSubmitting(true);
 
         try {
-            // 1. Process Images
+            // A. Prepare Images (Base64) - Still stored in engineer_image for now
             const compressedImages = [];
             for (const file of selectedFiles) {
                 const base64 = await compressImage(file);
                 compressedImages.push(base64);
             }
 
-            // 2. Process Documents
-            const processedDocs = [];
-            if (documents.POW) processedDocs.push({ type: 'POW', base64: await convertFullFileToBase64(documents.POW) });
-            if (documents.DUPA) processedDocs.push({ type: 'DUPA', base64: await convertFullFileToBase64(documents.DUPA) });
-            if (documents.CONTRACT) processedDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
-
-            // 2. CONSTRUCT SINGLE PAYLOAD
-            // We use relative URL '/api/save-project' so it works both Localhost & Production
-            const payload = {
-                url: '/api/save-project', 
-                method: 'POST',
-                body: { 
-                    ...formData, 
-                    projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0), // Strip commas
-                    uid: auth.currentUser?.uid,
-                    modifiedBy: auth.currentUser?.displayName || 'Engineer',
-                    images: compressedImages, // <--- Images are now bundled HERE
-                    documents: processedDocs,
-                    statusAsOfDate: new Date().toISOString() // Set initial status date
-                },
-                formName: `Project: ${formData.projectName}`
+            // B. Construct Project Data Payload (NO DOCUMENTS)
+            const projectBody = { 
+                ...formData, 
+                projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0),
+                uid: auth.currentUser?.uid,
+                modifiedBy: auth.currentUser?.displayName || 'Engineer',
+                images: compressedImages,
+                statusAsOfDate: new Date().toISOString()
             };
 
-            // 3. OFFLINE CHECK
+            // --- OFFLINE CHECK ---
             if (!navigator.onLine) {
-                // Because 'payload' now includes the Base64 images, 
-                // addEngineerToOutbox saves EVERYTHING (Text + Photos) in one go.
-                await addEngineerToOutbox(payload);
-                alert("📁 No internet. Project & Photos saved to Sync Center.");
+                // For offline, we might want to store docs locally, but we are supposed to avoid binary in DB.
+                // However, 'addEngineerToOutbox' saves to indexedDB (local). This is safe.
+                // We convert them to base64 ONLY for the offline store.
+                const offlineDocs = [];
+                 if (documents.POW) offlineDocs.push({ type: 'POW', base64: await convertFullFileToBase64(documents.POW) });
+                 if (documents.DUPA) offlineDocs.push({ type: 'DUPA', base64: await convertFullFileToBase64(documents.DUPA) });
+                 if (documents.CONTRACT) offlineDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
+
+                const offlinePayload = {
+                    url: '/api/save-project', 
+                    method: 'POST',
+                    body: { ...projectBody, documents: offlineDocs }, 
+                    formName: `Project: ${formData.projectName}`
+                };
+
+                await addEngineerToOutbox(offlinePayload);
+                alert("📁 No internet. Project & Photos saved to Sync Center. \n\nNOTE: Documents will be uploaded when connection is restored.");
                 setIsSubmitting(false);
                 navigate('/engineer-dashboard');
                 return;
             }
 
-            // 4. ONLINE SUBMISSION
-            const response = await fetch(payload.url, {
+            // --- ONLINE STEP 1: CREATE PROJECT RECORD ---
+            const projectRes = await fetch('/api/save-project', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload.body), // Sends Project + Images in one request
+                body: JSON.stringify(projectBody),
             });
 
-            if (response.ok) {
-                alert('Project and photos saved successfully!');
-                navigate('/engineer-dashboard');
-            } else {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Server responded with error');
+            if (!projectRes.ok) {
+                const errorData = await projectRes.json();
+                throw new Error(errorData.message || 'Failed to create project record');
             }
-        } catch (error) {
-            console.error("Submission failed, saving to outbox:", error);
-            // On error, we save the FULL payload (with images) to the outbox
-            await addEngineerToOutbox(payload);
-            alert("⚠️ Connection failed. Saved to Sync Center.");
+
+            const projectData = await projectRes.json();
+            const projectId = projectData.project.project_id; // Get ID
+            const ipc = projectData.ipc; 
+
+            // --- ONLINE STEP 2: UPLOAD DOCUMENTS TO FIREBASE STORAGE ---
+            console.log(`🚀 Project Created (ID: ${projectId}, IPC: ${ipc}). Uploading documents...`);
+            
+            const uploadedDocsMeta = [];
+            const docEntries = Object.entries(documents).filter(([_, file]) => file !== null);
+
+            for (const [type, file] of docEntries) {
+                // engineer_forms/{project_id}/{type}/{timestamp}_{filename}
+                const storagePath = `engineer_forms/${projectId}/${type}/${Date.now()}_${file.name}`;
+                const storageRef = ref(storage, storagePath);
+
+                                // Wrap upload in a timeout to prevent infinite hanging (e.g. CORS retries)
+                const uploadWithTimeout = (ref, data, ms = 25000) => {
+                    return new Promise((resolve, reject) => {
+                        const timer = setTimeout(() => reject(new Error("Upload timed out (CORS/Network).")), ms);
+                        uploadBytes(ref, data)
+                            .then(res => { clearTimeout(timer); resolve(res); })
+                            .catch(err => { clearTimeout(timer); reject(err); });
+                    });
+                };
+
+                const snapshot = await uploadWithTimeout(storageRef, file);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+
+                uploadedDocsMeta.push({
+                    type: type, // POW, DUPA, CONTRACT
+                    url: downloadURL,
+                    path: storagePath,
+                    size: file.size,
+                    contentType: file.type
+                });
+            }
+
+            // --- ONLINE STEP 3: SAVE DOCUMENT METADATA ---
+            console.log("💾 Documents uploaded. Saving metadata...");
+            
+            const metaRes = await fetch('/api/save-project-documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectId: projectId,
+                    documents: uploadedDocsMeta,
+                    uploadedBy: auth.currentUser?.uid
+                })
+            });
+
+            if (!metaRes.ok) {
+                 // Non-fatal, but warning needed?
+                 console.warn("Project created, but document metadata save failed.");
+            }
+
+            alert(`✅ Project ${ipc} created and documents uploaded successfully!`);
             navigate('/engineer-dashboard');
+
+        } catch (error) {
+            console.error("Submission failed:", error);
+            
+            // If project was created (we have an ID) but something else failed
+            // We should NOT save to outbox (it would duplicate the project creation)
+            // But we should warn the user.
+            // Note: We can't easily detect if Project was created unless we track it in state, 
+            // but here we are inside the try block. 
+            // If error happened BEFORE projectRes, then nothing is saved.
+            // If error happened AFTER projectRes, then Project is Saved, but Docs failed.
+            
+            const isDocUploadError = error.message && (error.message.includes("upload") || error.code === 'storage/unauthorized');
+            
+            if (isDocUploadError) {
+                 alert(`⚠️ PARTIAL SUCCESS: Project was created, but Document Upload failed.\n\nError: ${error.message}\n\nPlease contact admin or try re-uploading documents from the Edit page (Feature coming soon).`);
+                 navigate('/engineer-dashboard');
+            } else {
+                // Fully failed (likely network before project creation)
+                // Attempt to save to outbox
+                try {
+                     await addEngineerToOutbox(payload);
+                     alert("⚠️ Connection failed. Project saved to Sync Center for later retry.");
+                     navigate('/engineer-dashboard');
+                } catch (fallbackErr) {
+                     console.error("Fallback failed:", fallbackErr);
+                     // If IDB is broken, correct
+                     alert(`❌ CRITICAL: Submission failed and could not save to offline storage.\n\n${error.message}`);
+                }
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -710,7 +789,10 @@ const NewProjects = () => {
 
                         {/* --- SITE PHOTOS SECTION --- */}
                         <div className="mt-4 pt-4 border-t border-slate-100">
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Attach Site Photos</label>
+                            <div className="flex justify-between items-center mb-3">
+                                <label className="block text-xs font-bold text-slate-500 uppercase">Attach Site Photos</label>
+                                <span className="text-[10px] font-bold text-blue-500">{selectedFiles.length} Images Added</span>
+                            </div>
                             {!isDummy && (
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
@@ -729,6 +811,21 @@ const NewProjects = () => {
                                         <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">🖼️</div>
                                         <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">From Gallery</span>
                                     </button>
+                                </div>
+                            )}
+
+                            {previews.length > 0 && (
+                                <div className="grid grid-cols-4 gap-3 p-2 bg-slate-50 rounded-2xl border border-slate-100 mt-3">
+                                    {previews.map((url, index) => (
+                                        <div key={index} className="relative group aspect-square rounded-xl overflow-hidden shadow-sm ring-2 ring-white">
+                                            <img src={url} alt="preview" className="w-full h-full object-cover" />
+                                            <button
+                                                type="button"
+                                                onClick={() => removeFile(index)}
+                                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center shadow-md active:scale-95"
+                                            >✕</button>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                             {isDummy && (

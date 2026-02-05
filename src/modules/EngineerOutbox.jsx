@@ -5,6 +5,7 @@ import BottomNav from './BottomNav';
 
 const EngineerOutbox = () => {
     const navigate = useNavigate();
+    const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Engineer");
     const [items, setItems] = useState([]);
     const [isSyncing, setIsSyncing] = useState(false);
     const [statusMap, setStatusMap] = useState({});
@@ -230,7 +231,7 @@ const EngineerOutbox = () => {
                 </div>
             </div>
 
-            <BottomNav userRole="Engineer" />
+            <BottomNav userRole={userRole} />
         </div>
     );
 };

@@ -446,6 +446,9 @@ const MonitoringDashboard = () => {
                                     </>
                                 )}
                             </div>
+
+                            {/* --- SIMULATION MODE BUTTONS (Moved here for easier access) --- */}
+                            {/* REMOVED: Replaced by context-specific buttons below as per user request */}
                         </div>
                     </div>
 
@@ -517,9 +520,18 @@ const MonitoringDashboard = () => {
                                 {/* SECTION 2: INFRASTRUCTURE PROJECTS MATRIX - INFRA TAB */}
                                 {activeTab === 'infra' && (
                                     <div>
-                                        <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                                            <FiTrendingUp className="text-emerald-500" /> Infrastructure Projects Matrix
-                                        </h2>
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                                                <FiTrendingUp className="text-emerald-500" /> Infrastructure Projects Matrix
+                                            </h2>
+                                            <button
+                                                onClick={() => navigate('/dummy-forms', { state: { type: 'engineer' } })}
+                                                className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest bg-amber-50 dark:bg-amber-900/30 px-3 py-1.5 rounded-lg border border-amber-100 hover:bg-amber-100 transition-colors flex items-center gap-2"
+                                            >
+                                                <FiCheckCircle size={14} className="text-amber-500" />
+                                                Sample Engineer Forms
+                                            </button>
+                                        </div>
                                         <div className="bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden relative">
                                             <div className="overflow-x-auto custom-scrollbar">
                                                 <table className="w-full text-left border-collapse min-w-[800px]">
@@ -663,9 +675,7 @@ const MonitoringDashboard = () => {
             <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 font-sans">
                 {/* Header */}
                 <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-6 pb-20 rounded-b-[3rem] shadow-xl text-white relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-8 opacity-10">
-                        <FiTrendingUp size={120} />
-                    </div>
+                    {/* REMOVED BACKGROUND ICON as per user request */}
                     {userData?.role === 'Super User' && (
                         <div className="absolute top-6 right-6 z-50">
                             <button
@@ -679,7 +689,8 @@ const MonitoringDashboard = () => {
 
                     <div className="relative z-10">
                         {userData?.role === 'Central Office' || userData?.role === 'Super User' ? (
-                            <div className="flex items-center gap-2 mb-4">
+                            <>
+                                <div className="flex items-center gap-2 mb-4">
                                 {(coRegion || coDivision || coDistrict) && (
                                     <button
                                         onClick={() => {
@@ -701,6 +712,20 @@ const MonitoringDashboard = () => {
                                     </p>
                                 </div>
                             </div>
+                            
+                            {/* --- REGIONAL VIEW ACTION: SCHOOL HEAD SIMULATION --- */}
+                            {(coRegion || coDivision) && (
+                                <div className="mt-2 text-right md:absolute md:top-6 md:right-32 md:mt-0">
+                                    <button
+                                        onClick={() => navigate('/dummy-forms', { state: { type: 'school' } })}
+                                        className="text-[10px] font-black text-blue-100 uppercase tracking-widest bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-400/30 hover:bg-blue-500/30 transition-colors flex items-center gap-2"
+                                    >
+                                        <TbSchool size={16} className="text-blue-200" />
+                                        <span>Sample School Head Forms</span>
+                                    </button>
+                                </div>
+                            )}
+                            </>
                         ) : (
                             <>
                                 <div className="flex items-center gap-2 mb-2 opacity-80">

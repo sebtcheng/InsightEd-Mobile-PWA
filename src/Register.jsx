@@ -31,6 +31,7 @@ import locationData from './locations.json';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Engineer': '/engineer-dashboard',
+        'Local Government Unit': '/lgu',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
@@ -608,6 +609,7 @@ const Register = () => {
                                         <option value="School Division Office">School Division Office</option>
                                         <option value="School Head">School Head</option>
                                         <option value="Engineer">Engineer</option>
+                                        <option value="Local Government Unit">Local Government Unit</option>
                                         {/* {<option value="Admin">Admin</option>} */}
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">

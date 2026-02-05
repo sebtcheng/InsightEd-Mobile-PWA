@@ -12,6 +12,7 @@ import Register from './Register';
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
 import EngineerProjects from './modules/EngineerProjects';
+import LguDashboard from './modules/lgu'; // Import LguDashboard
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard';
@@ -67,6 +68,7 @@ const AnimatedRoutes = () => {
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
+        <Route path="/lgu" element={<LguDashboard />} />
         <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/super-admin" element={<SuperAdminDashboard />} />
 

@@ -18,6 +18,7 @@ import LoadingScreen from './components/LoadingScreen';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Engineer': '/engineer-dashboard',
+        'Local Government Unit': '/lgu',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Regional Office': '/monitoring-dashboard',
