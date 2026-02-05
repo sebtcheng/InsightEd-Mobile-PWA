@@ -58,6 +58,20 @@ export const ServiceWorkerProvider = ({ children }) => {
                         });
                     });
 
+
+                    // 4. Check for updates on Window Focus / Visibility Change
+                    // This ensures if the user comes back to the app, we check for updates immediately
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') {
+                            console.log('App visible, checking for SW updates...');
+                            reg.update();
+                        }
+                    });
+
+                    window.addEventListener('focus', () => {
+                        console.log('Window focused, checking for SW updates...');
+                        reg.update();
+                    });
                 } catch (err) {
                     console.error('PWA Registration Failed:', err);
                 }
@@ -65,19 +79,7 @@ export const ServiceWorkerProvider = ({ children }) => {
 
             registerSW();
 
-            // 4. Check for updates on Window Focus / Visibility Change
-            // This ensures if the user comes back to the app, we check for updates immediately
-            document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible') {
-                    console.log('App visible, checking for SW updates...');
-                    reg.update();
-                }
-            });
-
-            window.addEventListener('focus', () => {
-                console.log('Window focused, checking for SW updates...');
-                reg.update();
-            });
+            // Listen for controller change (reload happened)
 
             // Listen for controller change (reload happened)
             let refreshing = false;

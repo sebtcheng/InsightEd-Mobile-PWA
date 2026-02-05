@@ -268,7 +268,8 @@ const MonitoringDashboard = () => {
                 // Fetch ALL schools in this division
                 const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(userData.region)}&division=${encodeURIComponent(division)}`);
                 if (res.ok) {
-                    setDistrictSchools(await res.json());
+                    const data = await res.json();
+                    setDistrictSchools(Array.isArray(data) ? data : (data.data || []));
                 }
             } catch (err) {
                 console.error(err);
@@ -298,7 +299,7 @@ const MonitoringDashboard = () => {
                 const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}`);
                 if (res.ok) {
                     const data = await res.json();
-                    setDistrictSchools(data);
+                    setDistrictSchools(Array.isArray(data) ? data : (data.data || []));
                 }
             } catch (error) {
                 console.error("Failed to fetch district schools:", error);
@@ -691,40 +692,40 @@ const MonitoringDashboard = () => {
                         {userData?.role === 'Central Office' || userData?.role === 'Super User' ? (
                             <>
                                 <div className="flex items-center gap-2 mb-4">
-                                {(coRegion || coDivision || coDistrict) && (
-                                    <button
-                                        onClick={() => {
-                                            if (coDistrict) handleDistrictChange(''); // Back to Division View
-                                            else if (coDivision) handleDivisionChange(''); // Back to Regional View
-                                            else if (coRegion) handleFilterChange(''); // Back to National View
-                                        }}
-                                        className="mr-2 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition flex items-center justify-center group"
-                                        title="Go Back"
-                                    >
-                                        <FiArrowLeft className="text-lg group-hover:-translate-x-0.5 transition-transform" />
-                                    </button>
-                                )}
+                                    {(coRegion || coDivision || coDistrict) && (
+                                        <button
+                                            onClick={() => {
+                                                if (coDistrict) handleDistrictChange(''); // Back to Division View
+                                                else if (coDivision) handleDivisionChange(''); // Back to Regional View
+                                                else if (coRegion) handleFilterChange(''); // Back to National View
+                                            }}
+                                            className="mr-2 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition flex items-center justify-center group"
+                                            title="Go Back"
+                                        >
+                                            <FiArrowLeft className="text-lg group-hover:-translate-x-0.5 transition-transform" />
+                                        </button>
+                                    )}
 
-                                <div>
-                                    <h1 className="text-3xl font-black tracking-tight">{userData.bureau || 'Central Office'}</h1>
-                                    <p className="text-blue-100/70 text-sm mt-1 font-bold uppercase tracking-widest">
-                                        {coDistrict ? `${coDistrict}, ${coDivision}` : (coDivision ? `${coDivision} Division` : (coRegion ? `${coRegion}` : 'National View'))}
-                                    </p>
+                                    <div>
+                                        <h1 className="text-3xl font-black tracking-tight">{userData.bureau || 'Central Office'}</h1>
+                                        <p className="text-blue-100/70 text-sm mt-1 font-bold uppercase tracking-widest">
+                                            {coDistrict ? `${coDistrict}, ${coDivision}` : (coDivision ? `${coDivision} Division` : (coRegion ? `${coRegion}` : 'National View'))}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                            
-                            {/* --- REGIONAL VIEW ACTION: SCHOOL HEAD SIMULATION --- */}
-                            {(coRegion || coDivision) && (
-                                <div className="mt-2 text-right md:absolute md:top-6 md:right-32 md:mt-0">
-                                    <button
-                                        onClick={() => navigate('/dummy-forms', { state: { type: 'school' } })}
-                                        className="text-[10px] font-black text-blue-100 uppercase tracking-widest bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-400/30 hover:bg-blue-500/30 transition-colors flex items-center gap-2"
-                                    >
-                                        <TbSchool size={16} className="text-blue-200" />
-                                        <span>Sample School Head Forms</span>
-                                    </button>
-                                </div>
-                            )}
+
+                                {/* --- REGIONAL VIEW ACTION: SCHOOL HEAD SIMULATION --- */}
+                                {(coRegion || coDivision) && (
+                                    <div className="mt-2 text-right md:absolute md:top-6 md:right-32 md:mt-0">
+                                        <button
+                                            onClick={() => navigate('/dummy-forms', { state: { type: 'school' } })}
+                                            className="text-[10px] font-black text-blue-100 uppercase tracking-widest bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-400/30 hover:bg-blue-500/30 transition-colors flex items-center gap-2"
+                                        >
+                                            <TbSchool size={16} className="text-blue-200" />
+                                            <span>Sample School Head Forms</span>
+                                        </button>
+                                    </div>
+                                )}
                             </>
                         ) : (
                             <>
