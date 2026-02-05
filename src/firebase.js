@@ -1,7 +1,7 @@
-// src/firebase.js
-import { initializeApp, getApps } from "firebase/app"; // 👈 Added getApps
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence, inMemoryPersistence } from "firebase/auth";
 import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDKbjlnMauvdUZS4S8V6FkNaWAEXFQ1fFs",
@@ -16,22 +16,28 @@ const firebaseConfig = {
 // 1. SINGLETON CHECK: Only initialize if no app exists
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-// 2. Export Services
+// 2. Export Services (Auth with robust persistence)
 export const auth = getAuth(app);
+// Try local persistence, fallback to memory if IDB is broken
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn("Local persistence failed (IDB Error?), falling back to memory.", err);
+  return setPersistence(auth, inMemoryPersistence);
+});
+
 export const googleProvider = new GoogleAuthProvider();
+
+// 3. FIRESTORE WITH ROBUST CACHE
 export const db = getFirestore(app);
 
-// 3. ENABLE OFFLINE DATABASE (With Error Handling)
-// We wrap this in a catch block so it doesn't crash your app during reloads
+// Enable Offline Database (With Error Handling)
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code === 'failed-precondition') {
-    // Error: Multiple tabs open. Persistence can only be enabled in one tab at a time.
     console.warn('Firestore persistence enabled in another tab.');
   } else if (err.code === 'unimplemented') {
-    // Error: The current browser does not support all of the features required.
     console.warn('Firestore persistence not supported by this browser.');
   } else {
-    // This ignores the "already started" error during hot-reloads
-    console.log('Firestore persistence already active.');
+    console.warn(`Firestore persistence failed: ${err.code}`);
   }
 });
+
+export const storage = getStorage(app);

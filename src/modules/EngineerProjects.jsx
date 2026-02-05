@@ -514,7 +514,7 @@ const EditProjectModal = ({
           )}
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Engineering Remarks</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Remarks</label>
             <textarea
               name="otherRemarks"
               value={formData.otherRemarks || ""}
@@ -616,6 +616,7 @@ const EditProjectModal = ({
 const EngineerProjects = () => {
   const navigate = useNavigate();
   const [userName, setUserName] = useState("Engineer");
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || "Engineer");
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -950,7 +951,7 @@ const EngineerProjects = () => {
           isUploading={isUploading}
         />
 
-        <BottomNav userRole="Engineer" />
+        <BottomNav userRole={userRole} />
       </div>
     </PageTransition>
   );

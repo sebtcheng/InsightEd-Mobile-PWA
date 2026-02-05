@@ -11,7 +11,7 @@ import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 
 // 1. THIS MUST BE FIRST
-require('dotenv').config(); 
+require('dotenv').config();
 
 // 2. Now you can check the variable
 console.log("DEBUG: DATABASE_URL is:", process.env.DATABASE_URL ? "FOUND" : "NOT FOUND");
@@ -35,8 +35,8 @@ app.use(cors({
     'http://localhost:5174',           // Vite Local Alternate
     'https://insight-ed-mobile-pwa.vercel.app', // Your Vercel Frontend
     'https://insight-ed-frontend.vercel.app',
-'https://stride.deped.gov.ph',
-'http://stride.deped.gov.ph'
+    'https://stride.deped.gov.ph',
+    'http://stride.deped.gov.ph'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
@@ -2042,6 +2042,63 @@ app.post('/api/validate-project', async (req, res) => {
   } catch (err) {
     console.error("Validation Error:", err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// --- 11d. POST: Save Project Documents (Metadata Only) ---
+app.post('/api/save-project-documents', async (req, res) => {
+  const { projectId, documents, uploadedBy } = req.body;
+
+  if (!projectId || !documents || !Array.isArray(documents)) {
+    return res.status(400).json({ error: "Missing required fields or documents array" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const query = `
+      INSERT INTO project_documents 
+      (project_id, document_type, file_url, storage_path, uploaded_by, file_size, content_type)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `;
+
+    for (const doc of documents) {
+      await client.query(query, [
+        projectId,
+        doc.type,         // 'POW', 'DUPA', etc.
+        doc.url,          // Firebase Download URL
+        doc.path,         // storage/path/to/file.pdf
+        uploadedBy,
+        doc.size || 0,
+        doc.contentType || 'application/pdf'
+      ]);
+    }
+
+    await client.query('COMMIT');
+
+    // Audit Log
+    try {
+      await logActivity(
+        uploadedBy,
+        'Engineer', // Assuming role
+        'Engineer',
+        'UPLOAD',
+        `Project Documents: ${projectId}`,
+        `Uploaded ${documents.length} PDF documents`
+      );
+    } catch (logErr) {
+      console.warn("Log failed:", logErr.message);
+    }
+
+    res.json({ success: true, message: "Document metadata saved." });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("❌ Save Doc Metadata Error:", err);
+    res.status(500).json({ error: "Failed to save document metadata" });
+  } finally {
+    client.release();
   }
 });
 

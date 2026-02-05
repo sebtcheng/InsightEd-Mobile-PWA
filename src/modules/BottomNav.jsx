@@ -22,6 +22,12 @@ const BottomNav = ({ userRole }) => {
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
+        'Local Government Unit': [
+            { label: 'Home', path: '/lgu', icon: TbHomeEdit },
+            { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
+            { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
         'School Head': [
             { label: 'Home', path: '/schoolhead-dashboard', icon: TbHomeEdit },
             { label: 'Forms', path: '/school-forms', icon: TbClipboardList },

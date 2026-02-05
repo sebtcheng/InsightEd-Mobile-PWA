@@ -177,15 +177,15 @@ const StatsChart = ({ projects }) => {
 
 // --- MAIN DASHBOARD COMPONENT ---
 
-const EngineerDashboard = () => {
-  const [userName, setUserName] = useState("Engineer");
+const LguDashboard = () => {
+  const [userName, setUserName] = useState("User");
   const [userRole, setUserRole] = useState("");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]); 
   const [isLoading, setIsLoading] = useState(true);
 
   const API_BASE = "";
-  const navigate = useNavigate(); // Needs to be imported if not already, checking imports... it's not imported in EngineerDashboard.jsx yet.
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUserDataAndProjects = async () => {
@@ -249,7 +249,7 @@ const EngineerDashboard = () => {
                     contractorName: item.contractorName,
                 }));
                 
-                // Cache data if we are an Engineer
+                // Cache data 
                 if (currentRole !== 'Super User') { 
                      await cacheProjects(currentProjects);
                 }
@@ -294,7 +294,7 @@ const EngineerDashboard = () => {
               <p className="text-blue-200 text-xs font-bold tracking-wider uppercase">
                 DepEd Infrastructure
               </p>
-              <h1 className="text-2xl font-bold text-white mt-1">Dashboard</h1>
+              <h1 className="text-2xl font-bold text-white mt-1">LGU Dashboard</h1>
               <p className="text-blue-100 mt-1 text-sm">
                 Overview of {projects.length} active projects.
               </p>
@@ -309,7 +309,7 @@ const EngineerDashboard = () => {
                     </button>
                 )}
                 <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
-                 👷‍♂️
+                 🏛️
                 </div>
             </div>
           </div>
@@ -332,13 +332,10 @@ const EngineerDashboard = () => {
                 <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-sm border-l-4 border-[#FDB913] flex flex-col justify-center min-h-[140px]">
                   <h3 className="text-[#004A99] dark:text-blue-400 font-bold text-sm flex items-center mb-1">
                     <span className="text-xl mr-2">👷</span>
-                    Welcome, {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName}!
+                    Welcome, LGU Partner {userName}!
                   </h3>
                   <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed ml-7">
-                    {userRole === 'Local Government Unit' 
-                        ? "Your dashboard is ready. Monitor local infrastructure projects and progress."
-                        : "Your dashboard is ready. Track ongoing construction and validate school infrastructure data."
-                    }
+                    Your dashboard is ready. Monitor local infrastructure projects and progress.
                   </p>
                 </div>
               </SwiperSlide>
@@ -393,56 +390,11 @@ const EngineerDashboard = () => {
           
           <CalendarWidget projects={projects} />
 
-{/* --- RECENT ACTIVITIES section --- */}
-          {/* <div className="w-full mb-6">
-               <h3 className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider mb-3 ml-1">Recent Activities</h3>
-               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                   {isLoading ? (
-                       <div className="p-8 text-center text-xs text-slate-400">Loading activities...</div>
-                   ) : activities.length > 0 ? (
-                       <>
-                           <div className="divide-y divide-slate-50 dark:divide-slate-700 max-h-96 overflow-y-auto custom-scrollbar">
-                               {activities.map((log, idx) => (
-                                   <div key={log.log_id || idx} className="p-4 flex gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                                       <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                                           log.action_type === 'CREATE' ? 'bg-green-500' : 
-                                           log.action_type === 'DELETE' ? 'bg-red-500' : 'bg-blue-500'
-                                       }`} />
-                                       <div className="flex-1 min-w-0">
-                                           <div className="flex justify-between items-start">
-                                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border mb-1 inline-block ${
-                                                   log.action_type === 'CREATE' ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-100 dark:border-green-800' : 
-                                                   log.action_type === 'DELETE' ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800' : 
-                                                   'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-800'
-                                               }`}>
-                                                   {log.action_type}
-                                               </span>
-                                               <span className="text-[10px] text-slate-400">{log.formatted_time}</span>
-                                           </div>
-                                           <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{log.target_entity}</p>
-                                           <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mt-0.5">{log.details}</p>
-                                       </div>
-                                   </div>
-                               ))}
-                           </div>
-                           <div className="p-3 text-center bg-slate-50/50 dark:bg-slate-700/30 border-t border-slate-50 dark:border-slate-700">
-                               <p className="text-[10px] text-slate-400 font-medium">Showing {activities.length} recent activities</p>
-                           </div>
-                       </>
-                   ) : (
-                       <div className="p-8 text-center">
-                           <p className="text-2xl mb-2">💤</p>
-                           <p className="text-sm font-bold text-slate-600 dark:text-slate-300">No recent activity</p>
-                           <p className="text-xs text-slate-400">Your actions will appear here.</p>
-                       </div>
-                   )}
-               </div>
-          </div> */}
         </div>
-        <BottomNav userRole={userRole || "Engineer"} />
+        <BottomNav userRole={userRole || "Local Government Unit"} />
       </div>
     </PageTransition>
   );
 };
 
-export default EngineerDashboard;
+export default LguDashboard;
