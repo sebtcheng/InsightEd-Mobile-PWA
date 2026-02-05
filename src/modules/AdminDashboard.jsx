@@ -3,7 +3,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { auth, db } from '../firebase';
 import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare } from "react-icons/fi";
+import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool } from "react-icons/fi";
 
 
 // --- REUSABLE STAT COMPONENT ---
@@ -40,13 +40,18 @@ const AdminDashboard = () => {
 
     // Deadline State
     const [deadlineDate, setDeadlineDate] = useState('');
+
     const [updatingDeadline, setUpdatingDeadline] = useState(false);
+
+    // Maintenance State
+    const [maintenanceMode, setMaintenanceMode] = useState(false);
+    const [togglingMaintenance, setTogglingMaintenance] = useState(false);
 
     // --- FETCH DATA ---
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, usersRes, feedbackQuerySnapshot] = await Promise.all([
+            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, maintenanceRes, usersRes, feedbackQuerySnapshot] = await Promise.all([
                 // checking user role/name
 
                 (async () => {
@@ -59,14 +64,16 @@ const AdminDashboard = () => {
                 fetch('/api/schools').then(r => r.json()),
                 fetch('/api/projects').then(r => r.json()), // Changed to /api/projects
                 fetch('/api/activities').then(r => r.json()),
+
                 fetch('/api/settings/enrolment_deadline').then(r => r.json()),
+                fetch('/api/settings/maintenance_mode').then(r => r.json()), // Fetch Maintenance Status
                 fetch('/api/admin/users').then(r => r.json()),
                 // Fetch Feedback directly from Firestore for real-time accuracy
                 // Added catch block to prevent entire dashboard failure if permissions are missing
                 getDocs(query(collection(db, "app_feedback"), orderBy("timestamp", "desc")))
                     .catch(err => {
                         console.warn("Feedback fetch failed (likely permissions):", err);
-                        return null; 
+                        return null;
                     })
             ]);
 
@@ -83,6 +90,11 @@ const AdminDashboard = () => {
             // Handle Deadline
             if (deadlineRes && deadlineRes.value) {
                 setDeadlineDate(deadlineRes.value);
+            }
+
+            // Handle Maintenance
+            if (maintenanceRes) {
+                setMaintenanceMode(maintenanceRes.value === 'true');
             }
 
             // Handle Users
@@ -159,9 +171,42 @@ const AdminDashboard = () => {
         }
     };
 
+    const handleToggleMaintenance = async () => {
+        if (!window.confirm(`Are you sure you want to ${maintenanceMode ? 'DISABLE' : 'ENABLE'} Maintenance Mode? \n\n${maintenanceMode ? 'Users will be able to log in again.' : 'Non-admin users will be blocked from accessing the system.'}`)) return;
+
+        setTogglingMaintenance(true);
+        try {
+            const user = auth.currentUser;
+            const newValue = (!maintenanceMode).toString();
+
+            const res = await fetch('/api/settings/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'maintenance_mode',
+                    value: newValue,
+                    userUid: user ? user.uid : 'admin_override'
+                })
+            });
+
+            if (res.ok) {
+                alert(`✅ Maintenance Mode ${newValue === 'true' ? 'ENABLED' : 'DISABLED'}!`);
+                setMaintenanceMode(newValue === 'true');
+                fetchAllData(); // refresh logs
+            } else {
+                alert("❌ Failed to update maintenance mode.");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("❌ Error updating maintenance mode.");
+        } finally {
+            setTogglingMaintenance(false);
+        }
+    };
+
     const handleDisableUser = async (uid, currentStatus) => {
         if (!window.confirm(`Are you sure you want to ${currentStatus ? 'ENABLE' : 'DISABLE'} this user?`)) return;
-        
+
         try {
             const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
             const res = await fetch(`/api/admin/users/${uid}/status`, {
@@ -251,6 +296,32 @@ const AdminDashboard = () => {
                 >
                     {updatingDeadline ? 'Updating...' : 'Update Deadline'}
                 </button>
+
+            </div>
+
+            {/* MAINTENANCE MODE CARD */}
+            <div className={`mt-4 p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition-colors ${maintenanceMode ? 'bg-amber-50 border-amber-200' : 'bg-white'}`}>
+                <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-full ${maintenanceMode ? 'bg-amber-100 text-amber-600' : 'bg-gray-100 text-gray-500'}`}>
+                        <FiTool size={20} />
+                    </div>
+                    <div>
+                        <h3 className={`text-xs font-bold uppercase tracking-wider ${maintenanceMode ? 'text-amber-600' : 'text-gray-400'}`}>Maintenance Mode</h3>
+                        <p className={`text-xs mb-1 ${maintenanceMode ? 'text-amber-700' : 'text-gray-500'}`}>
+                            {maintenanceMode ? 'System is currently LOCKED for non-admins.' : 'System is running normally.'}
+                        </p>
+                    </div>
+                </div>
+                <button
+                    onClick={handleToggleMaintenance}
+                    disabled={togglingMaintenance}
+                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${maintenanceMode
+                        ? 'bg-amber-500 text-white hover:bg-amber-600'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                >
+                    {togglingMaintenance ? 'Saving...' : (maintenanceMode ? 'Turn OFF' : 'Turn ON')}
+                </button>
             </div>
 
             {/* Recent Activity Mini-Feed */}
@@ -274,7 +345,7 @@ const AdminDashboard = () => {
                     </div>
                 ))}
             </div>
-        </div>
+        </div >
     );
 
     const renderSchoolsList = () => (
@@ -387,14 +458,14 @@ const AdminDashboard = () => {
     };
 
     const renderAccountManagement = () => {
-        const filteredUsers = users.filter(u => 
-            (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        const filteredUsers = users.filter(u =>
+            (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (u.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (u.last_name || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
 
         return (
-             <div className="animate-in fade-in duration-300">
+            <div className="animate-in fade-in duration-300">
                 <div className="flex items-center gap-2 mb-4 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
                     <FiSearch className="text-gray-400 ml-2" />
                     <input
@@ -426,11 +497,10 @@ const AdminDashboard = () => {
                                         <p className="text-[10px] text-gray-500">{user.email}</p>
                                     </td>
                                     <td className="p-3">
-                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
-                                            user.role === 'Admin' ? 'bg-purple-100 text-purple-600 border-purple-200' :
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${user.role === 'Admin' ? 'bg-purple-100 text-purple-600 border-purple-200' :
                                             user.role === 'Central Office' ? 'bg-blue-100 text-blue-600 border-blue-200' :
-                                            'bg-slate-100 text-slate-600 border-slate-200'
-                                        }`}>
+                                                'bg-slate-100 text-slate-600 border-slate-200'
+                                            }`}>
                                             {user.role}
                                         </span>
                                     </td>
@@ -441,26 +511,26 @@ const AdminDashboard = () => {
                                         </p>
                                     </td>
                                     <td className="p-3 text-center">
-                                       {user.disabled ? (
-                                           <span className="inline-flex items-center gap-1 bg-red-100 text-red-600 text-[9px] font-black px-1.5 py-0.5 rounded">
-                                               <FiSlash size={8} /> DISABLED
-                                           </span>
-                                       ) : (
-                                           <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-600 text-[9px] font-black px-1.5 py-0.5 rounded">
-                                               <FiCheckCircle size={8} /> ACTIVE
-                                           </span>
-                                       )}
+                                        {user.disabled ? (
+                                            <span className="inline-flex items-center gap-1 bg-red-100 text-red-600 text-[9px] font-black px-1.5 py-0.5 rounded">
+                                                <FiSlash size={8} /> DISABLED
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-600 text-[9px] font-black px-1.5 py-0.5 rounded">
+                                                <FiCheckCircle size={8} /> ACTIVE
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="p-3 text-right">
                                         <div className="flex justify-end gap-1">
-                                            <button 
+                                            <button
                                                 onClick={() => handleDisableUser(user.uid, user.disabled)}
                                                 className={`p-1.5 rounded-lg transition-colors ${user.disabled ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-orange-50 text-orange-600 hover:bg-orange-100'}`}
                                                 title={user.disabled ? "Enable User" : "Disable User"}
                                             >
                                                 {user.disabled ? <FiCheckCircle size={14} /> : <FiSlash size={14} />}
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={() => handleDeleteUser(user.uid)}
                                                 className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                                                 title="Delete User"
@@ -480,31 +550,31 @@ const AdminDashboard = () => {
                         </div>
                     )}
                 </div>
-             </div>
+            </div>
         );
     };
 
     const renderFeedbackView = () => (
         <div className="animate-in fade-in slide-in-from-right-4 duration-500">
-             {/* Stats Cards */}
-             <div className="grid grid-cols-3 gap-4 mb-6">
-                <StatCard 
-                    label="Ease of Use" 
-                    value={calculateAverageRating('easeOfUse')} 
-                    icon={<FiStar />} 
-                    color="text-amber-500 bg-amber-50" 
+            {/* Stats Cards */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+                <StatCard
+                    label="Ease of Use"
+                    value={calculateAverageRating('easeOfUse')}
+                    icon={<FiStar />}
+                    color="text-amber-500 bg-amber-50"
                 />
-                <StatCard 
-                    label="Aesthetics" 
-                    value={calculateAverageRating('aesthetics')} 
-                    icon={<FiStar />} 
-                    color="text-pink-500 bg-pink-50" 
+                <StatCard
+                    label="Aesthetics"
+                    value={calculateAverageRating('aesthetics')}
+                    icon={<FiStar />}
+                    color="text-pink-500 bg-pink-50"
                 />
-                <StatCard 
-                    label="Functionality" 
-                    value={calculateAverageRating('functionality')} 
-                    icon={<FiStar />} 
-                    color="text-blue-500 bg-blue-50" 
+                <StatCard
+                    label="Functionality"
+                    value={calculateAverageRating('functionality')}
+                    icon={<FiStar />}
+                    color="text-blue-500 bg-blue-50"
                 />
             </div>
 
@@ -517,7 +587,7 @@ const AdminDashboard = () => {
                         {feedbackList.length} Reviews
                     </span>
                 </div>
-                
+
                 <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
                     {feedbackList.length === 0 ? (
                         <div className="p-8 text-center text-gray-400 text-sm">No feedback received yet.</div>
@@ -531,18 +601,18 @@ const AdminDashboard = () => {
                                     </div>
                                     <div className="flex gap-1">
                                         {[1, 2, 3, 4, 5].map(star => (
-                                            <FiStar 
-                                                key={star} 
-                                                size={12} 
-                                                className={star <= Math.round((item.ratings?.easeOfUse + item.ratings?.aesthetics + item.ratings?.functionality)/3) ? "fill-amber-400 text-amber-400" : "text-gray-200"} 
+                                            <FiStar
+                                                key={star}
+                                                size={12}
+                                                className={star <= Math.round((item.ratings?.easeOfUse + item.ratings?.aesthetics + item.ratings?.functionality) / 3) ? "fill-amber-400 text-amber-400" : "text-gray-200"}
                                             />
                                         ))}
                                     </div>
                                 </div>
                                 <div className="text-xs text-gray-500 mb-2 flex gap-4">
-                                     <span>Ease: <b>{item.ratings?.easeOfUse}</b></span>
-                                     <span>Look: <b>{item.ratings?.aesthetics}</b></span>
-                                     <span>Func: <b>{item.ratings?.functionality}</b></span>
+                                    <span>Ease: <b>{item.ratings?.easeOfUse}</b></span>
+                                    <span>Look: <b>{item.ratings?.aesthetics}</b></span>
+                                    <span>Func: <b>{item.ratings?.functionality}</b></span>
                                 </div>
                                 {item.comment && (
                                     <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700 italic border border-gray-100">
@@ -630,7 +700,7 @@ const AdminDashboard = () => {
                                     {activeTab === 'schools' && renderSchoolsList()}
                                     {activeTab === 'projects' && renderProjectsList()}
                                     {activeTab === 'audit' && renderAuditTable()}
-                    {activeTab === 'feedback' && renderFeedbackView()}
+                                    {activeTab === 'feedback' && renderFeedbackView()}
                                     {activeTab === 'accounts' && renderAccountManagement()}
                                 </>
                             )}

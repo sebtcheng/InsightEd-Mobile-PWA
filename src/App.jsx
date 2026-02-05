@@ -4,6 +4,8 @@ import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-d
 // ... (lines 3-118 remain same, but I can't express that in one chunk easily if imports are at top and usage at bottom. I'll use 2 chunks)
 
 import { AnimatePresence } from 'framer-motion'; // <--- IMPORT THIS
+import MaintenanceScreen from './components/MaintenanceScreen'; // <--- IMPORT MAINTENANCE SCREEN
+import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 
 // Auth
 import Login from './Login';
@@ -57,6 +59,34 @@ import Leaderboard from './modules/Leaderboard';
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
 const AnimatedRoutes = () => {
   const location = useLocation();
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [checkingMaintenance, setCheckingMaintenance] = useState(true);
+
+  // Check Maintenance Status on Route Change
+  useEffect(() => {
+    const checkMaintenance = async () => {
+      try {
+        const res = await fetch('/api/settings/maintenance_mode');
+        const data = await res.json();
+        setMaintenanceMode(data.value === 'true');
+      } catch (err) {
+        console.error("Maintenance Check Failed:", err);
+      } finally {
+        setCheckingMaintenance(false);
+      }
+    };
+    checkMaintenance();
+  }, [location.pathname]); // Re-check on nav
+
+  if (checkingMaintenance) return null; // Or a mini loader
+
+  const role = localStorage.getItem('userRole');
+  const isProtected = location.pathname !== '/' && location.pathname !== '/register';
+  const isAdmin = role === 'Admin' || role === 'Super Admin';
+
+  // if (maintenanceMode && isProtected && !isAdmin) {
+  //   return <MaintenanceScreen />;
+  // }
 
   return (
     // 'mode="wait"' ensures the old page leaves before the new one enters
@@ -113,7 +143,13 @@ const AnimatedRoutes = () => {
         <Route path="/project-details/:id" element={<DetailedProjInfo />} />
         <Route path="/project-gallery" element={<ProjectGallery />} />
         <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
+        <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
       </Routes>
+
+      {/* MAINTENANCE OVERLAY (Blocks interaction if active) */}
+      {maintenanceMode && isProtected && !isAdmin && (
+        <MaintenanceScreen />
+      )}
     </AnimatePresence>
   );
 };
