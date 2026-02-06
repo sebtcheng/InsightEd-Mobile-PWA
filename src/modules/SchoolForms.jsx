@@ -198,7 +198,7 @@ const SchoolForms = () => {
                 return totalTeachers > 0 ? 'completed' : 'pending';
             case 'specialization':
                 const specFields = [
-                    'spec_general_major', 'spec_ece_major',
+                    'spec_general_teaching', 'spec_ece_teaching', // UPDATED
                     'spec_english_major', 'spec_filipino_major', 'spec_math_major',
                     'spec_science_major', 'spec_ap_major', 'spec_mapeh_major',
                     'spec_esp_major', 'spec_tle_major', 'spec_bio_sci_major',

@@ -728,7 +728,7 @@ const UserProfile = () => {
                 </button>
             </div>
 
-            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.5</p>
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-8">InsightEd Mobile app v1.0.6</p>
         </div>
     );
 

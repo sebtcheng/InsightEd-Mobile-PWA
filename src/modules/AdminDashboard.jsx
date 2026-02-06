@@ -3,7 +3,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { auth, db } from '../firebase';
 import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool } from "react-icons/fi";
+import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX } from "react-icons/fi";
 
 
 // --- REUSABLE STAT COMPONENT ---
@@ -28,6 +28,11 @@ const AdminDashboard = () => {
     const [schools, setSchools] = useState([]);
     const [projects, setProjects] = useState([]);
     const [users, setUsers] = useState([]);
+    const [usersPage, setUsersPage] = useState(1);
+    const [usersTotal, setUsersTotal] = useState(0);
+    const [usersTotalPages, setUsersTotalPages] = useState(1);
+    const [usersLimit] = useState(20);
+    const [resetModalData, setResetModalData] = useState(null); // { email, password } | null
     const [auditLogs, setAuditLogs] = useState([]);
     const [feedbackList, setFeedbackList] = useState([]); // New state for feedback
 
@@ -67,7 +72,9 @@ const AdminDashboard = () => {
 
                 fetch('/api/settings/enrolment_deadline').then(r => r.json()),
                 fetch('/api/settings/maintenance_mode').then(r => r.json()), // Fetch Maintenance Status
-                fetch('/api/admin/users').then(r => r.json()),
+                fetch('/api/settings/maintenance_mode').then(r => r.json()), // Fetch Maintenance Status
+                // fetch('/api/admin/users').then(r => r.json()), // REMOVED: Fetch separately for pagination
+                // Fetch Feedback directly from Firestore for real-time accuracy
                 // Fetch Feedback directly from Firestore for real-time accuracy
                 // Added catch block to prevent entire dashboard failure if permissions are missing
                 getDocs(query(collection(db, "app_feedback"), orderBy("timestamp", "desc")))
@@ -97,8 +104,8 @@ const AdminDashboard = () => {
                 setMaintenanceMode(maintenanceRes.value === 'true');
             }
 
-            // Handle Users
-            if (Array.isArray(usersRes)) setUsers(usersRes);
+            // Handle Users (Moved to separate effect)
+            // if (Array.isArray(usersRes)) setUsers(usersRes);
 
             // Handle Feedback
             const feedbackData = [];
@@ -120,6 +127,36 @@ const AdminDashboard = () => {
     useEffect(() => {
         fetchAllData();
     }, []);
+
+    // --- FETCH USERS (Paginated) ---
+    const fetchUsers = async () => {
+        try {
+            // Only search users if we are on the accounts tab to save bandwidth
+            if (activeTab !== 'accounts') return;
+
+            const res = await fetch(`/api/admin/users?page=${usersPage}&limit=${usersLimit}&search=${searchTerm}`);
+            const data = await res.json();
+
+            if (data.data) {
+                setUsers(data.data);
+                setUsersTotal(data.total);
+                setUsersTotalPages(data.totalPages);
+            }
+        } catch (error) {
+            console.error("Failed to fetch users:", error);
+        }
+    };
+
+    // Debounce Search & Fetch
+    useEffect(() => {
+        const delayDebounceFn = setTimeout(() => {
+            if (activeTab === 'accounts') {
+                fetchUsers();
+            }
+        }, 500);
+        return () => clearTimeout(delayDebounceFn);
+    }, [searchTerm, usersPage, activeTab]);
+
 
     // --- DERIVED STATS ---
     const totalSchools = schools.length;
@@ -241,6 +278,36 @@ const AdminDashboard = () => {
             }
         } catch (err) {
             alert("❌ Error deleting user.");
+        }
+    };
+
+    const handleResetPassword = async (uid, email) => {
+        if (!window.confirm(`Are you sure you want to RESET the password for ${email}?`)) return;
+
+        // 1. Generate Temp Password (8 chars, alphanumeric + special)
+        const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHIJKLMNPQRSTUVWXYZ23456789!@#";
+        let tempPassword = "";
+        for (let i = 0; i < 8; i++) tempPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+
+        // 2. Call API
+        try {
+            const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
+            const res = await fetch('/api/admin/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid, newPassword: tempPassword, adminUid })
+            });
+
+            if (res.ok) {
+                // 3. Show Success & Password via Modal
+                setResetModalData({ email, password: tempPassword });
+            } else {
+                const err = await res.json();
+                alert("❌ Failed to reset password: " + err.error);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("❌ Network Error: " + e.message);
         }
     };
 
@@ -458,11 +525,9 @@ const AdminDashboard = () => {
     };
 
     const renderAccountManagement = () => {
-        const filteredUsers = users.filter(u =>
-            (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (u.first_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (u.last_name || '').toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        // No local filtering anymore
+        const filteredUsers = users;
+
 
         return (
             <div className="animate-in fade-in duration-300">
@@ -473,7 +538,10 @@ const AdminDashboard = () => {
                         placeholder="Search users..."
                         className="flex-1 text-sm outline-none"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            setUsersPage(1);
+                        }}
                     />
                 </div>
 
@@ -524,6 +592,13 @@ const AdminDashboard = () => {
                                     <td className="p-3 text-right">
                                         <div className="flex justify-end gap-1">
                                             <button
+                                                onClick={() => handleResetPassword(user.uid, user.email)}
+                                                className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                                                title="Reset Password"
+                                            >
+                                                <FiKey size={14} />
+                                            </button>
+                                            <button
                                                 onClick={() => handleDisableUser(user.uid, user.disabled)}
                                                 className={`p-1.5 rounded-lg transition-colors ${user.disabled ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-orange-50 text-orange-600 hover:bg-orange-100'}`}
                                                 title={user.disabled ? "Enable User" : "Disable User"}
@@ -549,6 +624,32 @@ const AdminDashboard = () => {
                             No users found.
                         </div>
                     )}
+                </div>
+
+                {/* PAGINATION CONTROLS */}
+                <div className="flex items-center justify-between mt-4 px-2">
+                    <p className="text-xs text-gray-500">
+                        Showing {users.length} of {usersTotal} users
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setUsersPage(p => Math.max(1, p - 1))}
+                            disabled={usersPage === 1}
+                            className="px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Previous
+                        </button>
+                        <span className="px-3 py-1.5 text-xs font-bold text-gray-800 bg-gray-100 rounded-lg">
+                            Page {usersPage} of {usersTotalPages || 1}
+                        </span>
+                        <button
+                            onClick={() => setUsersPage(p => Math.min(usersTotalPages, p + 1))}
+                            disabled={usersPage === usersTotalPages}
+                            className="px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -627,9 +728,78 @@ const AdminDashboard = () => {
         </div>
     );
 
+    const renderResetModal = () => {
+        if (!resetModalData) return null;
+
+        const copyToClipboard = () => {
+            navigator.clipboard.writeText(resetModalData.password);
+            alert("Password copied to clipboard!");
+        };
+
+        return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200 relative">
+                    <button
+                        onClick={() => setResetModalData(null)}
+                        className="absolute top-3 right-3 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-colors z-10"
+                    >
+                        <FiX size={20} />
+                    </button>
+
+                    <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-8 text-center relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                        <div className="mx-auto w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 text-white shadow-lg ring-4 ring-white/10">
+                            <FiCheckCircle size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-1">Password Reset!</h3>
+                        <p className="text-green-50 text-xs font-medium opacity-90">
+                            New credentials generated for<br />
+                            <span className="font-bold underline decoration-green-300/50 underline-offset-2">{resetModalData.email}</span>
+                        </p>
+                    </div>
+
+                    <div className="p-6">
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6 group relative">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1 text-center">Temporary Password</p>
+                            <div className="flex items-center justify-center gap-2">
+                                <code className="font-mono text-2xl font-bold text-slate-700 tracking-widest">
+                                    {resetModalData.password}
+                                </code>
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center bg-slate-50/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={copyToClipboard}
+                                    className="px-4 py-2 bg-white text-slate-700 font-bold text-xs rounded-lg shadow-sm border border-slate-200 flex items-center gap-2 transform hover:scale-105 transition-all"
+                                >
+                                    <FiCopy /> Copy Password
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <button
+                                onClick={copyToClipboard}
+                                className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all shadow-lg shadow-slate-200 flex items-center justify-center gap-2"
+                            >
+                                <FiCopy size={16} /> Copy & Close
+                            </button>
+                            <button
+                                onClick={() => setResetModalData(null)}
+                                className="w-full py-3 bg-white text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors border border-slate-100"
+                            >
+                                Close Window
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <PageTransition>
             <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
+                {renderResetModal()}
 
                 {/* --- HEADER --- */}
                 <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden transition-all duration-500 ease-in-out">

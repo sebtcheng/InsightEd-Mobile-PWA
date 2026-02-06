@@ -144,10 +144,15 @@ const AnimatedRoutes = () => {
         <Route path="/project-gallery" element={<ProjectGallery />} />
         <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
         <Route path="/project-gallery/:projectId" element={<ProjectGallery />} />
+
+        {/* Hidden Admin Login Route */}
+        <Route path="/adminlogin" element={<Login />} />
       </Routes>
 
       {/* MAINTENANCE OVERLAY (Blocks interaction if active) */}
-      {maintenanceMode && isProtected && !isAdmin && (
+      {/* EXEMPT: Authenticated users (protected routes) and Admin Login */}
+      {/* FIX: Only show on Login Page ('/') if not Admin. Logged-in users are effectively exempt by being on other routes. */}
+      {maintenanceMode && !isAdmin && location.pathname === '/' && (
         <MaintenanceScreen />
       )}
     </AnimatePresence>

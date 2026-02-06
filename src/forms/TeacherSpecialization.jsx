@@ -73,7 +73,7 @@ const SubjectRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) =
 
 // --- SUB-COMPONENT: Elementary Row (Single Input) ---
 const ElementaryRow = ({ label, id, formData, handleChange, isLocked, viewOnly }) => {
-    const total = formData[`spec_${id}_major`]; // Using 'major' column to store Total
+    const total = formData[`spec_${id}_teaching`]; // UPDATED: Using 'teaching' column to store Total
 
     return (
         <div className="group flex items-center justify-between py-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors px-2 -mx-2 rounded-xl">
@@ -84,7 +84,7 @@ const ElementaryRow = ({ label, id, formData, handleChange, isLocked, viewOnly }
                 <p className="text-[9px] text-slate-400 font-medium mb-1 text-center block">Total Teachers</p>
                 <input
                     type="text" inputMode="numeric" pattern="[0-9]*"
-                    name={`spec_${id}_major`}
+                    name={`spec_${id}_teaching`}
                     value={total ?? 0}
                     onChange={(e) => handleChange(e.target.name, e.target.value)}
                     disabled={isLocked || viewOnly}
@@ -320,8 +320,8 @@ const TeacherSpecialization = () => {
         const { hasElementary, hasSecondary } = getSections();
 
         if (hasElementary) {
-            if (!isValidEntry(formData.spec_general_major)) valid = false; // Check only Total
-            if (!isValidEntry(formData.spec_ece_major)) valid = false;   // Check only Total
+            if (!isValidEntry(formData.spec_general_teaching)) valid = false; // Check Teaching (Total)
+            if (!isValidEntry(formData.spec_ece_teaching)) valid = false;   // Check Teaching (Total)
         }
 
         if (hasSecondary) {

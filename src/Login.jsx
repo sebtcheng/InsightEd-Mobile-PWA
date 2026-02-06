@@ -346,8 +346,9 @@ const Login = () => {
             console.log("Determined Role:", role);
 
             if (role) {
-                // --- MAINTENANCE CHECK ---
+                // --- MAINTENANCE CHECK (DISABLED FOR TESTING) ---
                 // Before navigating, strict check for maintenance mode
+                /* 
                 try {
                     const maintRes = await fetch('/api/settings/maintenance_mode');
                     const maintData = await maintRes.json();
@@ -361,6 +362,7 @@ const Login = () => {
                 } catch (maintErr) {
                     console.warn("Maintenance check skipped (offline/error)", maintErr);
                 }
+                */
 
                 // --- FORCE ROLE FOR HARDCODED SUPER ADMIN ---
                 const currentUser = auth.currentUser;
