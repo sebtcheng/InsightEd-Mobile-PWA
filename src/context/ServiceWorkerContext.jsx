@@ -92,12 +92,26 @@ export const ServiceWorkerProvider = ({ children }) => {
         }
     }, []);
 
-    const updateApp = () => {
+    const updateApp = async () => {
         if (registration && registration.waiting) {
-            // Send message to SW to skip waiting
-            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            try {
+                // HARD RESET: Clear all caches before updating
+                console.log('Clearing all caches for hard reset...');
+                const cacheKeys = await caches.keys();
+                await Promise.all(
+                    cacheKeys.map(key => caches.delete(key))
+                );
+                console.log('All caches cleared.');
 
-            // Note: The 'controllerchange' listener above will handle the actual reload
+                // Send message to SW to skip waiting
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+
+                // Note: The 'controllerchange' listener above will handle the actual reload
+            } catch (error) {
+                console.error('Error during hard reset update:', error);
+                // Fallback: try to update anyway even if cache clear fails
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
         }
     };
 
@@ -124,11 +138,36 @@ export const ServiceWorkerProvider = ({ children }) => {
         }
     };
 
+    const hardReset = async () => {
+        try {
+            console.log('Manual hard reset triggered.');
+            // 1. Clear Caches
+            const cacheKeys = await caches.keys();
+            await Promise.all(
+                cacheKeys.map(key => caches.delete(key))
+            );
+            console.log('Caches cleared.');
+
+            // 2. Unregister SW to force fresh fetch
+            if (registration) {
+                await registration.unregister();
+                console.log('Service Worker unregistered.');
+            }
+
+            // 3. Reload
+            window.location.reload(true);
+        } catch (error) {
+            console.error('Hard reset failed:', error);
+            window.location.reload(); // Force reload anyway
+        }
+    };
+
     const value = {
         isUpdateAvailable,
         updateApp,
         checkForUpdates,
-        registration
+        registration,
+        hardReset // Exposed
     };
 
     return (

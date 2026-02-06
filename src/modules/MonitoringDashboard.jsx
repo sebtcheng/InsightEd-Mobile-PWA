@@ -487,21 +487,24 @@ const MonitoringDashboard = () => {
 
     // NEW: Calculate Jurisdiction Total (Memoized for reuse)
     const jurisdictionTotal = useMemo(() => {
-        let total = 0;
+        let csvTotal = 0;
         if (schoolData.length > 0 && userData) {
             const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
             const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
             const targetDistrict = userData.role === 'Central Office' ? coDistrict : null;
 
-            total = schoolData.filter(s => {
+            csvTotal = schoolData.filter(s => {
                 const matchRegion = !targetRegion || s.region === targetRegion;
                 const matchDivision = !targetDivision || s.division === targetDivision;
                 const matchDistrict = !targetDistrict || s.district === targetDistrict;
                 return matchRegion && matchDivision && matchDistrict;
             }).length;
         }
-        // Fallback to DB stats if CSV not ready, though CSV is preferred for "Total Jurisdiction"
-        return total || stats?.total_schools || 0;
+        // FIX: Use MAX of CSV count or DB count. 
+        // If DB has more schools (e.g. 311) than CSV (296), we must use 311 to avoid > 100%.
+        // If CSV has more (296) than DB (20), we use 296 to show true remaining progress.
+        const dbTotal = parseInt(stats?.total_schools || 0);
+        return Math.max(csvTotal, dbTotal);
     }, [schoolData, userData, coRegion, coDivision, coDistrict, stats?.total_schools]);
 
 
@@ -575,9 +578,13 @@ const MonitoringDashboard = () => {
                                             <p className="text-blue-200 text-xs font-bold uppercase tracking-wider">National Accomplishment Rate</p>
                                             {/* Show Percentage */}
                                             {(() => {
-                                                const totalSchools = Object.values(csvRegionalTotals).length > 0
+                                                const csvSum = Object.values(csvRegionalTotals).length > 0
                                                     ? Object.values(csvRegionalTotals).reduce((a, b) => a + b, 0)
-                                                    : regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
+                                                    : 0;
+                                                const dbSum = regionalStats.reduce((acc, curr) => acc + parseInt(curr.total_schools || 0), 0);
+
+                                                // FIX: Use Max of CSV vs DB to ensure denominator >= numerator
+                                                const totalSchools = Math.max(csvSum, dbSum);
                                                 const completed = regionalStats.reduce((acc, curr) => acc + parseInt(curr.completed_schools || 0), 0);
                                                 const pct = totalSchools > 0 ? ((completed / totalSchools) * 100).toFixed(1) : 0;
                                                 return (
@@ -636,11 +643,10 @@ const MonitoringDashboard = () => {
                                         </h2>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {regionalStats.map((reg, idx) => {
-                                                // REFACTOR: Use API total (DB) if available, otherwise fallback to CSV.
-                                                // This ensures newly registered schools (not in CSV) are counted.
+                                                // REFACTOR: Use MAX of API total (DB) or CSV to prevent >100% overflow
                                                 const apiTotal = parseInt(reg.total_schools || 0);
                                                 const csvTotal = csvRegionalTotals[reg.region] || 0;
-                                                const totalSchools = apiTotal > 0 ? apiTotal : csvTotal;
+                                                const totalSchools = Math.max(apiTotal, csvTotal);
 
                                                 const completedCount = reg.completed_schools || 0;
 
@@ -1073,10 +1079,13 @@ const MonitoringDashboard = () => {
                                                             s.region === targetRegion && s.division === divName
                                                         ).length;
 
-                                                        const totalSchools = apiTotal > 0 ? apiTotal : csvTotal;
+                                                        // Fix: Use Math.max to avoid undercounting if API has fewer synced schools than CSV
+                                                        const totalSchools = Math.max(csvTotal, apiTotal);
 
                                                         // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
-                                                        const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
+                                                        // Clamp to 100%
+                                                        const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
+                                                        const percentage = Math.min(Math.round(rawPercentage), 100);
 
                                                         // Define colors for progress bars (cycling)
                                                         const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500'];
