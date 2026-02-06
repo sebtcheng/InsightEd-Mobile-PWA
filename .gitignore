@@ -26,3 +26,5 @@ server/.env
 public/Oct2025-GMIS-Filled_Minified.csv
 **/service-account.json
 **/service-account.json
+full_backup_neon.sql
+scripts/migrate_db.ps1

@@ -5,6 +5,7 @@ import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
 import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
 import nodemailer from 'nodemailer'; // --- NODEMAILER ---
+import { initOtpTable, runMigrations } from './db_init.js';
 
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -344,7 +345,9 @@ if (!admin.apps.length) {
 }
 
 // Initialize OTP Table
-const initOtpTable = async () => {
+
+
+const initOtpTable_OLD = async () => {
   if (!isDbConnected) {
     console.log("⚠️ Skipping OTP Table Init (Offline Mode)");
     return;
@@ -366,7 +369,7 @@ const initOtpTable = async () => {
 
 // --- DATABASE CONNECTION ---
 // Auto-connect and initialize
-(async () => {
+const old_db_init_disabled = async () => {
   try {
     const client = await pool.connect();
     isDbConnected = true;
@@ -864,7 +867,46 @@ const initOtpTable = async () => {
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   }
-})(); // End of DB Init IIFE
+}; // End of OLD DB Init
+
+// --- NEW DATABASE INITIALIZATION ---
+(async () => {
+  // 1. Primary Database (Neon)
+  try {
+    const client = await pool.connect();
+    isDbConnected = true;
+    console.log('✅ Connected to Neon Database (Primary) successfully!');
+
+    try {
+      await initOtpTable(pool);
+      await runMigrations(client, "Primary");
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
+    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE.');
+    isDbConnected = false;
+  }
+
+  // 2. Secondary Database (Dual Write Target)
+  if (poolNew) {
+    console.log("🔌 Initializing Secondary Database Migrations...");
+    try {
+      const clientNew = await poolNew.connect();
+      console.log('✅ Connected to Secondary DB for Migrations!');
+      try {
+        // We don't run initOtpTable on Secondary (it's auth related/Primary only mostly)
+        // But we run Schema Migrations
+        await runMigrations(clientNew, "Secondary");
+      } finally {
+        clientNew.release();
+      }
+    } catch (err) {
+      console.error('❌ Failed to migrate Secondary Database:', err.message);
+    }
+  }
+})();
 
 // --- 1f. MASKED EMAIL LOOKUP (FORGOT PASSWORD) ---
 app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
@@ -999,6 +1041,12 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
   try {
     await pool.query(query, [userUid, userName, role, actionType, targetEntity, details]);
     console.log(`📝 Audit Logged: ${actionType} - ${targetEntity}`);
+
+    // --- DUAL WRITE: LOG ACTIVITY ---
+    if (poolNew) {
+      poolNew.query(query, [userUid, userName, role, actionType, targetEntity, details])
+        .catch(e => console.error("❌ Dual-Write Log Error:", e.message));
+    }
   } catch (err) {
     console.error("❌ Failed to log activity:", err.message);
   }
@@ -1382,6 +1430,16 @@ app.post('/api/send-otp', async (req, res) => {
         DO UPDATE SET code = $2, expires_at = NOW() + INTERVAL '10 minutes';
     `, [email, otp]);
 
+    // --- DUAL WRITE: SAVE OTP ---
+    if (poolNew) {
+      poolNew.query(`
+        INSERT INTO verification_codes (email, code, expires_at)
+        VALUES ($1, $2, NOW() + INTERVAL '10 minutes')
+        ON CONFLICT (email) 
+        DO UPDATE SET code = $2, expires_at = NOW() + INTERVAL '10 minutes';
+      `, [email, otp]).catch(e => console.error("Dual-Write OTP Error:", e.message));
+    }
+
     console.log(`💾 OTP saved to DB for ${email}`);
 
     // 2. SEND EMAIL
@@ -1453,7 +1511,15 @@ app.post('/api/verify-otp', async (req, res) => {
 
     if (result.rows.length > 0) {
       // 2. Success: Delete the code so it can't be reused
+      // 2. Success: Delete the code so it can't be reused
       await pool.query('DELETE FROM verification_codes WHERE email = $1', [email]);
+
+      // --- DUAL WRITE: DELETE OTP ---
+      if (poolNew) {
+        poolNew.query('DELETE FROM verification_codes WHERE email = $1', [email])
+          .catch(e => console.error("Dual-Write OTP Delete Error:", e.message));
+      }
+
       return res.json({ success: true, message: "Email Verified!" });
     } else {
       return res.status(400).json({ success: false, message: "Invalid or Expired Code." });
@@ -1916,6 +1982,32 @@ app.post('/api/save-school', async (req, res) => {
     await client.query(query, values);
     await client.query('COMMIT');
 
+    // --- DUAL WRITE: SCHOOL PROFILE ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing School Profile...");
+        const clientNew = await poolNew.connect();
+        try {
+          await clientNew.query('BEGIN');
+          // Re-use logic: Insert/Update using the exact same IERN and Values
+          // Note: values array includes finalIern at index 16 (derived from primary)
+          await clientNew.query(query, values);
+          await clientNew.query('COMMIT');
+          console.log("✅ Dual-Write: School Profile Synced!");
+
+          // Calculate Snapshot on Secondary
+          await calculateSchoolProgress(data.schoolId, poolNew);
+        } catch (dwErr) {
+          await clientNew.query('ROLLBACK');
+          console.error("❌ Dual-Write Error (Save School):", dwErr.message);
+        } finally {
+          clientNew.release();
+        }
+      } catch (connErr) {
+        console.error("❌ Dual-Write Connection Error (Save School):", connErr.message);
+      }
+    }
+
     // --- CENTRALIZED AUDIT LOGGING ---
     // Log to activity_logs table for Admin Dashboard visibility
     try {
@@ -1933,7 +2025,7 @@ app.post('/api/save-school', async (req, res) => {
 
     res.status(200).json({ message: "Profile saved successfully!", changes: changes, iern: finalIern });
 
-    // SNAPSHOT UPDATE
+    // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
 
   } catch (err) {
@@ -2023,6 +2115,26 @@ app.post('/api/save-school-head', async (req, res) => {
     );
 
     res.json({ success: true, message: "School Head information updated successfully!" });
+
+    // --- DUAL WRITE: SCHOOL HEAD ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing School Head...");
+        await poolNew.query(query, values);
+        console.log("✅ Dual-Write: School Head Synced!");
+
+        // Snapshot trigger logic repeated for secondary
+        try {
+          const spRes = await poolNew.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [data.uid]);
+          if (spRes.rows.length > 0) {
+            await calculateSchoolProgress(spRes.rows[0].school_id, poolNew);
+          }
+        } catch (e) { console.warn("Secondary Snapshot Trigger Failed (School Head)", e); }
+
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (School Head):", dwErr.message);
+      }
+    }
 
     // SNAPSHOT UPDATE - Need SchoolID first. The endpoint receives UID.
     // We can fetch school_id from result of update or query it.
@@ -2748,6 +2860,17 @@ app.post('/api/validate-project', async (req, res) => {
     );
 
     res.json({ success: true, message: `Project ${status}` });
+
+    // --- DUAL WRITE: VALIDATE PROJECT ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Project Validation...");
+        await poolNew.query(query, [status, projectId, remarks || '', userName]);
+        console.log("✅ Dual-Write: Project Validation Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Validate Project):", dwErr.message);
+      }
+    }
   } catch (err) {
     console.error("Validation Error:", err);
     res.status(500).json({ message: "Server error" });
@@ -2765,6 +2888,42 @@ app.post('/api/upload-image', async (req, res) => {
 
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image`);
     res.status(201).json({ success: true, imageId: result.rows[0].id });
+
+    // --- DUAL WRITE: UPLOAD IMAGE ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Project Image...");
+        // Re-use query? Yes.
+        // NOTE: The ID returned might be different on secondary, but we don't return it here for dual-write context.
+        // We just ensure the image exists there.
+        // However, we need to map the project_id correctly if it differs.
+        // But for this simplified setup, we assume IPC/IDs are synced or we rely on the Primary ID logic (assuming simple replication).
+        // Actually, in `save-project` we used the same parameters.
+        // Ideally we should look up the project by IPC, but `upload-image` takes `projectId`.
+        // If `projectId` (Serial PK) is different on Secondary, this will FAIL or attach to WRONG project.
+
+        // Safer Approach: Look up project on Secondary by IPC?
+        // But we don't have IPC here. We only have `projectId`.
+        // We must fetch the IPC from Primary first to find the correct project on Secondary.
+
+        // 1. Get IPC from Primary using projectId
+        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+        if (ipcRes.rows.length > 0) {
+          const ipc = ipcRes.rows[0].ipc;
+
+          // 2. Insert into Secondary using Subquery for Project ID based on IPC
+          const dwQuery = `
+                INSERT INTO engineer_image (project_id, image_data, uploaded_by) 
+                VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1), $2, $3);
+            `;
+          await poolNew.query(dwQuery, [ipc, imageData, uploadedBy]);
+          console.log("✅ Dual-Write: Project Image Synced via IPC!");
+        }
+
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Upload Image):", dwErr.message);
+      }
+    }
   } catch (err) {
     console.error("❌ Image Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save image to database" });
@@ -2953,8 +3112,45 @@ app.post('/api/save-organized-classes', async (req, res) => {
     }
 
     res.json({ message: "Classes saved successfully!" });
-    // SNAPSHOT UPDATE
+    // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
+
+    // --- DUAL WRITE: SAVE ORGANIZED CLASSES ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Organized Classes...");
+        // 1. Replay Update
+        await poolNew.query(query, [
+          data.schoolId,
+          data.kinder,
+          data.g1, data.g2, data.g3, data.g4, data.g5, data.g6,
+          data.g7, data.g8, data.g9, data.g10,
+          data.g11, data.g12,
+
+          data.cntLessG1 || 0, data.cntWithinG1 || 0, data.cntAboveG1 || 0,
+          data.cntLessG2 || 0, data.cntWithinG2 || 0, data.cntAboveG2 || 0,
+          data.cntLessG3 || 0, data.cntWithinG3 || 0, data.cntAboveG3 || 0,
+          data.cntLessG4 || 0, data.cntWithinG4 || 0, data.cntAboveG4 || 0,
+          data.cntLessG5 || 0, data.cntWithinG5 || 0, data.cntAboveG5 || 0,
+          data.cntLessG6 || 0, data.cntWithinG6 || 0, data.cntAboveG6 || 0,
+          data.cntLessG7 || 0, data.cntWithinG7 || 0, data.cntAboveG7 || 0,
+          data.cntLessG8 || 0, data.cntWithinG8 || 0, data.cntAboveG8 || 0,
+          data.cntLessG9 || 0, data.cntWithinG9 || 0, data.cntAboveG9 || 0,
+          data.cntLessG10 || 0, data.cntWithinG10 || 0, data.cntAboveG10 || 0,
+          data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
+          data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
+
+          data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0
+        ]);
+
+        // 2. Snapshot Update (Secondary)
+        await calculateSchoolProgress(data.schoolId, poolNew);
+        console.log("✅ Dual-Write: Organized Classes Synced!");
+
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Organized Classes):", dwErr.message);
+      }
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -3080,7 +3276,21 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
     }
 
     console.log("✅ Neon Updated Successfully for School:", result.rows[0].school_id);
-    await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE
+    await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE (Primary)
+
+    // --- DUAL WRITE: TEACHING PERSONNEL ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Teaching Personnel...");
+        await poolNew.query(query, values);
+        // Snapshot secondary
+        await calculateSchoolProgress(result.rows[0].school_id, poolNew);
+        console.log("✅ Dual-Write: Teaching Personnel Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Teaching Personnel):", dwErr.message);
+      }
+    }
+
     res.json({ success: true });
 
 
@@ -3143,8 +3353,29 @@ app.post('/api/save-learning-modalities', async (req, res) => {
     ]);
 
     res.json({ message: "Modalities saved successfully!" });
-    // SNAPSHOT UPDATE
+    // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
+
+    // --- DUAL WRITE: LEARNING MODALITIES ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Learning Modalities...");
+        await poolNew.query(query, [
+          data.schoolId,
+          data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
+          data.shift_g7, data.shift_g8, data.shift_g9, data.shift_g10, data.shift_g11, data.shift_g12,
+
+          data.mode_kinder, data.mode_g1, data.mode_g2, data.mode_g3, data.mode_g4, data.mode_g5, data.mode_g6,
+          data.mode_g7, data.mode_g8, data.mode_g9, data.mode_g10, data.mode_g11, data.mode_g12,
+
+          data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
+        ]);
+        await calculateSchoolProgress(data.schoolId, poolNew);
+        console.log("✅ Dual-Write: Learning Modalities Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Learning Modalities):", dwErr.message);
+      }
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -3232,8 +3463,48 @@ app.post('/api/save-school-resources', async (req, res) => {
     }
     console.log("[Resources] Success");
     res.json({ message: "Resources saved!" });
-    // SNAPSHOT UPDATE
+    // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
+
+    // --- DUAL WRITE: SCHOOL RESOURCES ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing School Resources...");
+        await poolNew.query(query, [
+          data.schoolId,
+          data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
+          data.res_blackboards_good, data.res_blackboards_defective,
+          data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
+          data.res_printers_working, data.res_projectors_working, valueOrNull(data.res_internet_type),
+          data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, valueOrNull(data.res_water_source),
+          data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops,
+
+          valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space),
+
+          data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
+          data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
+          data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
+          data.seats_grade_11, data.seats_grade_12,
+
+          data.res_toilets_common,
+          valueOrNull(data.sha_category),
+
+          // New Inventory Values
+          data.res_ecart_func || 0, data.res_ecart_nonfunc || 0,
+          data.res_laptop_func || 0, data.res_laptop_nonfunc || 0,
+          data.res_tv_func || 0, data.res_tv_nonfunc || 0,
+          data.res_printer_func || 0, data.res_printer_nonfunc || 0,
+          data.res_desk_func || 0, data.res_desk_nonfunc || 0,
+          data.res_armchair_func || 0, data.res_armchair_nonfunc || 0,
+          data.res_toilet_func || 0, data.res_toilet_nonfunc || 0,
+          data.res_handwash_func || 0, data.res_handwash_nonfunc || 0
+        ]);
+        await calculateSchoolProgress(data.schoolId, poolNew);
+        console.log("✅ Dual-Write: School Resources Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (School Resources):", dwErr.message);
+      }
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -3290,8 +3561,27 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       data.build_classrooms_demolition
     ]);
     res.json({ message: "Facilities saved!" });
-    // SNAPSHOT UPDATE
+    // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
+
+    // --- DUAL WRITE: PHYSICAL FACILITIES ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Physical Facilities...");
+        await poolNew.query(query, [
+          data.schoolId,
+          data.build_classrooms_total,
+          data.build_classrooms_new,
+          data.build_classrooms_good,
+          data.build_classrooms_repair,
+          data.build_classrooms_demolition
+        ]);
+        await calculateSchoolProgress(data.schoolId, poolNew);
+        console.log("✅ Dual-Write: Physical Facilities Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Physical Facilities):", dwErr.message);
+      }
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -3357,6 +3647,18 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       const spRes = await pool.query("SELECT school_id FROM school_profiles WHERE submitted_by = $1", [d.uid]);
       if (spRes.rows.length > 0) {
         await calculateSchoolProgress(spRes.rows[0].school_id, pool);
+
+        // --- DUAL WRITE: TEACHER SPECIALIZATION ---
+        if (poolNew) {
+          try {
+            console.log("🔄 Dual-Write: Syncing Teacher Specialization...");
+            await poolNew.query(query, values);
+            await calculateSchoolProgress(spRes.rows[0].school_id, poolNew);
+            console.log("✅ Dual-Write: Teacher Specialization Synced!");
+          } catch (dwErr) {
+            console.error("❌ Dual-Write Error (Teacher Specialization):", dwErr.message);
+          }
+        }
       }
     } catch (e) { console.warn("Snapshot Trigger Specialization User Lookup Failed", e); }
 
@@ -3787,6 +4089,12 @@ RETURNING *;
 `;
     const result = await pool.query(query, [recipientUid, senderUid, senderName, title, message, type || 'alert']);
 
+    // --- DUAL WRITE: SEND NOTIFICATION ---
+    if (poolNew) {
+      poolNew.query(query, [recipientUid, senderUid, senderName, title, message, type || 'alert'])
+        .catch(e => console.error("Dual-Write Notification Error:", e.message));
+    }
+
     // Log it
     await logActivity(senderUid, senderName, 'System', 'ALERT', `User: ${recipientUid} `, `Sent alert: ${title} `);
 
@@ -3820,6 +4128,12 @@ app.put('/api/notifications/:id/read', async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('UPDATE notifications SET is_read = TRUE WHERE id = $1', [id]);
+
+    // --- DUAL WRITE: MARK NOTIFICATION READ ---
+    if (poolNew) {
+      poolNew.query('UPDATE notifications SET is_read = TRUE WHERE id = $1', [id])
+        .catch(e => console.error("Dual-Write Notif Read Error:", e.message));
+    }
     res.json({ success: true });
   } catch (err) {
     console.error("Mark Read Error:", err);
@@ -3930,6 +4244,18 @@ app.post('/api/save-learner-statistics', async (req, res) => {
 
     await pool.query(query, values);
 
+    // --- DUAL WRITE: LEARNER STATISTICS ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Learner Stats...");
+        await poolNew.query(query, values);
+        await calculateSchoolProgress(data.schoolId, poolNew);
+        console.log("✅ Dual-Write: Learner Stats Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Learner Stats):", dwErr.message);
+      }
+    }
+
     // Centrally log activity
     await logActivity(
       data.uid,
@@ -3941,7 +4267,7 @@ app.post('/api/save-learner-statistics', async (req, res) => {
     );
 
     res.json({ success: true, message: "Learner statistics saved successfully!" });
-    // SNAPSHOT UPDATE
+    // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
 
   } catch (err) {
