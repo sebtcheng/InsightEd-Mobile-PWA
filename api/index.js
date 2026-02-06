@@ -1158,7 +1158,7 @@ app.get('/api/activities', async (req, res) => {
 
 // --- 1b. POST: Generic Log Activity (For Frontend Actions) ---
 app.post('/api/log-activity', async (req, res) => {
-  const { userUid, userName, role, actionType, targetEntity, details } = req.body;
+  const { userUid, userName, role, actionType, targetEntity, details } = req.body || {};
   try {
     await logActivity(userUid, userName, role, actionType, targetEntity, details);
     res.status(200).json({ success: true });
@@ -1188,7 +1188,7 @@ app.get('/api/settings/:key', async (req, res) => {
 
 // SAVE Setting (Upsert)
 app.post('/api/settings/save', async (req, res) => {
-  const { key, value, userUid } = req.body;
+  const { key, value, userUid } = req.body || {};
 
   if (!key) return res.status(400).json({ error: "Key is required" });
 
@@ -2771,7 +2771,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
 
 // --- 11c. POST: Validate Project (School Head) ---
 app.post('/api/validate-project', async (req, res) => {
-  const { projectId, status, userUid, userName, remarks } = req.body;
+  const { projectId, status, userUid, userName, remarks } = req.body || {};
   try {
     const query = `
       UPDATE "engineer_form" 

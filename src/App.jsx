@@ -151,7 +151,8 @@ const AnimatedRoutes = () => {
 
       {/* MAINTENANCE OVERLAY (Blocks interaction if active) */}
       {/* EXEMPT: Authenticated users (protected routes) and Admin Login */}
-      {maintenanceMode && !isAdmin && !location.pathname.startsWith('/adminlogin') && !isProtected && (
+      {/* FIX: Only show on Login Page ('/') if not Admin. Logged-in users are effectively exempt by being on other routes. */}
+      {maintenanceMode && !isAdmin && location.pathname === '/' && (
         <MaintenanceScreen />
       )}
     </AnimatePresence>
