@@ -54,6 +54,24 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
+let poolNew = null;
+if (process.env.NEW_DATABASE_URL) {
+  console.log('🔌 Initializing Secondary Database Connection...');
+  poolNew = new Pool({
+    connectionString: process.env.NEW_DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+
+  // Test Connection
+  poolNew.connect()
+    .then(client => {
+      console.log('✅ Connected to Secondary Database (ICTS) successfully!');
+      client.release();
+    })
+    .catch(err => console.error('❌ Failed to connect to Secondary Database:', err.message));
+}
+
 // --- DATABASE INIT ---
 const initDB = async () => {
   try {
@@ -276,6 +294,17 @@ app.post('/api/save-token', async (req, res) => {
             ON CONFLICT (uid)
             DO UPDATE SET fcm_token = $2, updated_at = CURRENT_TIMESTAMP
         `, [uid, token]);
+
+    // --- DUAL WRITE: SAVE DEVICE TOKEN ---
+    if (poolNew) {
+      poolNew.query(`
+            INSERT INTO user_device_tokens (uid, fcm_token, updated_at)
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (uid)
+            DO UPDATE SET fcm_token = $2, updated_at = CURRENT_TIMESTAMP
+        `, [uid, token]).catch(e => console.error("Dual-Write Token Err:", e.message));
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error("Save Token Error:", err);
@@ -1263,6 +1292,12 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
 
     // 2. Update DB (Critical Source of Truth) AND Get user email for log
     const result = await pool.query('UPDATE users SET disabled = $1 WHERE uid = $2 RETURNING email', [disabled, uid]);
+
+    // --- DUAL WRITE: USER STATUS ---
+    if (poolNew) {
+      poolNew.query('UPDATE users SET disabled = $1 WHERE uid = $2', [disabled, uid])
+        .catch(e => console.error("Dual-Write User Status Err:", e.message));
+    }
     const targetEmail = result.rows.length > 0 ? result.rows[0].email : uid;
 
     // 3. Log Activity
@@ -1303,6 +1338,12 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
 
     // 2. Delete from DB (Critical Source of Truth)
     await pool.query('DELETE FROM users WHERE uid = $1', [uid]);
+
+    // --- DUAL WRITE: DELETE USER ---
+    if (poolNew) {
+      poolNew.query('DELETE FROM users WHERE uid = $1', [uid])
+        .catch(e => console.error("Dual-Write Delete User Err:", e.message));
+    }
 
     // 3. Log Activity
     if (adminUid) {
@@ -1665,6 +1706,42 @@ app.post('/api/register-school', async (req, res) => {
     await client.query(insertQuery, values);
     await client.query('COMMIT');
 
+    // --- DUAL WRITE: REGISTER SCHOOL ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing School Registration...");
+        const clientNew = await poolNew.connect();
+        try {
+          await clientNew.query('BEGIN');
+
+          // 4a. Create User on Secondary
+          await clientNew.query(
+            "INSERT INTO users (uid, email, role, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT (uid) DO NOTHING",
+            [uid, email, 'School Head']
+          );
+
+          // 4b. Insert School Profile on Secondary
+          // Check for existing first to avoid unique violation if backup is slightly synced
+          const checkDup = await clientNew.query("SELECT school_id FROM school_profiles WHERE school_id = $1", [schoolData.school_id]);
+          if (checkDup.rows.length === 0) {
+            await clientNew.query(insertQuery, values);
+          } else {
+            console.log("⚠️ Secondary DB already has this school (Duplicate Check Hit).");
+          }
+
+          await clientNew.query('COMMIT');
+          console.log("✅ Dual-Write: School Registered on Secondary!");
+        } catch (dwErr) {
+          await clientNew.query('ROLLBACK');
+          console.error("❌ Dual-Write Error (Register School):", dwErr.message);
+        } finally {
+          clientNew.release();
+        }
+      } catch (connErr) {
+        console.error("❌ Dual-Write Connection Error:", connErr.message);
+      }
+    }
+
     console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
     res.json({ success: true, iern: newIern, message: "School Registered Successfully" });
 
@@ -1720,6 +1797,17 @@ app.post('/api/register-user', async (req, res) => {
 
     await pool.query(query, values);
     console.log(`✅ [NEON] Synced generic user: ${email} (${role})`);
+
+    // --- DUAL WRITE: REGISTER GENERIC USER ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Generic User...");
+        await poolNew.query(query, values);
+        console.log("✅ Dual-Write: Generic User Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Register User):", dwErr.message);
+      }
+    }
 
     // Log Activity
     await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
@@ -2126,6 +2214,17 @@ app.post('/api/save-enrolment', async (req, res) => {
 
     const result = await pool.query(query, values);
 
+    // --- DUAL WRITE: SAVE ENROLMENT ---
+    if (poolNew) {
+      try {
+        console.log("🔄 Dual-Write: Syncing Enrolment to Secondary DB...");
+        await poolNew.query(query, values);
+        console.log("✅ Dual-Write: Enrolment synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Enrolment):", dwErr.message);
+      }
+    }
+
     if (result.rowCount === 0) {
       console.error("❌ School Profile not found for ID:", data.schoolId);
       return res.status(404).json({ message: "School Profile not found." });
@@ -2172,6 +2271,16 @@ app.post('/api/update-offering', async (req, res) => {
 
     const result = await pool.query(query, [offering, schoolId]);
 
+    // --- DUAL WRITE: UPDATE OFFERING ---
+    if (poolNew) {
+      try {
+        await poolNew.query(query, [offering, schoolId]);
+        console.log("✅ Dual-Write: Offering synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Offering):", dwErr.message);
+      }
+    }
+
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "School Profile not found." });
     }
@@ -2201,9 +2310,22 @@ app.post('/api/save-project', async (req, res) => {
   }
 
   let client;
+  let clientNew; // For secondary DB transaction
+
   try {
     client = await pool.connect();
     await client.query('BEGIN'); // Start Transaction
+
+    // --- DUAL WRITE: START TRANSACTION ---
+    if (poolNew) {
+      try {
+        clientNew = await poolNew.connect();
+        await clientNew.query('BEGIN');
+      } catch (connErr) {
+        console.error("❌ Dual-Write: Failed to start transaction:", connErr.message);
+        clientNew = null; // Proceed without secondary sync
+      }
+    }
 
     // 1. Generate IPC (INF-YYYY-XXXXX)
     const year = new Date().getFullYear();
@@ -2285,6 +2407,66 @@ app.post('/api/save-project', async (req, res) => {
 
     await client.query('COMMIT');
 
+    // --- DUAL WRITE: REPLAY ON SECONDARY DB ---
+    if (clientNew) {
+      try {
+        console.log("🔄 Dual-Write: Replaying Project Creation...");
+
+        // 1. Insert Project (Using SAME IPC and Data)
+        await clientNew.query(projectQuery, projectValues);
+
+        // 2. Insert Images
+        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+          const imageQuery = `
+            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
+            VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1), $2, $3) 
+          `;
+          // Note: In secondary DB, project_id is SERIAL and might differ!
+          // We must look up the project_id by IPC or School ID+Name to be safe.
+          // Since IPC is unique (mostly), let's use it.
+          // BUT wait, we just inserted it. calling RETURNING project_id on clientNew would be better.
+          // Let's refactor slightly to execute steps immediately. 
+          // Actually, let's just use the query I wrote above.
+          // Correction: The `projectQuery` has `RETURNING project_id`. 
+          // Doing `clientNew.query(projectQuery, projectValues)` *will* return the NEW ID.
+        }
+
+        // Refined approach for images/docs in Dual Write to handle ID mismatch:
+
+        // A. Insert Project
+        const newProjRes = await clientNew.query(projectQuery, projectValues);
+        const newProjIdSecondary = newProjRes.rows[0].project_id;
+
+        // B. Insert Images
+        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+          const imageQuery = `
+            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
+            VALUES ($1, $2, $3)
+          `;
+          for (const imgBase64 of data.images) {
+            await clientNew.query(imageQuery, [newProjIdSecondary, imgBase64, data.uid]);
+          }
+        }
+
+        // C. Insert Documents
+        if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
+          const docQuery = `
+            INSERT INTO "project_documents" (project_id, doc_type, file_data)
+            VALUES ($1, $2, $3)
+          `;
+          for (const doc of data.documents) {
+            await clientNew.query(docQuery, [newProjIdSecondary, doc.type, doc.base64]);
+          }
+        }
+
+        await clientNew.query('COMMIT');
+        console.log("✅ Dual-Write: Project Creation Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Error (Project Create):", dwErr.message);
+        await clientNew.query('ROLLBACK').catch(() => { });
+      }
+    }
+
     // 5. Log Activity (Detailed for History)
     const logDetails = {
       action: "Project Created",
@@ -2330,10 +2512,12 @@ app.post('/api/save-project', async (req, res) => {
 
   } catch (err) {
     if (client) await client.query('ROLLBACK');
+    if (clientNew) await clientNew.query('ROLLBACK').catch(e => console.error("Dual-Write Rollback Err:", e.message)); // Rollback secondary too
     console.error("❌ SQL ERROR:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   } finally {
     if (client) client.release();
+    if (clientNew) clientNew.release();
   }
 });
 // --- 9. PUT: Update Project ---
@@ -2394,6 +2578,31 @@ app.put('/api/update-project/:id', async (req, res) => {
     `;
 
     const result = await client.query(insertQuery, insertValues);
+
+    // --- DUAL WRITE: UPDATE PROJECT ---
+    if (clientNew) {
+      try {
+        // We need to fetch the OLD data from the secondary DB too to handle snapshot nicely?
+        // Or just blindly insert the new row?
+        // The `insertQuery` is an INSERT (Append Only).
+        // It relies on `oldData` which came from Primary DB.
+        // We can use the SAME `insertValues`!
+        // The `insertValues` contains primitive data (status, etc.) and `finalUserName`.
+        // It does NOT contain `project_id` reference (except implicitly? No, engineer_form PK is `project_id` serial).
+        // Wait, `insertQuery` inserts a NEW row. 
+        // Is `engineer_form` storing `school_id`? Yes.
+        // History is tracked via `ipc`. 
+        // As long as IPC matches, we are good.
+        // The values array has IPC at index 17 ($17).
+
+        await clientNew.query(insertQuery, insertValues);
+        await clientNew.query('COMMIT');
+        console.log("✅ Dual-Write: Project Update Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Project Update Err:", dwErr.message);
+        await clientNew.query('ROLLBACK').catch(() => { });
+      }
+    }
     const newData = result.rows[0];
 
     await client.query('COMMIT');
