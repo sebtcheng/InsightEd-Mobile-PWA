@@ -41,7 +41,7 @@ const Login = () => {
     const [resetLoading, setResetLoading] = useState(false);
     const navigate = useNavigate();
 
-    // --- 0. INSTALLATION GATE LOGIC ---
+    // --- 0. INSTALLATION GATE LOGIC ---11111
     const [isInstalled, setIsInstalled] = useState(false);
     const [deferredPrompt, setDeferredPrompt] = useState(null);
     const [isIOS, setIsIOS] = useState(false);
