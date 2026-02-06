@@ -85,9 +85,16 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ DB Init: project_documents table verified.");
 
-    // Redundant block removed - handled in main migration IIFE
+    // --- MIGRATION: ADD PDF COLUMNS & engineer_id TO ENGINEER_FORM IF NOT EXIST ---
+    await pool.query(`
+      ALTER TABLE engineer_form 
+      ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
+      ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
+      ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
+      ADD COLUMN IF NOT EXISTS engineer_id TEXT;
+    `);
+    console.log("✅ DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
 
 
   } catch (err) {
@@ -2408,6 +2415,9 @@ app.post('/api/save-project', async (req, res) => {
       }
     }
 
+    // --- MIGRATION: ADD PDF COLUMNS IF NOT EXIST ---
+    // MOVED TO initDB() AT STARTUP TO ENSURE COLUMNS EXIST IMMEDATELY
+
     // 1. Generate IPC (INF-YYYY-XXXXX)
     const year = new Date().getFullYear();
     const ipcResult = await client.query(
@@ -2426,10 +2436,14 @@ app.post('/api/save-project', async (req, res) => {
     const newIpc = `INF-${year}-${String(nextSeq).padStart(5, '0')}`;
 
     // 2. Prepare Project Data
-    // 2. Prepare Project Data
-    // Fix: Fetch engineer name for storage
     const engineerName = await getUserFullName(data.uid);
     const resolvedEngineerName = engineerName || data.modifiedBy || 'Engineer';
+
+    // Extract Documents
+    const docs = data.documents || [];
+    const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
+    const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
+    const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
 
     const projectValues = [
       data.projectName, data.schoolName, data.schoolId,
@@ -2443,7 +2457,10 @@ app.post('/api/save-project', async (req, res) => {
       newIpc, // $17
       resolvedEngineerName, // $18
       valueOrNull(data.latitude), // $19
-      valueOrNull(data.longitude) // $20
+      valueOrNull(data.longitude), // $20
+      powDoc, // $21
+      dupaDoc, // $22
+      contractDoc // $23
     ];
 
     const projectQuery = `
@@ -2452,8 +2469,9 @@ app.post('/api/save-project', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name, latitude, longitude
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        engineer_id, ipc, engineer_name, latitude, longitude,
+        pow_pdf, dupa_pdf, contract_pdf
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING project_id, project_name, ipc;
     `;
 
@@ -2474,17 +2492,7 @@ app.post('/api/save-project', async (req, res) => {
       }
     }
 
-    // 5. Insert Documents (POW, DUPA, CONTRACT)
-    if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
-      const docQuery = `
-        INSERT INTO "project_documents" (project_id, doc_type, file_data)
-        VALUES ($1, $2, $3)
-      `;
-      for (const doc of data.documents) {
-        // doc = { type: 'POW', base64: '...' }
-        await client.query(docQuery, [newProjectId, doc.type, doc.base64]);
-      }
-    }
+    // 5. NO External Document Table Insert needed (Stored in engineer_form)
 
     await client.query('COMMIT');
 
@@ -2493,32 +2501,19 @@ app.post('/api/save-project', async (req, res) => {
       try {
         console.log("🔄 Dual-Write: Replaying Project Creation...");
 
+        // Ensure Schema Sync on Secondary (Quick check)
+        await clientNew.query(`
+          ALTER TABLE engineer_form 
+          ADD COLUMN IF NOT EXISTS pow_pdf TEXT,
+          ADD COLUMN IF NOT EXISTS dupa_pdf TEXT,
+          ADD COLUMN IF NOT EXISTS contract_pdf TEXT;
+        `).catch(() => { });
+
         // 1. Insert Project (Using SAME IPC and Data)
-        await clientNew.query(projectQuery, projectValues);
-
-        // 2. Insert Images
-        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-          const imageQuery = `
-            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
-            VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1), $2, $3) 
-          `;
-          // Note: In secondary DB, project_id is SERIAL and might differ!
-          // We must look up the project_id by IPC or School ID+Name to be safe.
-          // Since IPC is unique (mostly), let's use it.
-          // BUT wait, we just inserted it. calling RETURNING project_id on clientNew would be better.
-          // Let's refactor slightly to execute steps immediately. 
-          // Actually, let's just use the query I wrote above.
-          // Correction: The `projectQuery` has `RETURNING project_id`. 
-          // Doing `clientNew.query(projectQuery, projectValues)` *will* return the NEW ID.
-        }
-
-        // Refined approach for images/docs in Dual Write to handle ID mismatch:
-
-        // A. Insert Project
         const newProjRes = await clientNew.query(projectQuery, projectValues);
         const newProjIdSecondary = newProjRes.rows[0].project_id;
 
-        // B. Insert Images
+        // 2. Insert Images
         if (data.images && Array.isArray(data.images) && data.images.length > 0) {
           const imageQuery = `
             INSERT INTO "engineer_image" (project_id, image_data, uploaded_by)
@@ -2526,17 +2521,6 @@ app.post('/api/save-project', async (req, res) => {
           `;
           for (const imgBase64 of data.images) {
             await clientNew.query(imageQuery, [newProjIdSecondary, imgBase64, data.uid]);
-          }
-        }
-
-        // C. Insert Documents
-        if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
-          const docQuery = `
-            INSERT INTO "project_documents" (project_id, doc_type, file_data)
-            VALUES ($1, $2, $3)
-          `;
-          for (const doc of data.documents) {
-            await clientNew.query(docQuery, [newProjIdSecondary, doc.type, doc.base64]);
           }
         }
 
@@ -2608,14 +2592,19 @@ app.put('/api/update-project/:id', async (req, res) => {
   const data = req.body;
 
   let client;
+  let clientNew = null; // Fix: Define clientNew
   try {
     client = await pool.connect();
+    if (poolNew) clientNew = await poolNew.connect(); // Fix: Connect if secondary DB exists
+
     await client.query('BEGIN');
+    if (clientNew) await clientNew.query('BEGIN'); // Fix: Transaction for secondary too
 
     // 1. Fetch Existing Data for Comparison
     const oldRes = await client.query('SELECT * FROM "engineer_form" WHERE project_id = $1', [id]);
     if (oldRes.rows.length === 0) {
       await client.query('ROLLBACK');
+      if (clientNew) await clientNew.query('ROLLBACK');
       return res.status(404).json({ message: "Project not found" });
     }
     const oldData = oldRes.rows[0];
@@ -2644,7 +2633,10 @@ app.put('/api/update-project/:id', async (req, res) => {
       oldData.ipc,         // Preserve IPC to link history
       finalUserName,       // Update Name string
       newLat,              // $19
-      newLong              // $20
+      newLong,             // $20
+      oldData.pow_pdf,      // $21: Preserve POW
+      oldData.dupa_pdf,     // $22: Preserve DUPA
+      oldData.contract_pdf  // $23: Preserve CONTRACT
     ];
 
     const insertQuery = `
@@ -2653,8 +2645,9 @@ app.put('/api/update-project/:id', async (req, res) => {
         status, accomplishment_percentage, status_as_of,
         target_completion_date, actual_completion_date, notice_to_proceed,
         contractor_name, project_allocation, batch_of_funds, other_remarks,
-        engineer_id, ipc, engineer_name, latitude, longitude
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        engineer_id, ipc, engineer_name, latitude, longitude,
+        pow_pdf, dupa_pdf, contract_pdf
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       RETURNING *;
     `;
 
@@ -2722,10 +2715,12 @@ app.put('/api/update-project/:id', async (req, res) => {
     res.json({ message: "Update successful", project: newData });
   } catch (err) {
     if (client) await client.query('ROLLBACK');
+    if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
     console.error("❌ Error updating project:", err.message);
     res.status(500).json({ message: "Server error" });
   } finally {
     if (client) client.release();
+    if (clientNew) clientNew.release();
   }
 });
 
@@ -2740,7 +2735,7 @@ app.get('/api/projects', async (req, res) => {
     let sql = `
       WITH LatestProjects AS (
           SELECT DISTINCT ON (ipc) 
-            project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name,
+            project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name, engineer_id,
             accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude
           FROM engineer_form
@@ -2941,12 +2936,12 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
-// --- 21. GET: Fetch Project Images (METADATA ONLY) ---
+// --- 21. GET: Fetch Project Images (Active) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
-    // OPTIMIZATION: Removed image_data from selection
-    const query = `SELECT id, uploaded_by, created_at FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
+    // FIXED: Included image_data so frontend can render them
+    const query = `SELECT id, uploaded_by, created_at, image_data FROM engineer_image WHERE project_id = $1 ORDER BY created_at DESC;`;
     const result = await pool.query(query, [projectId]);
     res.json(result.rows);
   } catch (err) {

@@ -371,49 +371,50 @@ const NewProjects = () => {
         setIsSubmitting(true);
 
         try {
-            // A. Prepare Images (Base64) - Still stored in engineer_image for now
+            // A. Prepare Images (Base64)
             const compressedImages = [];
             for (const file of selectedFiles) {
                 const base64 = await compressImage(file);
                 compressedImages.push(base64);
             }
 
-            // B. Construct Project Data Payload (NO DOCUMENTS)
+            // B. Prepare Documents (Base64)
+            // Convert docs to Base64 to send DIRECTLY to DB (No Firebase)
+            const processedDocs = [];
+            if (documents.POW) processedDocs.push({ type: 'POW', base64: await convertFullFileToBase64(documents.POW) });
+            if (documents.DUPA) processedDocs.push({ type: 'DUPA', base64: await convertFullFileToBase64(documents.DUPA) });
+            if (documents.CONTRACT) processedDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
+
+            // C. Construct Payload
             const projectBody = { 
                 ...formData, 
                 projectAllocation: Number(formData.projectAllocation?.toString().replace(/,/g, '') || 0),
                 uid: auth.currentUser?.uid,
                 modifiedBy: auth.currentUser?.displayName || 'Engineer',
                 images: compressedImages,
+                documents: processedDocs, // Send docs directly!
                 statusAsOfDate: new Date().toISOString()
             };
 
-            // --- OFFLINE CHECK ---
+            // --- OFFLINE/ONLINE CHECK ---
+            const endpoint = '/api/save-project';
+            const payload = {
+                url: endpoint,
+                method: 'POST',
+                body: projectBody,
+                formName: `Project: ${formData.projectName}`
+            };
+
             if (!navigator.onLine) {
-                // For offline, we might want to store docs locally, but we are supposed to avoid binary in DB.
-                // However, 'addEngineerToOutbox' saves to indexedDB (local). This is safe.
-                // We convert them to base64 ONLY for the offline store.
-                const offlineDocs = [];
-                 if (documents.POW) offlineDocs.push({ type: 'POW', base64: await convertFullFileToBase64(documents.POW) });
-                 if (documents.DUPA) offlineDocs.push({ type: 'DUPA', base64: await convertFullFileToBase64(documents.DUPA) });
-                 if (documents.CONTRACT) offlineDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
-
-                const offlinePayload = {
-                    url: '/api/save-project', 
-                    method: 'POST',
-                    body: { ...projectBody, documents: offlineDocs }, 
-                    formName: `Project: ${formData.projectName}`
-                };
-
-                await addEngineerToOutbox(offlinePayload);
-                alert("📁 No internet. Project & Photos saved to Sync Center. \n\nNOTE: Documents will be uploaded when connection is restored.");
-                setIsSubmitting(false);
-                navigate('/engineer-dashboard');
-                return;
+                 await addEngineerToOutbox(payload);
+                 alert("📁 No internet. Project & Docs saved to Sync Center.");
+                 setIsSubmitting(false);
+                 navigate('/engineer-dashboard');
+                 return;
             }
 
-            // --- ONLINE STEP 1: CREATE PROJECT RECORD ---
-            const projectRes = await fetch('/api/save-project', {
+            // --- ONLINE SUBMISSION ---
+            const projectRes = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(projectBody),
@@ -421,95 +422,26 @@ const NewProjects = () => {
 
             if (!projectRes.ok) {
                 const errorData = await projectRes.json();
-                throw new Error(errorData.message || 'Failed to create project record');
+                throw new Error(errorData.message || 'Failed to save project');
             }
 
             const projectData = await projectRes.json();
-            const projectId = projectData.project.project_id; // Get ID
             const ipc = projectData.ipc; 
-
-            // --- ONLINE STEP 2: UPLOAD DOCUMENTS TO FIREBASE STORAGE ---
-            console.log(`🚀 Project Created (ID: ${projectId}, IPC: ${ipc}). Uploading documents...`);
             
-            const uploadedDocsMeta = [];
-            const docEntries = Object.entries(documents).filter(([_, file]) => file !== null);
-
-            for (const [type, file] of docEntries) {
-                // engineer_forms/{project_id}/{type}/{timestamp}_{filename}
-                const storagePath = `engineer_forms/${projectId}/${type}/${Date.now()}_${file.name}`;
-                const storageRef = ref(storage, storagePath);
-
-                                // Wrap upload in a timeout to prevent infinite hanging (e.g. CORS retries)
-                const uploadWithTimeout = (ref, data, ms = 25000) => {
-                    return new Promise((resolve, reject) => {
-                        const timer = setTimeout(() => reject(new Error("Upload timed out (CORS/Network).")), ms);
-                        uploadBytes(ref, data)
-                            .then(res => { clearTimeout(timer); resolve(res); })
-                            .catch(err => { clearTimeout(timer); reject(err); });
-                    });
-                };
-
-                const snapshot = await uploadWithTimeout(storageRef, file);
-                const downloadURL = await getDownloadURL(snapshot.ref);
-
-                uploadedDocsMeta.push({
-                    type: type, // POW, DUPA, CONTRACT
-                    url: downloadURL,
-                    path: storagePath,
-                    size: file.size,
-                    contentType: file.type
-                });
-            }
-
-            // --- ONLINE STEP 3: SAVE DOCUMENT METADATA ---
-            console.log("💾 Documents uploaded. Saving metadata...");
-            
-            const metaRes = await fetch('/api/save-project-documents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectId: projectId,
-                    documents: uploadedDocsMeta,
-                    uploadedBy: auth.currentUser?.uid
-                })
-            });
-
-            if (!metaRes.ok) {
-                 // Non-fatal, but warning needed?
-                 console.warn("Project created, but document metadata save failed.");
-            }
-
-            alert(`✅ Project ${ipc} created and documents uploaded successfully!`);
+            alert(`✅ Project ${ipc} created and all documents saved successfully!`);
             navigate('/engineer-dashboard');
 
         } catch (error) {
             console.error("Submission failed:", error);
             
-            // If project was created (we have an ID) but something else failed
-            // We should NOT save to outbox (it would duplicate the project creation)
-            // But we should warn the user.
-            // Note: We can't easily detect if Project was created unless we track it in state, 
-            // but here we are inside the try block. 
-            // If error happened BEFORE projectRes, then nothing is saved.
-            // If error happened AFTER projectRes, then Project is Saved, but Docs failed.
-            
-            const isDocUploadError = error.message && (error.message.includes("upload") || error.code === 'storage/unauthorized');
-            
-            if (isDocUploadError) {
-                 alert(`⚠️ PARTIAL SUCCESS: Project was created, but Document Upload failed.\n\nError: ${error.message}\n\nPlease contact admin or try re-uploading documents from the Edit page (Feature coming soon).`);
-                 navigate('/engineer-dashboard');
-            } else {
-                // Fully failed (likely network before project creation)
-                // Attempt to save to outbox
-                try {
-                     await addEngineerToOutbox(payload);
-                     alert("⚠️ Connection failed. Project saved to Sync Center for later retry.");
-                     navigate('/engineer-dashboard');
-                } catch (fallbackErr) {
-                     console.error("Fallback failed:", fallbackErr);
-                     // If IDB is broken, correct
-                     alert(`❌ CRITICAL: Submission failed and could not save to offline storage.\n\n${error.message}`);
-                }
+            // Try saving to outbox if it might be a network glitch
+            try {
+                 // We can't easily reconstruct the exact payload if we failed mid-way, 
+                 // but typically if fetch failed, we are here.
+                 
+                 alert(`❌ Submission Failed: ${error.message}\n\nPlease check your connection and try again.`);
+            } catch (fallbackErr) {
+                 alert(`❌ Critical Error: ${error.message}`);
             }
         } finally {
             setIsSubmitting(false);
