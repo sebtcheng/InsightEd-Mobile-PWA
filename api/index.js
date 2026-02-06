@@ -373,7 +373,7 @@ const old_db_init_disabled = async () => {
   try {
     const client = await pool.connect();
     isDbConnected = true;
-    console.log('✅ Connected to Neon Database successfully!');
+    console.log('✅ Connected to Postgres Database successfully!');
     await initOtpTable();
 
     try {
@@ -863,7 +863,7 @@ const old_db_init_disabled = async () => {
       client.release();
     }
   } catch (err) {
-    console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
+    console.error('❌ FATAL: Could not connect to Postgres DB:', err.message);
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   }
@@ -871,11 +871,11 @@ const old_db_init_disabled = async () => {
 
 // --- NEW DATABASE INITIALIZATION ---
 (async () => {
-  // 1. Primary Database (Neon)
+  // 1. Primary Database
   try {
     const client = await pool.connect();
     isDbConnected = true;
-    console.log('✅ Connected to Neon Database (Primary) successfully!');
+    console.log('✅ Connected to Postgres Database (Primary) successfully!');
 
     try {
       await initOtpTable(pool);
@@ -884,7 +884,7 @@ const old_db_init_disabled = async () => {
       client.release();
     }
   } catch (err) {
-    console.error('❌ FATAL: Could not connect to Neon DB:', err.message);
+    console.error('❌ FATAL: Could not connect to Postgres DB:', err.message);
     console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE.');
     isDbConnected = false;
   }
@@ -1103,7 +1103,7 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     // --- FORM 6: Specialization ---
     // Criteria: Any specialization field > 0
     const specFields = [
-      'spec_general_major', 'spec_ece_major', 'spec_english_major', 'spec_filipino_major', 'spec_math_major',
+      'spec_general_teaching', 'spec_ece_teaching', 'spec_english_major', 'spec_filipino_major', 'spec_math_major',
       'spec_science_major', 'spec_ap_major', 'spec_mapeh_major', 'spec_esp_major', 'spec_tle_major',
       'spec_bio_sci_major', 'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
     ];
@@ -1123,8 +1123,16 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
 
 
     // --- FORM 9: Shifting ---
-    // Criteria: Any shift defined OR any modality defined
-    const f9 = (sp.shift_kinder || sp.shift_g1 || sp.adm_mdl || sp.adm_odl) ? 1 : 0;
+    // Criteria: Any shift (K-12) OR any mode (K-12) OR any ADM defined
+    const hasShift =
+      (sp.shift_kinder || sp.shift_g1 || sp.shift_g2 || sp.shift_g3 || sp.shift_g4 || sp.shift_g5 || sp.shift_g6 ||
+        sp.shift_g7 || sp.shift_g8 || sp.shift_g9 || sp.shift_g10 || sp.shift_g11 || sp.shift_g12);
+    const hasMode =
+      (sp.mode_kinder || sp.mode_g1 || sp.mode_g2 || sp.mode_g3 || sp.mode_g4 || sp.mode_g5 || sp.mode_g6 ||
+        sp.mode_g7 || sp.mode_g8 || sp.mode_g9 || sp.mode_g10 || sp.mode_g11 || sp.mode_g12);
+    const hasAdm = (sp.adm_mdl || sp.adm_odl || sp.adm_tvi || sp.adm_blended || sp.adm_others);
+
+    const f9 = (hasShift || hasMode || hasAdm) ? 1 : 0;
     if (f9) completed++;
 
     // --- FORM 10: Learner Statistics ---
@@ -1133,7 +1141,10 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     const hasStats = Object.keys(sp).some(key => key.startsWith('stat_') && Number(sp[key]) > 0);
     const f10 = hasStats ? 1 : 0;
     if (f10) completed++;
-    else console.log(`[DEBUG] School ${schoolId} F10 Incomplete. Keys checked: ${Object.keys(sp).filter(k => k.startsWith('stat_')).length}, HasStats: ${hasStats}`);
+    else {
+      // It's normal to be incomplete, reduce log spam or clarify message
+      // console.log(`[DEBUG] School ${schoolId} F10 Incomplete. Keys checked: ${Object.keys(sp).filter(k => k.startsWith('stat_')).length}, HasStats: ${hasStats}`);
+    }
 
 
 
@@ -1206,7 +1217,7 @@ app.get('/api/activities', async (req, res) => {
 
 // --- 1b. POST: Generic Log Activity (For Frontend Actions) ---
 app.post('/api/log-activity', async (req, res) => {
-  const { userUid, userName, role, actionType, targetEntity, details } = req.body || {};
+  const { userUid, userName, role, actionType, targetEntity, details } = req.body;
   try {
     await logActivity(userUid, userName, role, actionType, targetEntity, details);
     res.status(200).json({ success: true });
@@ -1236,7 +1247,7 @@ app.get('/api/settings/:key', async (req, res) => {
 
 // SAVE Setting (Upsert)
 app.post('/api/settings/save', async (req, res) => {
-  const { key, value, userUid } = req.body || {};
+  const { key, value, userUid } = req.body;
 
   if (!key) return res.status(400).json({ error: "Key is required" });
 
@@ -1265,55 +1276,13 @@ app.post('/api/settings/save', async (req, res) => {
 
 // GET All Users
 app.get('/api/admin/users', async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
-  const search = req.query.search || '';
-  const offset = (page - 1) * limit;
-
   try {
-    let whereClause = '';
-    let params = [];
-
-    if (search) {
-      whereClause = `WHERE (
-        email ILIKE $1 OR 
-        first_name ILIKE $1 OR 
-        last_name ILIKE $1
-      )`;
-      params.push(`%${search}%`);
-    }
-
-    // 1. Get Total Count
-    const countQuery = `SELECT COUNT(*) as total FROM users ${whereClause}`;
-    const countRes = await pool.query(countQuery, params);
-    const total = parseInt(countRes.rows[0].total);
-
-    // 2. Get Data
-    let queryParams = [...params];
-    queryParams.push(limit);
-    queryParams.push(offset);
-
-    const limitIndex = params.length + 1;
-    const offsetIndex = params.length + 2;
-
-    const dataQuery = `
+    const result = await pool.query(`
       SELECT uid, email, role, first_name, last_name, region, division, created_at, disabled 
       FROM users 
-      ${whereClause}
       ORDER BY created_at DESC
-      LIMIT $${limitIndex} OFFSET $${offsetIndex}
-    `;
-
-    const result = await pool.query(dataQuery, queryParams);
-
-    res.json({
-      data: result.rows,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit)
-    });
-
+    `);
+    res.json(result.rows);
   } catch (err) {
     console.error("Get Users Error:", err);
     res.status(500).json({ error: "Failed to fetch users" });
@@ -1862,7 +1831,7 @@ app.post('/api/register-user', async (req, res) => {
     ];
 
     await pool.query(query, values);
-    console.log(`✅ [NEON] Synced generic user: ${email} (${role})`);
+    console.log(`✅ [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
     if (poolNew) {
@@ -1878,10 +1847,10 @@ app.post('/api/register-user', async (req, res) => {
     // Log Activity
     await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
 
-    res.json({ success: true, message: "User synced to NeonSQL" });
+    res.json({ success: true, message: "User synced to Database" });
   } catch (err) {
     console.error("❌ Register User Error:", err);
-    res.status(500).json({ error: "Failed to sync user to NeonSQL" });
+    res.status(500).json({ error: "Failed to sync user to Database" });
   }
 });
 
@@ -2883,7 +2852,7 @@ app.get('/api/projects-by-school-id/:schoolId', async (req, res) => {
 
 // --- 11c. POST: Validate Project (School Head) ---
 app.post('/api/validate-project', async (req, res) => {
-  const { projectId, status, userUid, userName, remarks } = req.body || {};
+  const { projectId, status, userUid, userName, remarks } = req.body;
   try {
     const query = `
       UPDATE "engineer_form" 
@@ -3314,10 +3283,10 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
 
     if (result.rowCount === 0) {
       console.error("❌ SQL matched 0 rows for UID:", d.uid);
-      return res.status(404).json({ error: "No matching record found in Neon." });
+      return res.status(404).json({ error: "No matching record found in Database." });
     }
 
-    console.log("✅ Neon Updated Successfully for School:", result.rows[0].school_id);
+    console.log("✅ Record Updated Successfully for School:", result.rows[0].school_id);
     await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE (Primary)
 
     // --- DUAL WRITE: TEACHING PERSONNEL ---
@@ -3337,7 +3306,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
 
 
   } catch (err) {
-    console.error("❌ Neon Database Error:", err.message);
+    console.error("❌ Database Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -3647,8 +3616,8 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
                 spec_tle_major=$16, spec_tle_teaching=$17,
                 spec_guidance=$18, spec_librarian=$19,
                 spec_ict_coord=$20, spec_drrm_coord=$21,
-                spec_general_major=$22,
-                spec_ece_major=$23,
+                spec_general_teaching=$22,
+                spec_ece_teaching=$23,
                 spec_bio_sci_major=$24, spec_bio_sci_teaching=$25,
                 spec_phys_sci_major=$26, spec_phys_sci_teaching=$27,
                 spec_agri_fishery_major=$28, spec_agri_fishery_teaching=$29,
@@ -3668,8 +3637,8 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
       d.spec_tle_major || 0, d.spec_tle_teaching || 0,
       d.spec_guidance || 0, d.spec_librarian || 0,
       d.spec_ict_coord || 0, d.spec_drrm_coord || 0,
-      d.spec_general_major || 0,
-      d.spec_ece_major || 0,
+      d.spec_general_teaching || 0,
+      d.spec_ece_teaching || 0,
       d.spec_bio_sci_major || 0, d.spec_bio_sci_teaching || 0,
       d.spec_phys_sci_major || 0, d.spec_phys_sci_teaching || 0,
       d.spec_agri_fishery_major || 0, d.spec_agri_fishery_teaching || 0,
@@ -3678,7 +3647,7 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 
     // DEBUG LOGGING
     console.log(`[Specialization Save] UID: ${d.uid}`);
-    console.log(`[Specialization Save] General Major: ${d.spec_general_major}, ECE Major: ${d.spec_ece_major}`);
+    console.log(`[Specialization Save] General Teaching: ${d.spec_general_teaching}, ECE Teaching: ${d.spec_ece_teaching}`);
 
     const result = await pool.query(query, values);
     if (result.rowCount === 0) return res.status(404).json({ error: "Profile not found" });
@@ -4115,41 +4084,6 @@ app.get('/api/monitoring/regions', async (req, res) => {
 });
 
 
-
-// --- 34. POST: Admin Reset Password ---
-app.post('/api/admin/reset-password', async (req, res) => {
-  const { uid, newPassword, adminUid } = req.body;
-
-  if (!uid || !newPassword) return res.status(400).json({ error: "Missing uid or password" });
-
-  try {
-    // Verify Admin Status (Optional Check)
-    // For now, we rely on the frontend gating + potential future backend logic.
-
-    await admin.auth().updateUser(uid, {
-      password: newPassword
-    });
-
-    console.log(`[Admin] Password reset for user ${uid} by admin ${adminUid}`);
-
-    // Log to Audit Trail (If logActivity is available)
-    try {
-      await logActivity(
-        adminUid || 'system',
-        'Admin',
-        'Admin',
-        'UPDATE',
-        'User Account',
-        `Reset password for user ${uid}`
-      );
-    } catch (e) { console.warn("Audit log failed", e); }
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error("Admin Password Reset Error:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // ==================================================================
 //                    NOTIFICATION ROUTES

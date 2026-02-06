@@ -99,7 +99,7 @@ const MonitoringDashboard = () => {
         fetchProjectList(region, status);
     };
 
-    const fetchData = async (region, division) => {
+    const fetchData = async (region, division, district) => {
         const user = auth.currentUser;
         if (!user) return;
 
@@ -120,6 +120,8 @@ const MonitoringDashboard = () => {
             // Determine params based on Role
             let queryRegion = region;
             let queryDivision = division;
+            // Use passed district if defined (even empty string), otherwise fallback to state
+            let queryDistrict = district !== undefined ? district : coDistrict;
 
             if (currentUserData.role === 'Central Office') {
                 // If in National View (no region selected), fetch Regional Overview
@@ -145,13 +147,23 @@ const MonitoringDashboard = () => {
             const params = new URLSearchParams({
                 region: queryRegion,
                 ...(queryDivision && { division: queryDivision }),
-                ...(coDistrict && { district: coDistrict }) // Add District param
+                ...(queryDistrict && { district: queryDistrict }) // Add District param
             });
 
+            // FIX: For SDO, we want the "Top Stats" to remain as Division Overview even when drilling down to a district.
+            // Create a separate params object for the main stats that EXCLUDES district.
+            const statsParams = new URLSearchParams({
+                region: queryRegion,
+                ...(queryDivision && { division: queryDivision })
+                // explicitly OMIT district here
+            });
+
+
             const fetchPromises = [
-                fetch(`/api/monitoring/stats?${params.toString()}`),
-                fetch(`/api/monitoring/engineer-stats?${params.toString()}`),
-                fetch(`/api/monitoring/engineer-projects?${params.toString()}`)
+                // Use statsParams for the main stats (Top Card) so it stays fixed to Division/Region level
+                fetch(`/api/monitoring/stats?${statsParams.toString()}`),
+                fetch(`/api/monitoring/engineer-stats?${statsParams.toString()}`),
+                fetch(`/api/monitoring/engineer-projects?${statsParams.toString()}`)
             ];
 
             // Fetch Division Stats for Regional Office OR Central Office (when drilling down to a region)
@@ -382,7 +394,8 @@ const MonitoringDashboard = () => {
                     normalizeLocationName(s.district) === normalizeLocationName(district)
                 );
 
-                const mergedSchools = masterList.map(csvSchool => {
+                // 1. Map CSV Schools (Existing Logic)
+                const csvMapped = masterList.map(csvSchool => {
                     const apiMatch = apiSchools.find(api =>
                         api.school_id === csvSchool.school_id ||
                         normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
@@ -410,6 +423,21 @@ const MonitoringDashboard = () => {
                     }
                 });
 
+                // 2. Add API Schools that were NOT in CSV (Fix for SDO View consistency)
+                const csvIds = new Set(masterList.map(s => s.school_id));
+                const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
+
+                const extraApiSchools = apiSchools.filter(api =>
+                    !csvIds.has(api.school_id) &&
+                    !csvNames.has(normalizeLocationName(api.school_name))
+                ).map(api => ({
+                    ...api,
+                    // Ensure district is set (it should be, since we filtered API query by district)
+                    district: api.district || district
+                }));
+
+                const mergedSchools = [...csvMapped, ...extraApiSchools];
+
                 mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
                 setDistrictSchools(mergedSchools);
 
@@ -422,8 +450,8 @@ const MonitoringDashboard = () => {
             setDistrictSchools([]);
         }
 
-        // Trigger global stats fetch
-        setTimeout(() => fetchData(), 0);
+        // Trigger global stats fetch (pass explicit district to avoid stale state)
+        setTimeout(() => fetchData(undefined, undefined, district), 0);
     };
 
     // Better: Add useEffect for Filters
@@ -1303,9 +1331,9 @@ const MonitoringDashboard = () => {
                                                                     <FiChevronLeft size={14} />
                                                                     <span>Prev</span>
                                                                 </button>
-                                                                
+
                                                                 <div className="bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-lg text-xs font-black text-slate-600 dark:text-slate-300">
-                                                                     {schoolPage} <span className="text-slate-400 font-bold mx-1">/</span> {totalPages}
+                                                                    {schoolPage} <span className="text-slate-400 font-bold mx-1">/</span> {totalPages}
                                                                 </div>
 
                                                                 <button
@@ -1353,30 +1381,27 @@ const MonitoringDashboard = () => {
                                                 <div className="space-y-4">
                                                     {divisionDistricts.map((distName, idx) => {
                                                         // 2. Count Total from CSV
-                                                        const totalSchools = schoolData.filter(s =>
+                                                        const csvTotal = schoolData.filter(s =>
                                                             s.region === targetRegion &&
                                                             s.division === targetDivision &&
                                                             s.district === distName
                                                         ).length;
 
-                                                        // 3. Count Completed from DB Stats
+                                                        // 3. Get API Stats for this District
                                                         const startStat = districtStats.find(d => {
-                                                            const match = normalizeLocationName(d.district) === normalizeLocationName(distName);
-                                                            // Debug logging for the problematic district
-                                                            if (distName.includes('Adams')) {
-                                                                console.log(`[Dashboard Debug] Matching: '${distName}' -> '${normalizeLocationName(distName)}' vs API: '${d.district}' -> '${normalizeLocationName(d.district)}' = ${match}`);
-                                                            }
-                                                            return match;
+                                                            return normalizeLocationName(d.district) === normalizeLocationName(distName);
                                                         });
 
-                                                        if (distName.includes('Adams') && !startStat) {
-                                                            console.log("[Dashboard Debug] Failed to find stat match for:", distName, "Available Stats:", districtStats);
-                                                        }
-
                                                         const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+                                                        const apiTotal = startStat ? parseInt(startStat.total_schools || 0) : 0;
+
+                                                        // Fix >100% Bug: Ensure total includes API count if it's higher than CSV
+                                                        const totalSchools = Math.max(csvTotal, apiTotal);
 
                                                         // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
-                                                        const percentage = totalSchools > 0 ? Math.round((completedCount / totalSchools) * 100) : 0;
+                                                        // Clamp to 100% to prevent edge cases
+                                                        const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
+                                                        const percentage = Math.min(Math.round(rawPercentage), 100);
 
                                                         // Colors
                                                         const colors = ['bg-orange-500', 'bg-cyan-500', 'bg-lime-500', 'bg-fuchsia-500', 'bg-indigo-500'];
