@@ -122,6 +122,8 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS barangay TEXT,
             ADD COLUMN IF NOT EXISTS office TEXT,
             ADD COLUMN IF NOT EXISTS position TEXT,
+            ADD COLUMN IF NOT EXISTS contact_number TEXT,
+            ADD COLUMN IF NOT EXISTS alt_email TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
         console.log(`✅ [${dbLabel}] Users Table Schema Updated`);
@@ -444,6 +446,48 @@ const runMigrations = async (client, dbLabel) => {
         console.log(`✅ [${dbLabel}] Monitoring Snapshot Columns Initialized`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to migrate snapshot columns:`, migErr.message);
+    }
+
+    // --- 14. PENDING SCHOOLS TABLE (SDO Submission & Admin Approval) ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS pending_schools (
+                pending_id SERIAL PRIMARY KEY,
+                
+                -- School Information (exact match to schools table)
+                school_id TEXT UNIQUE NOT NULL,
+                school_name TEXT NOT NULL,
+                region TEXT NOT NULL,
+                division TEXT NOT NULL,
+                district TEXT,
+                province TEXT,
+                municipality TEXT,
+                leg_district TEXT,
+                barangay TEXT,
+                street_address TEXT,
+                mother_school_id TEXT,
+                curricular_offering TEXT,
+                
+                -- Location Data
+                latitude NUMERIC(10, 7),
+                longitude NUMERIC(10, 7),
+                
+                -- Submission Metadata
+                submitted_by TEXT NOT NULL,
+                submitted_by_name TEXT,
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                -- Approval Status
+                status TEXT DEFAULT 'pending',
+                reviewed_by TEXT,
+                reviewed_by_name TEXT,
+                reviewed_at TIMESTAMP,
+                rejection_reason TEXT
+            );
+        `);
+        console.log(`✅ [${dbLabel}] Pending Schools Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to create pending_schools table:`, migErr.message);
     }
 };
 

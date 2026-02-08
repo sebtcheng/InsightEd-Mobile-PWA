@@ -19,6 +19,7 @@ import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard';
 import MonitoringDashboard from './modules/MonitoringDashboard';
+import SchoolManagement from './modules/SchoolManagement';
 import DummyDashboard from './modules/DummyDashboard';
 import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
 import UserProfile from './modules/UserProfile';
@@ -45,7 +46,7 @@ import TeacherSpecialization from './forms/TeacherSpecialization';
 import PhysicalFacilities from './forms/PhysicalFacilities';
 import LearnerStatistics from './forms/LearnerStatistics';
 
-// Form Imports (Engineer)
+// Form Imports (Division Engineer)
 import EngineerSchoolResources from './forms/EngineerSchoolResources';
 import DamageAssessment from './forms/DamageAssessment';
 import ProjectMonitoring from './forms/ProjectMonitoring';
@@ -106,6 +107,7 @@ const AnimatedRoutes = () => {
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
         <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
+        <Route path="/school-management" element={<SchoolManagement />} />
         <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
         <Route path="/dummy-forms" element={<DummyDashboard />} />
 
@@ -133,7 +135,7 @@ const AnimatedRoutes = () => {
         <Route path="/project-validation" element={<ProjectValidation />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
 
-        {/* Engineer Forms */}
+        {/* Division Engineer Forms */}
         <Route path="/engineer-school-resources" element={<EngineerSchoolResources />} />
         <Route path="/damage-assessment" element={<DamageAssessment />} />
         <Route path="/project-monitoring" element={<ProjectMonitoring />} />

@@ -26,11 +26,22 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const CSV_PATH = `${import.meta.env.BASE_URL}schools.csv`;
 const OFFICES_CSV_PATH = `${import.meta.env.BASE_URL}Personnel Positions by Functional Division at RO and SDO Levels - Sheet1.csv`;
 
+// --- AUTHORIZATION CODES (Secure & Alphanumeric) ---
+const AUTHORIZATION_CODES = {
+    'Central Office': '8XK2-M9P4',
+    'Regional Office': 'H7V3-L5N1',
+    'School Division Office': 'Q9D2-R4J6',
+    'Division Engineer': 'E5T8-B2W3',
+    'Local Government Unit': 'L2G7-X4Z9',
+    // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
+    'Admin': 'A3M6-Y1K8'
+};
+
 import locationData from './locations.json';
 
 const getDashboardPath = (role) => {
     const roleMap = {
-        'Engineer': '/engineer-dashboard',
+        'Division Engineer': '/engineer-dashboard',
         'Local Government Unit': '/lgu',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
@@ -65,7 +76,10 @@ const Register = () => {
         division: '',
         province: '',
         city: '',
-        barangay: ''
+        barangay: '',
+        authCode: '',
+        // New Fields for Division Engineer
+        altEmail: ''
     });
 
     // --- OTP STATE --- (REMOVED)
@@ -78,9 +92,12 @@ const Register = () => {
     const [cityOptions, setCityOptions] = useState([]);
     const [barangayOptions, setBarangayOptions] = useState([]);
 
-    // --- SCHOOL HEAD SPECIFIC STATE ---
-    const [csvData, setCsvData] = useState([]);
-    const [isCsvLoaded, setIsCsvLoaded] = useState(false);
+    // --- SCHOOL HEAD CASCADING OPTIONS STATE ---
+    const [regions, setRegions] = useState([]);
+    const [divisions, setDivisions] = useState([]);
+    const [districts, setDistricts] = useState([]);
+    const [municipalities, setMunicipalities] = useState([]);
+    const [availableSchools, setAvailableSchools] = useState([]);
 
     // --- OFFICE DATA STATE ---
     const [officeData, setOfficeData] = useState([]);
@@ -100,51 +117,14 @@ const Register = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [registeredIern, setRegisteredIern] = useState('');
 
-    // --- OTP TIMER EFFECT (REMOVED) ---
 
-
-
-    // --- 1. LOAD CSV DATA ---
+    // --- 1. LOAD INITIAL DATA (Regions + Office CSV) ---
     useEffect(() => {
-        console.log("Attempting to load CSV from:", CSV_PATH);
-        // Load Schools CSV
-        Papa.parse(CSV_PATH, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                console.log("CSV Load Success, rows:", results.data.length);
-                if (results.data && results.data.length > 0) {
-                    // Standardize Curricular Offering
-                    const standardizedData = results.data.map(item => {
-                        let offering = item.curricular_offering;
-                        if (offering) {
-                            const map = {
-                                "Purely es": "Purely Elementary",
-                                "ES and JHS (K to 10)": "Elementary School and Junior High School (K-10)",
-                                "All offering (K to 12)": "All Offering (K-12)",
-                                "JHS with SHS": "Junior and Senior High",
-                                "Purely JHS": "Purely Junior High School",
-                                "Purely SHS": "Purely Senior High School"
-                            };
-                            // Normalize check (case insensitive or direct map)
-                            const key = Object.keys(map).find(k => k.toLowerCase() === offering.toLowerCase()) || offering;
-                            if (map[key] || map[offering]) {
-                                item.curricular_offering = map[key] || map[offering];
-                            }
-                        }
-                        return item;
-                    });
-
-                    setCsvData(standardizedData);
-                    setIsCsvLoaded(true);
-                }
-            },
-            error: (err) => {
-                console.error("CSV Load Error Detailed:", err);
-                alert(`Failed to load School Database: ${err.message || 'Unknown Error'}`);
-            }
-        });
+        // Load Regions from API
+        fetch('/api/locations/regions')
+            .then(res => res.json())
+            .then(data => setRegions(data || []))
+            .catch(err => console.error("Failed to load regions:", err));
 
         // Load Offices CSV
         Papa.parse(OFFICES_CSV_PATH, {
@@ -163,37 +143,54 @@ const Register = () => {
         });
     }, []);
 
-    // --- 2. CASCADING FILTER LOGIC ---
-    // Helper to get unique values based on filters
-    const getUniqueValues = (field, filters = {}) => {
-        if (!isCsvLoaded) return [];
-        let filtered = csvData;
+    // --- 2. CASCADING EFFECTS ---
 
-        // Apply existing filters in order
-        if (filters.region) filtered = filtered.filter(row => row.region === filters.region);
-        if (filters.division) filtered = filtered.filter(row => row.division === filters.division);
-        if (filters.district) filtered = filtered.filter(row => row.district === filters.district);
-        if (filters.municipality) filtered = filtered.filter(row => row.municipality === filters.municipality);
+    // Load Divisions when Region changes
+    useEffect(() => {
+        setDivisions([]);
+        // Note: Downstream selections (division, district...) should be cleared by the change handler
+        if (selectedRegion) {
+            fetch(`/api/locations/divisions?region=${encodeURIComponent(selectedRegion)}`)
+                .then(res => res.json())
+                .then(data => setDivisions(data || []))
+                .catch(console.error);
+        }
+    }, [selectedRegion]);
 
-        // Extract and deduplicate
-        return [...new Set(filtered.map(row => row[field]))].sort().filter(Boolean);
-    };
+    // Load Districts when Division changes
+    useEffect(() => {
+        setDistricts([]);
+        if (selectedRegion && selectedDivision) {
+            fetch(`/api/locations/districts?region=${encodeURIComponent(selectedRegion)}&division=${encodeURIComponent(selectedDivision)}`)
+                .then(res => res.json())
+                .then(data => setDistricts(data || []))
+                .catch(console.error);
+        }
+    }, [selectedRegion, selectedDivision]);
 
-    // Derived Options Hierarchy
-    const regions = getUniqueValues('region');
-    const divisions = selectedRegion ? getUniqueValues('division', { region: selectedRegion }) : [];
-    const districts = selectedDivision ? getUniqueValues('district', { region: selectedRegion, division: selectedDivision }) : [];
-    const municipalities = selectedDistrict ? getUniqueValues('municipality', { region: selectedRegion, division: selectedDivision, district: selectedDistrict }) : [];
+    // Load Municipalities when District changes
+    useEffect(() => {
+        setMunicipalities([]);
+        if (selectedRegion && selectedDivision && selectedDistrict) {
+            fetch(`/api/locations/municipalities?region=${encodeURIComponent(selectedRegion)}&division=${encodeURIComponent(selectedDivision)}&district=${encodeURIComponent(selectedDistrict)}`)
+                .then(res => res.json())
+                .then(data => setMunicipalities(data || []))
+                .catch(console.error);
+        }
+    }, [selectedRegion, selectedDivision, selectedDistrict]);
 
-    // Final School List logic (Filtered by Municipality)
-    const availableSchools = (selectedMunicipality)
-        ? csvData.filter(s =>
-            s.region === selectedRegion &&
-            s.division === selectedDivision &&
-            s.district === selectedDistrict &&
-            s.municipality === selectedMunicipality
-        ).sort((a, b) => a.school_name.localeCompare(b.school_name))
-        : [];
+    // Load Schools when Municipality changes
+    useEffect(() => {
+        setAvailableSchools([]);
+        if (selectedRegion && selectedDivision && selectedDistrict && selectedMunicipality) {
+            fetch(`/api/locations/schools?region=${encodeURIComponent(selectedRegion)}&division=${encodeURIComponent(selectedDivision)}&district=${encodeURIComponent(selectedDistrict)}&municipality=${encodeURIComponent(selectedMunicipality)}`)
+                .then(res => res.json())
+                .then(data => setAvailableSchools(data || []))
+                .catch(console.error);
+        }
+    }, [selectedRegion, selectedDivision, selectedDistrict, selectedMunicipality]);
+
+
 
     // --- OFFICE DROPDOWN LOGIC ---
     const regionalOffices = useMemo(() => {
@@ -265,6 +262,10 @@ const Register = () => {
             province: '', city: '', barangay: '', division: ''
         });
 
+        // Trigger Cascading Load (Database)
+        setSelectedRegion(region);
+
+        // Legacy Location Data (for LGU Province/City/Barangay)
         if (region && locationData[region]) {
             setProvinceOptions(Object.keys(locationData[region]).sort());
         } else {
@@ -347,6 +348,15 @@ const Register = () => {
             return;
         }
 
+        // --- AUTHORIZATION CODE CHECK (For Non-School Heads) ---
+        if (formData.role !== 'School Head') {
+            const requiredCode = AUTHORIZATION_CODES[formData.role];
+            if (requiredCode && formData.authCode !== requiredCode) {
+                alert(`Invalid Authorization Code for ${formData.role}. Please send an email to support.stride@deped.gov.ph to obtain the secure code.`);
+                return;
+            }
+        }
+
         if (formData.role === 'School Head') {
             if (!selectedSchool) {
                 alert("Please select a school.");
@@ -379,9 +389,29 @@ const Register = () => {
 
 
         // STRICT EMAIL VALIDATION (Global Check)
-        if (!contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
+        if (formData.role !== 'Local Government Unit' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
+        }
+
+        // Division Engineer Specific Validations
+        if (formData.role === 'Division Engineer') {
+            if (formData.contactNumber.length !== 11) {
+                alert("Please enter a valid 11-digit mobile number.");
+                return;
+            }
+        }
+
+        // Local Government Unit Specific Validations
+        if (formData.role === 'Local Government Unit') {
+            if (formData.contactNumber.length !== 11) {
+                alert("Please enter a valid 11-digit mobile number.");
+                return;
+            }
+            if (!formData.region || !formData.province || !formData.city) {
+                alert("Please complete the Assignment details (Region, Province, Municipality).");
+                return;
+            }
         }
 
         // STRICT OTP ENFORCEMENT (User requested REMOVAL)
@@ -528,7 +558,9 @@ const Register = () => {
                     region: formData.region,
                     division: formData.division,
                     office: formData.office,
-                    position: formData.position
+                    position: formData.position,
+                    contactNumber: formData.contactNumber,
+                    altEmail: formData.altEmail
                 });
 
                 // SYNC TO NEONSQL (Tabular Data)
@@ -549,7 +581,9 @@ const Register = () => {
                             city: formData.city,
                             barangay: formData.barangay,
                             office: formData.office,
-                            position: formData.position
+                            position: formData.position,
+                            contactNumber: formData.contactNumber,
+                            altEmail: formData.altEmail
                         })
                     });
                 } catch (neonErr) {
@@ -594,7 +628,6 @@ const Register = () => {
 
                         <form onSubmit={handleRegister} className="space-y-6">
 
-                            {/* Role Selection */}
                             <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
                                 <label className="block text-xs font-bold text-blue-800 uppercase tracking-wider mb-2">Registering As</label>
                                 <div className="relative">
@@ -608,7 +641,7 @@ const Register = () => {
                                         <option value="Regional Office">Regional Office</option>
                                         <option value="School Division Office">School Division Office</option>
                                         <option value="School Head">School Head</option>
-                                        <option value="Engineer">Engineer</option>
+                                        <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         {/* {<option value="Admin">Admin</option>} */}
                                     </select>
@@ -617,6 +650,30 @@ const Register = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* AUTHORIZATION CODE INPUT (For Non-School Heads) */}
+                            {formData.role !== 'School Head' && (
+                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 animate-fade-in">
+                                    <label className="block text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                        </svg>
+                                        Authorization Code (Required)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="authCode"
+                                        value={formData.authCode}
+                                        onChange={handleChange}
+                                        placeholder="Enter Secure Code"
+                                        className="w-full bg-white border border-amber-300 rounded-xl px-4 py-3 text-amber-900 font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all placeholder:text-amber-300 placeholder:font-sans placeholder:tracking-normal"
+                                        required
+                                    />
+                                    <p className="text-[10px] text-amber-600 mt-2 ml-1">
+                                        Please send an email to <span className="font-bold select-all">support.stride@deped.gov.ph</span> to obtain the secure code for <strong>{formData.role}</strong> registration.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* === SCHOOL HEAD SPECIFIC FLOW === */}
                             {formData.role === 'School Head' ? (
@@ -627,7 +684,7 @@ const Register = () => {
                                             School Selection
                                         </h3>
 
-                                        {!isCsvLoaded ? (
+                                        {regions.length === 0 ? (
                                             <div className="text-center py-4 text-slate-400 text-sm animate-pulse">Loading School Database...</div>
                                         ) : (
                                             <div className="grid grid-cols-1 gap-3">
@@ -846,7 +903,7 @@ const Register = () => {
                                     </div>
 
 
-                                    <input name="email" type="email" placeholder="DepEd Email Address" onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
+                                    <input name="email" type="email" placeholder={formData.role === 'Local Government Unit' ? "Email Address" : "DepEd Email Address"} onChange={handleChange} value={formData.email} className="w-full bg-white border text-sm rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500" required />
 
                                     {/* CENTRAL OFFICE FIELDS */}
                                     {formData.role === 'Central Office' && (
@@ -899,8 +956,7 @@ const Register = () => {
                                                 required
                                             >
                                                 <option value="">Select Region</option>
-                                                {/* Use locationData keys or CSV regions? User snippet used locationData. Let's use generic regions logic if possible or locationData */}
-                                                {Object.keys(locationData).sort().map((reg) => (
+                                                {regions.map((reg) => (
                                                     <option key={reg} value={reg}>{reg}</option>
                                                 ))}
                                             </select>
@@ -941,7 +997,7 @@ const Register = () => {
                                                 required
                                             >
                                                 <option value="">Select Region</option>
-                                                {Object.keys(locationData).sort().map((reg) => (
+                                                {regions.map((reg) => (
                                                     <option key={reg} value={reg}>{reg}</option>
                                                 ))}
                                             </select>
@@ -955,15 +1011,9 @@ const Register = () => {
                                                 required
                                             >
                                                 <option value="">Select Division</option>
-                                                {/* Filter Divisions based on Region from CSV Data (Rich Source) */}
-                                                {[...new Set(csvData
-                                                    .filter(s => s.region === formData.region)
-                                                    .map(s => s.division))]
-                                                    .sort()
-                                                    .map(div => (
-                                                        <option key={div} value={div}>{div}</option>
-                                                    ))
-                                                }
+                                                {divisions.map(div => (
+                                                    <option key={div} value={div}>{div}</option>
+                                                ))}
                                             </select>
 
                                             <select
@@ -990,36 +1040,211 @@ const Register = () => {
                                         </div>
                                     )}
 
-
-                                    {/* Generic Location Dropdowns (For Engineer, Admin if needed - Optional but good practice) */}
-                                    {/* Hiding them for minimal Engineer view unless requested. User snippet had them for Generic. I'll add them if Engineer */}
-                                    {['Engineer'].includes(formData.role) && (
-                                        <div className="space-y-4 pt-4 border-t border-slate-100">
-                                            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                                <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">2</span>
-                                                Assignment Details
+                                    {/* DIVISION ENGINEER FIELDS */}
+                                    {formData.role === 'Division Engineer' && (
+                                        <div className="space-y-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
+                                            <h3 className="text-sm font-bold text-teal-800 uppercase flex items-center gap-2">
+                                                <span className="bg-teal-100 text-teal-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
+                                                Assignment & Contact
                                             </h3>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {/* Using locations.json for hierarchy */}
-                                                <select name="region" onChange={handleRegionChange} value={formData.region} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500">
-                                                    <option value="">Region</option>
-                                                    {Object.keys(locationData).sort().map(r => <option key={r} value={r}>{r}</option>)}
+
+                                            {/* ASSIGNMENT */}
+                                            <div className="space-y-3">
+                                                <label className="text-xs font-bold text-teal-700 uppercase">Assignment</label>
+                                                <select
+                                                    name="region"
+                                                    onChange={handleRegionChange}
+                                                    value={formData.region}
+                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
+                                                    required
+                                                >
+                                                    <option value="">Select Region</option>
+                                                    {regions.map((reg) => (
+                                                        <option key={reg} value={reg}>{reg}</option>
+                                                    ))}
                                                 </select>
-                                                <select name="province" onChange={handleProvinceChange} value={formData.province} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.region}>
-                                                    <option value="">Province</option>
-                                                    {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
+
+                                                <select
+                                                    name="division"
+                                                    onChange={handleChange}
+                                                    value={formData.division}
+                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                                                    disabled={!formData.region}
+                                                    required
+                                                >
+                                                    <option value="">Select Division</option>
+                                                    {divisions.map(div => (
+                                                        <option key={div} value={div}>{div}</option>
+                                                    ))}
                                                 </select>
-                                                <select name="city" onChange={handleCityChange} value={formData.city} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.province}>
-                                                    <option value="">City/Mun</option>
-                                                    {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                                <select name="barangay" onChange={handleChange} value={formData.barangay} className="bg-white border text-sm rounded-xl px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500" disabled={!formData.city}>
-                                                    <option value="">Barangay</option>
-                                                    {barangayOptions.map(b => <option key={b} value={b}>{b}</option>)}
-                                                </select>
+
+                                                <input
+                                                    name="position"
+                                                    value={formData.position}
+                                                    placeholder="Position (e.g. Engineer III)"
+                                                    onChange={handleChange}
+                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                                    required
+                                                />
+                                            </div>
+
+                                            {/* CONTACT INFO */}
+                                            <div className="space-y-3 pt-3 border-t border-teal-200/50">
+                                                <label className="text-xs font-bold text-teal-700 uppercase">Contact Information</label>
+
+                                                {/* MOBILE */}
+                                                <div>
+                                                    <input
+                                                        name="contactNumber"
+                                                        inputMode="numeric"
+                                                        value={formData.contactNumber}
+                                                        onFocus={() => {
+                                                            if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
+                                                        }}
+                                                        onChange={(e) => {
+                                                            let val = e.target.value.replace(/\D/g, '');
+                                                            if (!val.startsWith('09')) {
+                                                                if (val.startsWith('9')) val = '0' + val;
+                                                                else if (val.length < 2) val = '09';
+                                                                else val = '09' + val.substring(2);
+                                                            }
+                                                            val = val.slice(0, 11);
+                                                            setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                        }}
+                                                        placeholder="Mobile No. (09xx xxx xxxx)"
+                                                        className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                                        maxLength={11}
+                                                        required
+                                                    />
+                                                    <p className="text-[10px] text-teal-600 mt-1 ml-1">Must be 11 digits.</p>
+                                                </div>
+
+                                                {/* ALT EMAIL */}
+                                                <input
+                                                    name="altEmail"
+                                                    type="email"
+                                                    value={formData.altEmail}
+                                                    onChange={handleChange}
+                                                    placeholder="Alternative Email Address (Optional)"
+                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                                />
+                                                <p className="text-[10px] text-teal-600 ml-1">Backup email for account recovery.</p>
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* LOCAL GOVERNMENT UNIT FIELDS */}
+                                    {formData.role === 'Local Government Unit' && (
+                                        <div className="space-y-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                                            <h3 className="text-sm font-bold text-orange-800 uppercase flex items-center gap-2">
+                                                <span className="bg-orange-100 text-orange-600 w-5 h-5 flex items-center justify-center rounded-full text-[10px]">2</span>
+                                                LGU Assignment & Contact
+                                            </h3>
+
+                                            {/* ASSIGNMENT */}
+                                            <div className="space-y-3">
+                                                <label className="text-xs font-bold text-orange-700 uppercase">Jurisdiction</label>
+
+                                                {/* REGION */}
+                                                <select
+                                                    name="region"
+                                                    onChange={handleRegionChange}
+                                                    value={formData.region}
+                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500"
+                                                    required
+                                                >
+                                                    <option value="">Select Region</option>
+                                                    {regions.map((reg) => (
+                                                        <option key={reg} value={reg}>{reg}</option>
+                                                    ))}
+                                                </select>
+
+                                                {/* PROVINCE */}
+                                                <select
+                                                    name="province"
+                                                    onChange={handleProvinceChange}
+                                                    value={formData.province}
+                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                                                    disabled={!formData.region}
+                                                    required
+                                                >
+                                                    <option value="">Select Province</option>
+                                                    {provinceOptions.map((prov) => (
+                                                        <option key={prov} value={prov}>{prov}</option>
+                                                    ))}
+                                                </select>
+
+                                                {/* MUNICIPALITY */}
+                                                <select
+                                                    name="city"
+                                                    onChange={handleCityChange}
+                                                    value={formData.city}
+                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                                                    disabled={!formData.province}
+                                                    required
+                                                >
+                                                    <option value="">Select Municipality/City</option>
+                                                    {cityOptions.map((city) => (
+                                                        <option key={city} value={city}>{city}</option>
+                                                    ))}
+                                                </select>
+
+                                                <input
+                                                    name="position"
+                                                    value={formData.position}
+                                                    placeholder="Position / Designation"
+                                                    onChange={handleChange}
+                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                                                    required
+                                                />
+                                            </div>
+
+                                            {/* CONTACT INFO */}
+                                            <div className="space-y-3 pt-3 border-t border-orange-200/50">
+                                                <label className="text-xs font-bold text-orange-700 uppercase">Contact Information</label>
+
+                                                {/* MOBILE */}
+                                                <div>
+                                                    <input
+                                                        name="contactNumber"
+                                                        inputMode="numeric"
+                                                        value={formData.contactNumber}
+                                                        onFocus={() => {
+                                                            if (!formData.contactNumber) setFormData(prev => ({ ...prev, contactNumber: '09' }));
+                                                        }}
+                                                        onChange={(e) => {
+                                                            let val = e.target.value.replace(/\D/g, '');
+                                                            if (!val.startsWith('09')) {
+                                                                if (val.startsWith('9')) val = '0' + val;
+                                                                else if (val.length < 2) val = '09';
+                                                                else val = '09' + val.substring(2);
+                                                            }
+                                                            val = val.slice(0, 11);
+                                                            setFormData(prev => ({ ...prev, contactNumber: val }));
+                                                        }}
+                                                        placeholder="Mobile No. (09xx xxx xxxx)"
+                                                        className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                                                        maxLength={11}
+                                                        required
+                                                    />
+                                                    <p className="text-[10px] text-orange-600 mt-1 ml-1">Must be 11 digits.</p>
+                                                </div>
+
+                                                {/* ALT EMAIL */}
+                                                <input
+                                                    name="altEmail"
+                                                    type="email"
+                                                    value={formData.altEmail}
+                                                    onChange={handleChange}
+                                                    placeholder="Alternative Email Address (Optional)"
+                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-orange-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+
+
                                 </div>
                             )}
 

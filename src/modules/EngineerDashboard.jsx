@@ -176,7 +176,7 @@ const StatsChart = ({ projects }) => {
 // --- MAIN DASHBOARD COMPONENT ---
 
 const EngineerDashboard = () => {
-  const [userName, setUserName] = useState("Engineer");
+  const [userName, setUserName] = useState("Division Engineer");
   const [userRole, setUserRole] = useState("");
   const [projects, setProjects] = useState([]);
   const [activities, setActivities] = useState([]);

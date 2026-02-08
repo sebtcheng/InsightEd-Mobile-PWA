@@ -52,6 +52,58 @@ const SchoolHeadDashboard = () => {
     const [showBanner, setShowBanner] = useState(true);
     const [showDeadlineAlert, setShowDeadlineAlert] = useState(false);
 
+    // --- VALIDATION MODAL STATE ---
+    const [showValidationModal, setShowValidationModal] = useState(false);
+    const [validationTimer, setValidationTimer] = useState(30);
+    const [canValidate, setCanValidate] = useState(false);
+
+    useEffect(() => {
+        let timer;
+        if (showValidationModal && validationTimer > 0) {
+            timer = setInterval(() => {
+                setValidationTimer((prev) => prev - 1);
+            }, 1000);
+        } else if (validationTimer === 0) {
+            setCanValidate(true);
+        }
+        return () => clearInterval(timer);
+    }, [showValidationModal, validationTimer]);
+
+    const handleOpenValidation = () => {
+        setShowValidationModal(true);
+        setValidationTimer(30); // Reset timer
+        setCanValidate(false);
+    };
+
+    const handleConfirmValidation = async () => {
+        if (!auth.currentUser || !schoolProfile) return;
+
+        try {
+            const response = await fetch('/api/school/validate-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    schoolId: schoolProfile.school_id,
+                    uid: auth.currentUser.uid
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                setShowValidationModal(false);
+                // Optimistically update UI
+                setSchoolProfile(prev => ({ ...prev, school_head_validation: true }));
+                // Reuse notification logic or simple alert
+                alert("Data validated successfully. Thank you for your affirmation.");
+            } else {
+                alert("Validation failed: " + data.message);
+            }
+        } catch (error) {
+            console.error("Validation Error:", error);
+            alert("An error occurred during validation.");
+        }
+    };
+
     // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
     const SEARCHABLE_ITEMS = [
         // IDENTITY
@@ -97,54 +149,34 @@ const SchoolHeadDashboard = () => {
     useEffect(() => {
         if (!schoolProfile) return;
 
-        const completedList = [];
-
-        // Helper to check if any field with prefix has value > 0
-        const hasData = (prefix, type = 'number') => {
-            return Object.keys(schoolProfile).some(key => {
-                if (!key.startsWith(prefix)) return false;
-                const val = schoolProfile[key];
-                if (type === 'number') return val > 0;
-                return val && val !== '' && val !== 'null';
-            });
-        };
-
-        if (schoolProfile.school_id) completedList.push("School Profile"); // 1. Profile
-        if (schoolProfile.head_last_name && schoolProfile.head_last_name.trim() !== '') completedList.push("School Head Info"); // 2. Head Info
-        if (schoolProfile.total_enrollment > 0) completedList.push("Enrollment"); // 3. Enrollment
-
-        // 4. Classes
-        const totalClasses = (schoolProfile.classes_kinder || 0) + (schoolProfile.classes_grade_1 || 0) + (schoolProfile.classes_grade_6 || 0) + (schoolProfile.classes_grade_10 || 0) + (schoolProfile.classes_grade_12 || 0);
-        if (totalClasses > 0) completedList.push("Organized Classes");
-
-        // 5. Learner Stats
-        if (hasData('stat_', 'number')) completedList.push("Learner Statistics");
-
-        // 6. Shifting
-        const hasShift = (schoolProfile.shift_kinder || schoolProfile.shift_g1) || (schoolProfile.adm_mdl || schoolProfile.adm_odl);
-        if (hasShift) completedList.push("Shifting & Modality");
-
-        // 7. Teaching Personnel
-        const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
-        if (totalTeachers > 0) completedList.push("Teaching Personnel");
-
-        // 8. Specialization
-        if (hasData('spec_', 'number') || (schoolProfile.spec_general && schoolProfile.spec_general > 0)) completedList.push("Specialization");
-
-        // 9. Resources
-        const hasResources = hasData('res_', 'number') || (schoolProfile.res_water_source && schoolProfile.res_water_source !== '');
-        if (hasResources) completedList.push("School Resources");
-
-        // 10. Physical Facilities
-        if (hasData('build_', 'number') || hasData('pf_', 'number')) completedList.push("Physical Facilities");
+        // Use values directly from DB (calculated by backend)
+        const dbCompleted = schoolProfile.forms_completed_count || 0;
+        const dbTotal = 10; // Fixed total
 
         setStats(prev => ({
             ...prev,
-            completedForms: completedList.length,
-            totalForms: 10,
+            completedForms: dbCompleted,
+            totalForms: dbTotal,
             enrollment: schoolProfile.total_enrollment || 0
         }));
+
+        // construct completedItems list based on f1-f10 flags for UI highligthing if needed
+        // (Optional: You can keep the list logic if you use it for highlighting specific buttons, 
+        //  but for the progress bar, we MUST use the DB value)
+        const completedList = [];
+        if (schoolProfile.f1_profile) completedList.push("School Profile");
+        if (schoolProfile.f2_head) completedList.push("School Head Info");
+        if (schoolProfile.f3_enrollment) completedList.push("Enrollment");
+        if (schoolProfile.f4_classes) completedList.push("Organized Classes");
+        if (schoolProfile.f5_teachers) completedList.push("Teaching Personnel");
+        if (schoolProfile.f6_specialization) completedList.push("Specialization");
+        if (schoolProfile.f7_resources) completedList.push("School Resources");
+        if (schoolProfile.f8_facilities) completedList.push("Physical Facilities");
+        if (schoolProfile.f9_shifting) completedList.push("Shifting & Modality");
+        if (schoolProfile.f10_stats) completedList.push("Learner Statistics");
+
         setCompletedItems(completedList);
+
     }, [schoolProfile]);
 
     const [searchParams] = useSearchParams(); // Get query params
@@ -304,7 +336,8 @@ const SchoolHeadDashboard = () => {
     }, [impersonatedUid]); // Re-run if query param changes
 
     const { completedForms, totalForms } = stats;
-    const progress = totalForms > 0 ? Math.round((completedForms / totalForms) * 100) : 0;
+    // Prefer DB percentage if available to ensure consistency
+    const progress = schoolProfile?.completion_percentage ?? (totalForms > 0 ? Math.round((completedForms / totalForms) * 100) : 0);
 
     return (
         <>
@@ -412,6 +445,38 @@ const SchoolHeadDashboard = () => {
 
                     {/* --- DASHBOARD CONTENT --- */}
                     <div className="px-6 -mt-12 relative z-10 space-y-8">
+
+                        {/* --- DATA VALIDATION ALERT (FRAUD DETECTION) --- */}
+                        {/* Show if Health is Critical, BUT hide if School Head has already manually validated it. */}
+                        {(schoolProfile?.data_health_description === 'Critical' && !schoolProfile?.school_head_validation) && (
+                            <div className="relative w-full p-4 rounded-2xl border flex items-start gap-3 shadow-lg bg-red-100 border-red-200 text-red-800 animate-in fade-in slide-in-from-top-4 mb-4">
+                                <div className="p-2 bg-white/50 rounded-full shrink-0">
+                                    <FiAlertTriangle className="text-red-600 animate-pulse" size={20} />
+                                </div>
+                                <div className="flex-1">
+                                    <h4 className="font-bold text-sm flex items-center gap-2">
+                                        Data Validation Required
+                                        <span className="px-2 py-0.5 rounded-full bg-red-200 text-red-800 text-[10px] font-extrabold uppercase tracking-wider">
+                                            Action Needed
+                                        </span>
+                                    </h4>
+                                    <p className="text-xs opacity-90 leading-relaxed mt-1 mb-2">
+                                        Our system detected potential inconsistencies in your submitted data. Please review and verify the following forms:
+                                    </p>
+                                    {schoolProfile.forms_to_recheck && (
+                                        <div className="bg-white/60 rounded-lg p-2 text-xs font-mono font-semibold text-red-900 border border-red-200/50 mb-2">
+                                            {schoolProfile.forms_to_recheck}
+                                        </div>
+                                    )}
+                                    <button
+                                        onClick={handleOpenValidation}
+                                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-1"
+                                    >
+                                        <FiCheckSquare /> Validate Data
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* --- DEADLINE BANNER (THE WAGAYWAY) --- */}
                         {deadlineDate && showBanner && (() => {
@@ -628,7 +693,6 @@ const SchoolHeadDashboard = () => {
                 </div>
             </PageTransition >
 
-            {/* --- DEADLINE POPUP MODAL --- */}
             {
                 showDeadlineAlert && deadlineDate && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
@@ -660,6 +724,52 @@ const SchoolHeadDashboard = () => {
                     </div>
                 )
             }
+
+            {/* --- DATA VALIDATION MODAL --- */}
+            {showValidationModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-6 relative overflow-hidden border border-red-200 dark:border-red-900/40">
+                        {/* Header */}
+                        <div className="text-center">
+                            <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto text-red-600 mb-4 shadow-sm">
+                                <FiCheckSquare size={32} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+                                Affirm Data Accuracy
+                            </h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Please read the following statement carefully.
+                            </p>
+                        </div>
+
+                        {/* Statement */}
+                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm leading-relaxed font-medium text-justify">
+                            "I affirm that despite the data inconsistencies detected by the system, the data submitted are <strong className="text-slate-900 dark:text-white">TRUE</strong> and <strong className="text-slate-900 dark:text-white">ACCURATE</strong>. I accept full responsibility for the integrity of this report."
+                        </div>
+
+                        {/* Actions */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={handleConfirmValidation}
+                                disabled={!canValidate}
+                                className={`w-full py-3.5 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2
+                                    ${canValidate
+                                        ? 'bg-red-600 hover:bg-red-700 text-white hover:shadow-red-600/30 active:scale-[0.98]'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
+                            >
+                                {canValidate ? "I Affirm & Validate" : `Please wait ${validationTimer}s...`}
+                            </button>
+
+                            <button
+                                onClick={() => setShowValidationModal(false)}
+                                className="w-full py-3 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-semibold rounded-xl transition-colors"
+                            >
+                                Go Back / Review Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <BottomNav userRole="School Head" />
 

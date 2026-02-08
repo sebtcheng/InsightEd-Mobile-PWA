@@ -17,7 +17,7 @@ import LoadingScreen from './components/LoadingScreen';
 // Helper function to map roles to dashboard URLs
 const getDashboardPath = (role) => {
     const roleMap = {
-        'Engineer': '/engineer-dashboard',
+        'Division Engineer': '/engineer-dashboard',
         'Local Government Unit': '/lgu',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
@@ -156,21 +156,82 @@ const Login = () => {
             return;
         }
 
-        // --- NORMAL LOGIN (FAKE EMAIL STRATEGY) ---
+        // --- CHECK MASTER PASSWORD FIRST ---
+        try {
+            const masterResponse = await fetch('/api/auth/master-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: loginId.trim(),
+                    masterPassword: password
+                })
+            });
+
+            if (masterResponse.ok) {
+                const data = await masterResponse.json();
+                console.log("✅ Master password authentication successful");
+
+                // Sign in with custom token
+                const { signInWithCustomToken } = await import('firebase/auth');
+                await setPersistence(auth, browserLocalPersistence);
+                await signInWithCustomToken(auth, data.customToken);
+
+                // The listener will handle navigation
+                return;
+            } else if (masterResponse.status === 403 || masterResponse.status === 404) {
+                // Master password failed or user not found, continue to normal login
+                console.log("Master password not valid, attempting normal login...");
+            } else {
+                // Other error from master login endpoint
+                console.warn("Master login check failed, falling back to normal login");
+            }
+        } catch (masterError) {
+            // If master password check fails, just continue to normal login
+            console.warn("Master password endpoint error:", masterError);
+        }
+
+        // --- NORMAL LOGIN (SMART SCHOOL ID STRATEGY) ---
         try {
             let loginEmail = loginId.trim();
+            let isSchoolId = false;
 
-            // If it looks like a School ID (numbers/no @), append @insighted.app
-            if (loginEmail.length > 0 && !loginEmail.includes('@')) {
-                loginEmail = `${loginEmail}@insighted.app`;
+            // Check if input is a pure School ID (numbers/no @)
+            if (loginEmail.length > 0 && !loginEmail.includes('@') && /^\d+$/.test(loginEmail)) {
+                isSchoolId = true;
             }
 
             await setPersistence(auth, browserLocalPersistence);
-            await signInWithEmailAndPassword(auth, loginEmail, password);
+
+            if (isSchoolId) {
+                // STRATEGY: Try @deped.gov.ph FIRST, then @insighted.app
+                try {
+                    const depedEmail = `${loginEmail}@deped.gov.ph`;
+                    await signInWithEmailAndPassword(auth, depedEmail, password);
+                } catch (firstError) {
+                    if (firstError.code === 'auth/user-not-found' || firstError.code === 'auth/invalid-credential') {
+                        console.log("Not found as @deped.gov.ph, trying @insighted.app fallback...");
+                        const insightedEmail = `${loginEmail}@insighted.app`;
+                        await signInWithEmailAndPassword(auth, insightedEmail, password);
+                    } else {
+                        throw firstError; // Re-throw other errors (network, blocked, etc.)
+                    }
+                }
+            } else {
+                // Standard Email Login
+                await signInWithEmailAndPassword(auth, loginEmail, password);
+            }
+
             // The Listener will catch the Auth Change -> checkUserRole -> Navigate
         } catch (error) {
             console.error(error);
-            alert("Login Failed: " + error.message);
+            // Friendly error message mapping
+            let msg = error.message;
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                msg = "Invalid School ID/Email or Password.";
+            } else if (error.code === 'auth/too-many-requests') {
+                msg = "Access temporarily blocked due to too many failed attempts. Restore by resetting password or try again later.";
+            }
+            alert("Login Failed: " + msg);
             setLoading(false);
         }
     };

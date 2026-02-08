@@ -27,12 +27,12 @@ class GlobalErrorBoundary extends React.Component {
                             {this.state.error && this.state.error.toString()}
                         </div>
 
-                        <button
-                            onClick={() => window.location.href = '/'}
-                            className="w-full py-3 bg-[#004A99] text-white font-bold rounded-xl hover:bg-blue-800 transition"
+                        <a
+                            href="/"
+                            className="w-full inline-block text-center bg-[#004A99] text-white font-bold py-3 px-6 rounded-xl hover:bg-[#003d80] transition-colors"
                         >
                             Return to Login
-                        </button>
+                        </a>
                     </div>
                 </div>
             );

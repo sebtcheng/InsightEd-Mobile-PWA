@@ -993,7 +993,7 @@ const MonitoringDashboard = () => {
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
                                 <div className="grid grid-cols-2 gap-4">
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
-                                        <div className={`p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl ${(activeTab === 'accomplishment' || activeTab === 'all' || activeTab === 'home') ? 'col-span-2' : ''}`}>
+                                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl col-span-1">
                                             {(() => {
                                                 // Use Memoized Jurisdiction Total
                                                 const displayTotal = jurisdictionTotal;
@@ -1016,6 +1016,32 @@ const MonitoringDashboard = () => {
                                                             </p>
                                                         </div>
                                                         {(activeTab === 'accomplishment' || activeTab === 'all' || activeTab === 'home') && <TbTrophy size={40} className="text-blue-200" />}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+
+                                    {/* NEW: System Validated % (Next to Accomplishment) */}
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
+                                        <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-2xl col-span-1">
+                                            {(() => {
+                                                const displayTotal = jurisdictionTotal;
+                                                const validatedCount = parseInt(stats?.validated_schools_count || 0);
+                                                const percentage = displayTotal > 0 ? ((validatedCount / displayTotal) * 100).toFixed(1) : 0;
+
+                                                return (
+                                                    <div className="flex items-center justify-between h-full">
+                                                        <div>
+                                                            <span className="text-3xl font-black text-purple-600 dark:text-purple-400">
+                                                                {percentage}%
+                                                            </span>
+                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
+                                                                System Validated <br />
+                                                                <span className="text-purple-600 dark:text-purple-300">({validatedCount} / {displayTotal})</span>
+                                                            </p>
+                                                        </div>
+                                                        <FiCheckCircle size={40} className="text-purple-200" />
                                                     </div>
                                                 );
                                             })()}
@@ -1068,8 +1094,8 @@ const MonitoringDashboard = () => {
                                                     {regionDivisions.map((divName, idx) => {
                                                         // 3. Get Completed Count from Backend Stats
                                                         const startStat = divisionStats.find(d => normalizeLocationName(d.division) === normalizeLocationName(divName));
-                                                        const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0; // Use API 'completed_schools' (newly added in backend logic if using monitoring/division-stats) 
-                                                        // Note: monitoring/division-stats uses completion_percentage=100 so it returns 'completed_schools' column correctly.
+                                                        const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+                                                        const validatedCount = startStat ? parseInt(startStat.validated_schools || 0) : 0;
 
                                                         // 2. Calculate Total Schools
                                                         // Use API Total if available and higher than CSV (to include new schools)
@@ -1086,6 +1112,15 @@ const MonitoringDashboard = () => {
                                                         // Clamp to 100%
                                                         const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
                                                         const percentage = Math.min(Math.round(rawPercentage), 100);
+
+                                                        // Validation Percentages for Stacked Bar
+                                                        const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;
+
+                                                        // Fix: "For Validation" should ONLY be Critical schools.
+                                                        // Previous logic (completed - validated) included NULLs.
+                                                        const criticalCount = parseInt(startStat?.critical_schools || 0);
+                                                        const forValidationCount = criticalCount;
+                                                        const forValidationPct = totalSchools > 0 ? (forValidationCount / totalSchools) * 100 : 0;
 
                                                         // Define colors for progress bars (cycling)
                                                         const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500'];
@@ -1104,15 +1139,25 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{divName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} out of {totalSchools} schools completed all forms
+                                                                            {completedCount} / {totalSchools} Completed • <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
                                                                         </p>
                                                                     </div>
-                                                                    <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                                    <div className="text-right">
+                                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                                        <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                {/* Stacked Progress Bar */}
+                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
-                                                                        style={{ width: `${percentage}%` }}
+                                                                        style={{ width: `${validatedPct}%` }}
+                                                                        title={`System Validated: ${validatedCount}`}
+                                                                    ></div>
+                                                                    <div
+                                                                        className={`h-full bg-rose-400/80 transition-all duration-1000`}
+                                                                        style={{ width: `${forValidationPct}%` }}
+                                                                        title={`Critical Issues: ${forValidationCount}`}
                                                                     ></div>
                                                                 </div>
                                                             </div>
@@ -1151,16 +1196,14 @@ const MonitoringDashboard = () => {
                                                         s.facilities_status
                                                     ];
 
-                                                    // REFACTOR: Use backend 'completion_percentage' if available to match Leaderboard logic
-                                                    // Otherwise fallback to calculating from flags (legacy/csv merged checks)
+                                                    // REFACTOR: Use backend 'completion_percentage' directly as requested by user.
+                                                    // This ensures a 1:1 match with the DB state.
                                                     let percentage = 0;
                                                     if (s.completion_percentage !== undefined && s.completion_percentage !== null) {
                                                         percentage = parseInt(s.completion_percentage);
-                                                    } else {
-                                                        const completedCount = checks.filter(Boolean).length;
-                                                        const totalChecks = 10;
-                                                        percentage = Math.round((completedCount / totalChecks) * 100);
                                                     }
+                                                    // Fallback REMOVED to strictly follow "project into the progress bar the completion_percentage"
+                                                    // If DB is 0 or null (handled by API as 0), it shows 0.
 
                                                     // Identify missing for tooltip/subtitle if needed
                                                     const missing = [];
@@ -1283,6 +1326,21 @@ const MonitoringDashboard = () => {
                                                                         <div className="flex items-center gap-2 mb-2">
                                                                             <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors truncate">{s.school_name}</h4>
                                                                             {s.percentage === 100 && <FiCheckCircle className="text-emerald-500 shrink-0" size={14} />}
+
+                                                                            {/* VALIDATION BADGES (Based on Data Health) */}
+                                                                            {/* Validated if NOT Critical (Excellent, Good, Fair, OR NULL/Undefined) - essentially anything NOT Critical */}
+                                                                            {s.data_health_description !== 'Critical' && (
+                                                                                <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1">
+                                                                                    <FiCheckCircle size={10} /> Validated
+                                                                                </span>
+                                                                            )}
+                                                                            {/* Only Critical is "For Validation" */}
+                                                                            {s.data_health_description === 'Critical' && (
+                                                                                <span className="text-[9px] bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1 animate-pulse">
+                                                                                    <FiAlertCircle size={10} /> For Validation
+                                                                                </span>
+                                                                            )}
+
                                                                             {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0">No Data</span>}
                                                                         </div>
 
@@ -1402,6 +1460,7 @@ const MonitoringDashboard = () => {
                                                         });
 
                                                         const completedCount = startStat ? parseInt(startStat.completed_schools || 0) : 0;
+                                                        const validatedCount = startStat ? parseInt(startStat.validated_schools || 0) : 0;
                                                         const apiTotal = startStat ? parseInt(startStat.total_schools || 0) : 0;
 
                                                         // Fix >100% Bug: Ensure total includes API count if it's higher than CSV
@@ -1411,6 +1470,11 @@ const MonitoringDashboard = () => {
                                                         // Clamp to 100% to prevent edge cases
                                                         const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
                                                         const percentage = Math.min(Math.round(rawPercentage), 100);
+
+                                                        // Validation Percentages for Stacked Bar
+                                                        const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;
+                                                        const forValidationCount = Math.max(0, completedCount - validatedCount);
+                                                        const forValidationPct = totalSchools > 0 ? (forValidationCount / totalSchools) * 100 : 0;
 
                                                         // Colors
                                                         const colors = ['bg-orange-500', 'bg-cyan-500', 'bg-lime-500', 'bg-fuchsia-500', 'bg-indigo-500'];
@@ -1426,15 +1490,25 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{distName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} out of {totalSchools} schools completed all forms
+                                                                            {completedCount} / {totalSchools} Completed • <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
                                                                         </p>
                                                                     </div>
-                                                                    <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                                    <div className="text-right">
+                                                                        <span className="text-lg font-black text-slate-700 dark:text-slate-200">{percentage}%</span>
+                                                                        <p className="text-[9px] font-bold text-slate-400">({Math.round(validatedPct)}% Validated)</p>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                                {/* Stacked Progress Bar */}
+                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
-                                                                        style={{ width: `${percentage}%` }}
+                                                                        style={{ width: `${validatedPct}%` }}
+                                                                        title={`System Validated: ${validatedCount}`}
+                                                                    ></div>
+                                                                    <div
+                                                                        className={`h-full bg-slate-400 transition-all duration-1000`}
+                                                                        style={{ width: `${forValidationPct}%` }}
+                                                                        title={`For Validation: ${forValidationCount}`}
                                                                     ></div>
                                                                 </div>
                                                             </div>
@@ -1615,64 +1689,66 @@ const MonitoringDashboard = () => {
                 <BottomNav userRole={userData?.role} />
             </div>
             {/* PROJECT LIST MODAL */}
-            {projectListModal.isOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1100] p-4">
-                    <div className="bg-white dark:bg-slate-800 w-full max-w-2xl max-h-[80vh] flex flex-col rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                            <div>
-                                <h3 className="text-xl font-black text-slate-800 dark:text-white">{projectListModal.title}</h3>
-                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
-                                    {projectListModal.projects.length} Projects Found
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setProjectListModal(prev => ({ ...prev, isOpen: false }))}
-                                className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors"
-                            >
-                                <FiX />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                            {projectListModal.isLoading ? (
-                                <div className="flex justify-center py-10">
-                                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            {
+                projectListModal.isOpen && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1100] p-4">
+                        <div className="bg-white dark:bg-slate-800 w-full max-w-2xl max-h-[80vh] flex flex-col rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200">
+                            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 dark:text-white">{projectListModal.title}</h3>
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                                        {projectListModal.projects.length} Projects Found
+                                    </p>
                                 </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {projectListModal.projects.map((p) => (
-                                        <div key={p.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
-                                            <div>
-                                                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{p.schoolName}</h4>
-                                                <p className="text-xs text-slate-500 italic">{p.projectName}</p>
-                                                {p.projectAllocation && (
-                                                    <p className="text-[10px] font-mono text-slate-400 mt-1">
-                                                        Alloc: ₱{Number(p.projectAllocation).toLocaleString()}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <div className="text-right">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase mb-1 ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' :
-                                                    p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
-                                                        'bg-blue-100 text-blue-600'
-                                                    }`}>
-                                                    {p.status}
-                                                </span>
-                                                <div className="text-xs font-black text-slate-700 dark:text-slate-300">
-                                                    {p.accomplishmentPercentage}%
+                                <button
+                                    onClick={() => setProjectListModal(prev => ({ ...prev, isOpen: false }))}
+                                    className="w-10 h-10 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-colors"
+                                >
+                                    <FiX />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                                {projectListModal.isLoading ? (
+                                    <div className="flex justify-center py-10">
+                                        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {projectListModal.projects.map((p) => (
+                                            <div key={p.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{p.schoolName}</h4>
+                                                    <p className="text-xs text-slate-500 italic">{p.projectName}</p>
+                                                    {p.projectAllocation && (
+                                                        <p className="text-[10px] font-mono text-slate-400 mt-1">
+                                                            Alloc: ₱{Number(p.projectAllocation).toLocaleString()}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase mb-1 ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-600' :
+                                                        p.status === 'Delayed' ? 'bg-rose-100 text-rose-600' :
+                                                            'bg-blue-100 text-blue-600'
+                                                        }`}>
+                                                        {p.status}
+                                                    </span>
+                                                    <div className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                                        {p.accomplishmentPercentage}%
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                    {projectListModal.projects.length === 0 && (
-                                        <p className="text-center text-slate-400 italic py-10">No projects found for this category.</p>
-                                    )}
-                                </div>
-                            )}
+                                        ))}
+                                        {projectListModal.projects.length === 0 && (
+                                            <p className="text-center text-slate-400 italic py-10">No projects found for this category.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </PageTransition>
+                )
+            }
+        </PageTransition >
     );
 };
 

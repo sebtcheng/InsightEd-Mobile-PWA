@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'; // Added addDoc, collection, serverTimestamp
 import BottomNav from './BottomNav';
 
@@ -17,22 +18,22 @@ const FAQ_DATA = [
     {
         question: "How do I sync my data when back online?",
         answer: "The app automatically syncs when it detects an internet connection. If 'Pending Sync' persists, pull down on your dashboard to force a refresh.",
-        roles: ['School Head', 'Engineer', 'Admin']
+        roles: ['School Head', 'Division Engineer', 'Admin']
     },
     {
         question: "Why is the 'Submit' button disabled?",
         answer: "Ensure all required fields (marked with *) are filled. Also, check if your geolocation is enabled, as some forms require location tagging.",
-        roles: ['School Head', 'Engineer']
+        roles: ['School Head', 'Division Engineer']
     },
     {
         question: "How do I attach photos to a report?",
         answer: "Tap the 'Upload Photo' icon in the form. You can select from your gallery or take a new photo. Please use landscape mode for better visibility.",
-        roles: ['Engineer', 'School Head']
+        roles: ['Division Engineer', 'School Head']
     },
     {
         question: "Can I edit a report after submission?",
         answer: "Submitted reports enter a 'Processing' state. You cannot edit them directly. Please contact your Division Office Admin to request changes.",
-        roles: ['School Head', 'Engineer']
+        roles: ['School Head', 'Division Engineer']
     },
     {
         question: "Where can I see the status of my funding request?",
@@ -82,6 +83,14 @@ const UserProfile = () => {
     });
     const [feedbackComment, setFeedbackComment] = useState('');
 
+    // Password Change State
+    const [passwordData, setPasswordData] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [passwordError, setPasswordError] = useState('');
+
 
     // --- INITIAL FETCH ---
     useEffect(() => {
@@ -127,7 +136,7 @@ const UserProfile = () => {
     // --- HELPERS ---
     const getDashboardPath = (role) => {
         const roleMap = {
-            'Engineer': '/engineer-dashboard',
+            'Division Engineer': '/engineer-dashboard',
             'School Head': '/schoolhead-dashboard',
             'Human Resource': '/hr-dashboard',
             'Admin': '/admin-dashboard',
@@ -205,6 +214,51 @@ const UserProfile = () => {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handlePasswordUpdate = async () => {
+        setPasswordError('');
+        const { currentPassword, newPassword, confirmPassword } = passwordData;
+
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            setPasswordError("All password fields are required.");
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setPasswordError("New passwords do not match.");
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setPasswordError("Password must be at least 6 characters.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const user = auth.currentUser;
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+
+            // 1. Re-authenticate
+            await reauthenticateWithCredential(user, credential);
+
+            // 2. Update Password
+            await updatePassword(user, newPassword);
+
+            alert("Password updated successfully!");
+            setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+            setIsEditing(false);
+        } catch (error) {
+            console.error("Password Update Error:", error);
+            if (error.code === 'auth/wrong-password') {
+                setPasswordError("Incorrect current password.");
+            } else {
+                setPasswordError("Failed to update password: " + error.message);
+            }
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSubmitFeedback = async () => {
@@ -441,8 +495,77 @@ const UserProfile = () => {
                         disabled={!isEditing}
                     />
                 </div>
+
+
+                <div className="h-px bg-gray-100 dark:bg-slate-600 my-5"></div>
+
+                {/* PASSWORD SECTION */}
+                <h4 className="text-xs text-gray-400 uppercase font-bold mt-2.5 mb-2.5">Security</h4>
+
+                {passwordError && (
+                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">
+                        <TbAlertTriangle /> {passwordError}
+                    </div>
+                )}
+
+                <div className="mb-4">
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Current Password</label>
+                    <input
+                        type="password"
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
+                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
+                            }`}
+                        placeholder={isEditing ? "Enter current password" : "••••••••"}
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                        disabled={!isEditing}
+                    />
+                </div>
+
+                <div className="mb-4">
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">New Password</label>
+                    <input
+                        type="password"
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
+                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
+                            }`}
+                        placeholder={isEditing ? "Enter new password" : "••••••••"}
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                        disabled={!isEditing}
+                    />
+                </div>
+
+                <div className="mb-4">
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Confirm New Password</label>
+                    <input
+                        type="password"
+                        className={`w-full p-2.5 rounded-lg text-sm outline-none transition-all ${isEditing
+                            ? "border border-[#004A99] bg-white dark:bg-slate-800 dark:text-white dark:border-blue-400"
+                            : "border border-transparent bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300"
+                            }`}
+                        placeholder={isEditing ? "Confirm new password" : "••••••••"}
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                        disabled={!isEditing}
+                    />
+                </div>
+
+                {isEditing && (
+                    <div className="mt-4">
+                        <button
+                            onClick={handlePasswordUpdate}
+                            className="w-full py-2.5 bg-[#004A99] text-white rounded-xl font-bold hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20"
+                            disabled={loading}
+                        >
+                            {loading ? "Updating Credentials..." : "Update Password"}
+                        </button>
+                    </div>
+                )}
             </div>
-        </div>
+        </div >
     );
 
     // 2. ABOUT VIEW

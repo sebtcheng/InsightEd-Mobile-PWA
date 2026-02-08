@@ -194,7 +194,19 @@ const SchoolForms = () => {
                 const totalClasses = (schoolProfile.classes_kinder || 0) + (schoolProfile.classes_grade_1 || 0) + (schoolProfile.classes_grade_6 || 0) + (schoolProfile.classes_grade_10 || 0) + (schoolProfile.classes_grade_12 || 0);
                 return totalClasses > 0 ? 'completed' : 'pending';
             case 'teachers':
-                const totalTeachers = (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) + (schoolProfile.teach_g6 || 0) + (schoolProfile.teach_g10 || 0) + (schoolProfile.teach_g12 || 0);
+                const totalTeachers =
+                    (schoolProfile.teach_kinder || 0) + (schoolProfile.teach_g1 || 0) +
+                    (schoolProfile.teach_g2 || 0) + (schoolProfile.teach_g3 || 0) +
+                    (schoolProfile.teach_g4 || 0) + (schoolProfile.teach_g5 || 0) +
+                    (schoolProfile.teach_g6 || 0) +
+                    (schoolProfile.teach_g7 || 0) + (schoolProfile.teach_g8 || 0) +
+                    (schoolProfile.teach_g9 || 0) + (schoolProfile.teach_g10 || 0) +
+                    (schoolProfile.teach_g11 || 0) + (schoolProfile.teach_g12 || 0) +
+                    (schoolProfile.teach_multi_1_2 || 0) +
+                    (schoolProfile.teach_multi_3_4 || 0) +
+                    (schoolProfile.teach_multi_5_6 || 0) +
+                    (schoolProfile.teach_multi_3plus_count || 0);
+
                 return totalTeachers > 0 ? 'completed' : 'pending';
             case 'specialization':
                 const specFields = [

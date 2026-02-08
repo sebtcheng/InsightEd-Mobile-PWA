@@ -3,7 +3,8 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { auth, db } from '../firebase';
 import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX } from "react-icons/fi";
+import { FiSearch, FiChevronLeft, FiChevronRight, FiRefreshCw, FiGrid, FiList, FiActivity, FiBriefcase, FiUser, FiTrash2, FiSlash, FiCheckCircle, FiStar, FiMessageSquare, FiTool, FiKey, FiCopy, FiX, FiMapPin, FiCheck } from "react-icons/fi";
+import { TbSchool } from "react-icons/tb";
 
 
 // --- REUSABLE STAT COMPONENT ---
@@ -22,10 +23,13 @@ const StatCard = ({ label, value, icon, color }) => (
 const AdminDashboard = () => {
     // --- STATE ---
     const [userName, setUserName] = useState('Admin');
-    const [activeTab, setActiveTab] = useState('overview'); // overview, schools, projects, audit
+    const [activeTab, setActiveTab] = useState('overview'); // overview, schools, school-management, projects, audit
 
     // Data States
     const [schools, setSchools] = useState([]);
+    const [pendingSchools, setPendingSchools] = useState([]); // New state for pending schools
+    const [reviewedSchools, setReviewedSchools] = useState([]); // History of approvals/rejections
+    const [schoolManagementView, setSchoolManagementView] = useState('pending'); // 'pending' | 'history'
     const [projects, setProjects] = useState([]);
     const [users, setUsers] = useState([]);
     const [usersPage, setUsersPage] = useState(1);
@@ -53,12 +57,41 @@ const AdminDashboard = () => {
     const [togglingMaintenance, setTogglingMaintenance] = useState(false);
 
     // --- FETCH DATA ---
+    const fetchPendingSchools = async () => {
+        try {
+            const res = await fetch('/api/admin/pending-schools');
+            if (res.ok) {
+                const data = await res.json();
+                setPendingSchools(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch pending schools:", err);
+        }
+    };
+
+    const fetchReviewedSchools = async () => {
+        try {
+            // Fetch all reviewed schools (or just by this admin if preferred, currently fetching all)
+            // If we want only by this admin: ?reviewed_by=${user.uid}
+            // Let's fetch all for transparency, or use logic based on requirement.
+            // Requirement said "history of ... requests that have been approved or denied".
+            // Implementation plan said "Filter ... performed by the current admin (optional)". 
+            // Let's show ALL for now as Admins usually want to see overall activity.
+            const res = await fetch(`/api/admin/reviewed-schools`);
+            if (res.ok) {
+                const data = await res.json();
+                setReviewedSchools(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch reviewed schools:", err);
+        }
+    };
+
     const fetchAllData = async () => {
         setLoading(true);
         try {
-            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, maintenanceRes, usersRes, feedbackQuerySnapshot] = await Promise.all([
+            const [usersAuthRes, schoolsRes, projectsRes, auditRes, deadlineRes, maintenanceRes, feedbackQuerySnapshot] = await Promise.all([
                 // checking user role/name
-
                 (async () => {
                     const user = auth.currentUser;
                     if (user) {
@@ -72,9 +105,6 @@ const AdminDashboard = () => {
 
                 fetch('/api/settings/enrolment_deadline').then(r => r.json()),
                 fetch('/api/settings/maintenance_mode').then(r => r.json()), // Fetch Maintenance Status
-                fetch('/api/settings/maintenance_mode').then(r => r.json()), // Fetch Maintenance Status
-                // fetch('/api/admin/users').then(r => r.json()), // REMOVED: Fetch separately for pagination
-                // Fetch Feedback directly from Firestore for real-time accuracy
                 // Fetch Feedback directly from Firestore for real-time accuracy
                 // Added catch block to prevent entire dashboard failure if permissions are missing
                 getDocs(query(collection(db, "app_feedback"), orderBy("timestamp", "desc")))
@@ -87,6 +117,7 @@ const AdminDashboard = () => {
 
             // Handle Schools
             if (Array.isArray(schoolsRes)) setSchools(schoolsRes);
+            // Pending and Reviewed schools are fetched separately now
 
             // Handle Projects
             if (Array.isArray(projectsRes)) setProjects(projectsRes);
@@ -103,9 +134,6 @@ const AdminDashboard = () => {
             if (maintenanceRes) {
                 setMaintenanceMode(maintenanceRes.value === 'true');
             }
-
-            // Handle Users (Moved to separate effect)
-            // if (Array.isArray(usersRes)) setUsers(usersRes);
 
             // Handle Feedback
             const feedbackData = [];
@@ -147,7 +175,7 @@ const AdminDashboard = () => {
         }
     };
 
-    // Debounce Search & Fetch
+    // Debounce Search & Fetch for Users
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
             if (activeTab === 'accounts') {
@@ -156,6 +184,14 @@ const AdminDashboard = () => {
         }, 500);
         return () => clearTimeout(delayDebounceFn);
     }, [searchTerm, usersPage, activeTab]);
+
+    // Fetch pending/reviewed schools when school management tab is active
+    useEffect(() => {
+        if (activeTab === 'school-management') {
+            fetchPendingSchools();
+            fetchReviewedSchools();
+        }
+    }, [activeTab]);
 
 
     // --- DERIVED STATS ---
@@ -248,12 +284,13 @@ const AdminDashboard = () => {
             const adminUid = auth.currentUser ? auth.currentUser.uid : 'unknown';
             const res = await fetch(`/api/admin/users/${uid}/status`, {
                 method: 'POST',
+
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ disabled: !currentStatus, adminUid })
             });
             if (res.ok) {
                 alert(`✅ User ${currentStatus ? 'enabled' : 'disabled'} successfully!`);
-                fetchAllData();
+                fetchUsers(); // Refresh user list
             } else {
                 alert("❌ Action failed.");
             }
@@ -272,12 +309,70 @@ const AdminDashboard = () => {
             });
             if (res.ok) {
                 alert("✅ User deleted successfully!");
-                fetchAllData();
+                fetchUsers(); // Refresh user list
             } else {
                 alert("❌ Delete failed.");
             }
         } catch (err) {
             alert("❌ Error deleting user.");
+        }
+    };
+
+    const handleApproveSchool = async (pendingId) => {
+        if (!window.confirm("Are you sure you want to APPROVE this school?")) return;
+        try {
+            const user = auth.currentUser;
+            const res = await fetch(`/api/admin/approve-school/${pendingId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reviewed_by: user.uid,
+                    reviewed_by_name: userName
+                })
+            });
+
+            if (res.ok) {
+                alert("✅ School Approved!");
+            } else {
+                const data = await res.json();
+                alert("❌ Approval Failed: " + data.error);
+            }
+            // Re-fetch both lists to be safe
+            fetchPendingSchools();
+            fetchReviewedSchools();
+        } catch (err) {
+            console.error(err);
+            alert("❌ Error approving school.");
+        }
+    };
+
+    const handleRejectSchool = async (pendingId) => {
+        const reason = prompt("Please enter a reason for rejection:");
+        if (reason === null) return; // Cancelled
+
+        try {
+            const user = auth.currentUser;
+            const res = await fetch(`/api/admin/reject-school/${pendingId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reviewed_by: user.uid,
+                    reviewed_by_name: userName,
+                    rejection_reason: reason
+                })
+            });
+
+            if (res.ok) {
+                alert("🚫 School Rejected.");
+            } else {
+                const data = await res.json();
+                alert("❌ Rejection Failed: " + data.error);
+            }
+            fetchPendingSchools();
+            fetchReviewedSchools();
+        } catch (err) {
+            console.error(err);
+            alert("❌ Error rejecting school.");
         }
     };
 
@@ -523,6 +618,124 @@ const AdminDashboard = () => {
             </div>
         );
     };
+
+    const renderSchoolManagement = () => (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-black text-slate-800">School Management</h2>
+
+                {/* View Switcher */}
+                <div className="bg-slate-100 p-1 rounded-xl flex">
+                    <button
+                        onClick={() => setSchoolManagementView('pending')}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${schoolManagementView === 'pending'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        Pending ({pendingSchools.length})
+                    </button>
+                    <button
+                        onClick={() => setSchoolManagementView('history')}
+                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-all ${schoolManagementView === 'history'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        History
+                    </button>
+                </div>
+            </div>
+
+            {schoolManagementView === 'pending' ? (
+                // PENDING VIEW
+                pendingSchools.length === 0 ? (
+                    <div className="bg-white rounded-2xl p-12 text-center shadow-sm">
+                        <TbSchool className="w-16 h-16 mx-auto text-slate-300 mb-4" />
+                        <h3 className="text-xl font-bold text-slate-600">No pending submissions</h3>
+                        <p className="text-slate-400">New school requests will appear here.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                        {pendingSchools.map((school) => (
+                            <div key={school.pending_id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                                {/* Existing School Card Content ... */}
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <span className="bg-blue-100 text-blue-800 text-xs font-black px-2 py-1 rounded uppercase tracking-wider">
+                                                {school.school_id}
+                                            </span>
+                                            <h3 className="text-xl font-bold text-slate-800">{school.school_name}</h3>
+                                        </div>
+                                        <p className="text-sm text-slate-500 mb-4 flex items-center gap-2">
+                                            <FiMapPin /> {school.municipality}, {school.province}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                                            <span className="bg-slate-100 px-2 py-1 rounded">District: {school.district}</span>
+                                            <span className="bg-slate-100 px-2 py-1 rounded">Type: {school.curricular_offering}</span>
+                                            <span className="bg-slate-100 px-2 py-1 rounded">By: {school.submitted_by_name}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handleRejectSchool(school.pending_id)}
+                                            className="p-3 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors"
+                                            title="Reject"
+                                        >
+                                            <FiX size={20} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleApproveSchool(school.pending_id)}
+                                            className="p-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 transition-all"
+                                            title="Approve"
+                                        >
+                                            <FiCheck size={20} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )
+            ) : (
+                // HISTORY VIEW
+                <div className="space-y-4">
+                    {reviewedSchools.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400">
+                            <p>No history found.</p>
+                        </div>
+                    ) : (
+                        reviewedSchools.map((school) => (
+                            <div key={school.pending_id} className="bg-white rounded-xl p-4 border border-slate-100 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="font-bold text-slate-700">{school.school_name}</h4>
+                                        <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded ${school.status === 'approved'
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-rose-100 text-rose-700'
+                                            }`}>
+                                            {school.status}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-slate-500 mt-1 flex gap-4">
+                                        <span>ID: {school.school_id}</span>
+                                        <span>Reviewed by: {school.reviewed_by_name}</span>
+                                        <span>{new Date(school.reviewed_at).toLocaleDateString()}</span>
+                                    </div>
+                                    {school.status === 'rejected' && school.rejection_reason && (
+                                        <p className="text-xs text-rose-500 mt-1 italic">
+                                            Reason: {school.rejection_reason}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
 
     const renderAccountManagement = () => {
         // No local filtering anymore
@@ -833,6 +1046,15 @@ const AdminDashboard = () => {
                                 Schools
                             </button>
                             <button
+                                onClick={() => { setActiveTab('school-management'); setSearchTerm(''); }}
+                                className={`px-4 py-2 text-xs font-bold rounded-lg whitespace-nowrap transition-all ${activeTab === 'school-management' ? 'bg-[#004A99] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                School Management
+                                {pendingSchools.length > 0 && (
+                                    <span className="ml-2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{pendingSchools.length}</span>
+                                )}
+                            </button>
+                            <button
                                 onClick={() => { setActiveTab('projects'); setSearchTerm(''); }}
                                 className={`px-4 py-2 text-xs font-bold rounded-lg whitespace-nowrap transition-all ${activeTab === 'projects' ? 'bg-[#004A99] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'}`}
                             >
@@ -868,6 +1090,7 @@ const AdminDashboard = () => {
                                 <>
                                     {activeTab === 'overview' && renderOverview()}
                                     {activeTab === 'schools' && renderSchoolsList()}
+                                    {activeTab === 'school-management' && renderSchoolManagement()}
                                     {activeTab === 'projects' && renderProjectsList()}
                                     {activeTab === 'audit' && renderAuditTable()}
                                     {activeTab === 'feedback' && renderFeedbackView()}

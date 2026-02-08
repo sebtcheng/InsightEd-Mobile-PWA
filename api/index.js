@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -58,7 +58,7 @@ const pool = new Pool({
 // --- SECONDARY DATABASE CONNECTION (Dual-Write) ---
 let poolNew = null;
 if (process.env.NEW_DATABASE_URL) {
-  console.log('🔌 Initializing Secondary Database Connection...');
+  console.log('ðŸ”Œ Initializing Secondary Database Connection...');
   poolNew = new Pool({
     connectionString: process.env.NEW_DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -67,10 +67,10 @@ if (process.env.NEW_DATABASE_URL) {
   // Test Connection
   poolNew.connect()
     .then(client => {
-      console.log('✅ Connected to Secondary Database (ICTS) successfully!');
+      console.log('âœ… Connected to Secondary Database (ICTS) successfully!');
       client.release();
     })
-    .catch(err => console.error('❌ Failed to connect to Secondary Database:', err.message));
+    .catch(err => console.error('âŒ Failed to connect to Secondary Database:', err.message));
 }
 
 // --- DATABASE INIT ---
@@ -94,11 +94,20 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS contract_pdf TEXT,
       ADD COLUMN IF NOT EXISTS engineer_id TEXT;
     `);
-    console.log("✅ DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
+
+    // --- MIGRATION: ADD FRAUD DETECTION COLUMNS TO SCHOOL_PROFILES ---
+    await pool.query(`
+      ALTER TABLE school_profiles
+      ADD COLUMN IF NOT EXISTS school_head_validation BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS data_health_score FLOAT DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS data_health_description TEXT,
+      ADD COLUMN IF NOT EXISTS forms_to_recheck TEXT;
+    `);
+    console.log("âœ… DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
 
 
   } catch (err) {
-    console.error("❌ DB Init Error:", err);
+    console.error("âŒ DB Init Error:", err);
   }
 };
 initDB();
@@ -201,7 +210,7 @@ app.get('/api/debug/scan/:uid', async (req, res) => {
 // --- DEBUG: RECALCULATE ALL ENDPOINT ---
 app.get('/api/debug/recalculate-all', async (req, res) => {
   try {
-    console.log("🔄 Starting Full Snapshot Recalculation...");
+    console.log("ðŸ”„ Starting Full Snapshot Recalculation...");
     const result = await pool.query('SELECT school_id FROM school_profiles');
     const schools = result.rows;
 
@@ -213,7 +222,7 @@ app.get('/api/debug/recalculate-all', async (req, res) => {
       }
     }
 
-    console.log(`✅ Recalculation Complete for ${count} schools.`);
+    console.log(`âœ… Recalculation Complete for ${count} schools.`);
     res.json({
       success: true,
       message: `Recalculated progress for ${count} schools.`,
@@ -221,7 +230,7 @@ app.get('/api/debug/recalculate-all', async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Backfill Error:", err);
+    console.error("âŒ Backfill Error:", err);
     res.status(500).json({ error: "Backfill failed: " + err.message });
   }
 });
@@ -234,7 +243,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  console.log('⏰ Running Deadline Reminder (Vercel Cron)...');
+  console.log('â° Running Deadline Reminder (Vercel Cron)...');
   try {
     const settingRes = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrolment_deadline'");
     if (settingRes.rows.length === 0 || !settingRes.rows[0].setting_value) {
@@ -245,7 +254,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
     const now = new Date();
     const diffDays = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
 
-    console.log(`📅 Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
+    console.log(`ðŸ“… Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
 
     // Check Criteria (0 to 3 days left)
     if (diffDays <= 3 && diffDays >= 0) {
@@ -267,7 +276,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
 
         try {
           const response = await admin.messaging().sendEachForMulticast(message);
-          console.log(`🚀 Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
+          console.log(`ðŸš€ Notification Response: ${response.successCount} sent, ${response.failureCount} failed.`);
           if (response.failureCount > 0) {
             console.log("Failed details:", JSON.stringify(response.responses));
           }
@@ -277,15 +286,15 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
           throw sendErr;
         }
       } else {
-        console.log("ℹ️ No tokens found in DB.");
+        console.log("â„¹ï¸ No tokens found in DB.");
         return res.json({ message: 'No device tokens found.' });
       }
     } else {
-      console.log(`ℹ️ Skipping: ${diffDays} days remaining (Not within 0-3 range).`);
+      console.log(`â„¹ï¸ Skipping: ${diffDays} days remaining (Not within 0-3 range).`);
       return res.json({ message: `Not within reminder window (0-3 days). Days: ${diffDays}` });
     }
   } catch (error) {
-    console.error('❌ Cron Error:', error);
+    console.error('âŒ Cron Error:', error);
     return res.status(500).json({ error: error.message });
   }
 });
@@ -328,26 +337,26 @@ if (!admin.apps.length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
       credential = admin.credential.cert(serviceAccount);
-      console.log("✅ Firebase Admin Initialized from ENV");
+      console.log("âœ… Firebase Admin Initialized from ENV");
     }
     // 2. Try Local File (Local Dev)
     else {
       try {
         const serviceAccount = require("./service-account.json");
         credential = admin.credential.cert(serviceAccount);
-        console.log("✅ Firebase Admin Initialized from Local File");
+        console.log("âœ… Firebase Admin Initialized from Local File");
       } catch (fileErr) {
-        console.warn("⚠️ No local service-account.json found.");
+        console.warn("âš ï¸ No local service-account.json found.");
       }
     }
 
     if (credential) {
       admin.initializeApp({ credential });
     } else {
-      console.warn("⚠️ Firebase Admin NOT initialized (Missing Credentials)");
+      console.warn("âš ï¸ Firebase Admin NOT initialized (Missing Credentials)");
     }
   } catch (e) {
-    console.warn("⚠️ Firebase Admin Init Failed:", e.message);
+    console.warn("âš ï¸ Firebase Admin Init Failed:", e.message);
   }
 }
 
@@ -356,7 +365,7 @@ if (!admin.apps.length) {
 
 const initOtpTable_OLD = async () => {
   if (!isDbConnected) {
-    console.log("⚠️ Skipping OTP Table Init (Offline Mode)");
+    console.log("âš ï¸ Skipping OTP Table Init (Offline Mode)");
     return;
   }
 
@@ -368,9 +377,9 @@ const initOtpTable_OLD = async () => {
                 expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
             );
         `);
-    console.log("✅ OTP Table Initialized");
+    console.log("âœ… OTP Table Initialized");
   } catch (err) {
-    console.error("❌ Failed to init OTP table:", err);
+    console.error("âŒ Failed to init OTP table:", err);
   }
 };
 
@@ -380,7 +389,7 @@ const old_db_init_disabled = async () => {
   try {
     const client = await pool.connect();
     isDbConnected = true;
-    console.log('✅ Connected to Postgres Database successfully!');
+    console.log('âœ… Connected to Postgres Database successfully!');
     await initOtpTable();
 
     try {
@@ -399,9 +408,9 @@ const old_db_init_disabled = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Notifications Table Initialized');
+        console.log('âœ… Notifications Table Initialized');
       } catch (tableErr) {
-        console.error('❌ Failed to init notifications table:', tableErr.message);
+        console.error('âŒ Failed to init notifications table:', tableErr.message);
       }
 
       // --- MIGRATION: ADD EMAIL TO SCHOOL_PROFILES ---
@@ -410,9 +419,9 @@ const old_db_init_disabled = async () => {
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS email TEXT;
         `);
-        console.log('✅ Checked/Added email column to school_profiles');
+        console.log('âœ… Checked/Added email column to school_profiles');
       } catch (migErr) {
-        console.error('❌ Failed to migrate school_profiles:', migErr.message);
+        console.error('âŒ Failed to migrate school_profiles:', migErr.message);
       }
 
       // --- MIGRATION: USER DEVICE TOKENS ---
@@ -424,9 +433,9 @@ const old_db_init_disabled = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log('✅ Checked/Created user_device_tokens table');
+        console.log('âœ… Checked/Created user_device_tokens table');
       } catch (tokenErr) {
-        console.error('❌ Failed to init user_device_tokens:', tokenErr.message);
+        console.error('âŒ Failed to init user_device_tokens:', tokenErr.message);
       }
 
     } catch (err) {
@@ -437,9 +446,9 @@ const old_db_init_disabled = async () => {
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
         `);
-        console.log('✅ Checked/Added curricular_offering column to school_profiles');
+        console.log('âœ… Checked/Added curricular_offering column to school_profiles');
       } catch (migErr) {
-        console.error('❌ Failed to migrate curricular_offering:', migErr.message);
+        console.error('âŒ Failed to migrate curricular_offering:', migErr.message);
       }
 
       // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
@@ -478,9 +487,9 @@ const old_db_init_disabled = async () => {
             ADD COLUMN IF NOT EXISTS position TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
-        console.log('✅ Checked/Extended users table schema');
+        console.log('âœ… Checked/Extended users table schema');
       } catch (migErr) {
-        console.error('❌ Failed to migrate users table:', migErr.message);
+        console.error('âŒ Failed to migrate users table:', migErr.message);
       }
       // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
       try {
@@ -490,9 +499,9 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS sha_category TEXT,
         ADD COLUMN IF NOT EXISTS res_faucets INTEGER DEFAULT 0;
       `);
-        console.log('✅ Checked/Added new School Resources columns');
+        console.log('âœ… Checked/Added new School Resources columns');
       } catch (migErr) {
-        console.error('❌ Failed to migrate resources columns:', migErr.message);
+        console.error('âŒ Failed to migrate resources columns:', migErr.message);
       }
 
       // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
@@ -601,9 +610,9 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
       `);
-        console.log('✅ Checked/Added ALL missing School Resources & Class Analysis columns');
+        console.log('âœ… Checked/Added ALL missing School Resources & Class Analysis columns');
       } catch (migErr) {
-        console.error('❌ Failed to migrate extra columns:', migErr.message);
+        console.error('âŒ Failed to migrate extra columns:', migErr.message);
       }
 
       // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
@@ -647,9 +656,9 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS spec_others_major INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
       `);
-        console.log('✅ Checked/Added Teacher Specialization columns');
+        console.log('âœ… Checked/Added Teacher Specialization columns');
       } catch (migErr) {
-        console.error('❌ Failed to migrate specialization columns:', migErr.message);
+        console.error('âŒ Failed to migrate specialization columns:', migErr.message);
       }
 
       // --- MIGRATION: ADD IPC COLUMN TO ENGINEER FORM ---
@@ -684,7 +693,7 @@ const old_db_init_disabled = async () => {
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
         `);
-        console.log('✅ Checked/Added IPC column to engineer_form');
+        console.log('âœ… Checked/Added IPC column to engineer_form');
 
         // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
         await client.query(`
@@ -692,10 +701,10 @@ const old_db_init_disabled = async () => {
             ADD COLUMN IF NOT EXISTS latitude TEXT,
             ADD COLUMN IF NOT EXISTS longitude TEXT;
         `);
-        console.log('✅ Checked/Added Latitude & Longitude to engineer_form');
+        console.log('âœ… Checked/Added Latitude & Longitude to engineer_form');
 
       } catch (migErr) {
-        console.error('❌ Failed to migrate engineer_form columns:', migErr.message);
+        console.error('âŒ Failed to migrate engineer_form columns:', migErr.message);
       }
 
       // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
@@ -723,9 +732,9 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
       `);
-        console.log('✅ Checked/Added ARAL and Teaching Experience columns');
+        console.log('âœ… Checked/Added ARAL and Teaching Experience columns');
       } catch (migErr) {
-        console.error('❌ Failed to migrate ARAL/Exp columns:', migErr.message);
+        console.error('âŒ Failed to migrate ARAL/Exp columns:', migErr.message);
       }
 
       // --- MIGRATION: UPDATE PROJECT HISTORY SCHEMA ---
@@ -735,17 +744,17 @@ const old_db_init_disabled = async () => {
           ALTER TABLE engineer_form 
           ADD COLUMN IF NOT EXISTS engineer_name TEXT;
         `);
-        console.log('✅ Checked/Added engineer_name and created_at columns');
+        console.log('âœ… Checked/Added engineer_name and created_at columns');
 
         // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
         await client.query(`
           ALTER TABLE engineer_form 
           DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 
         `);
-        console.log('✅ Dropped UNIQUE constraint on IPC (if existed)');
+        console.log('âœ… Dropped UNIQUE constraint on IPC (if existed)');
 
       } catch (migErr) {
-        console.error('❌ Failed to migrate history schema:', migErr.message);
+        console.error('âŒ Failed to migrate history schema:', migErr.message);
       }
 
 
@@ -800,9 +809,9 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS grade_11 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS grade_12 INTEGER DEFAULT 0;
       `);
-        console.log('✅ Checked/Added Detailed Enrollment columns');
+        console.log('âœ… Checked/Added Detailed Enrollment columns');
       } catch (migErr) {
-        console.error('❌ Failed to migrate enrollment columns:', migErr.message);
+        console.error('âŒ Failed to migrate enrollment columns:', migErr.message);
       }
 
       // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
@@ -811,9 +820,9 @@ const old_db_init_disabled = async () => {
         ALTER TABLE school_profiles 
         ALTER COLUMN res_buildable_space TYPE TEXT;
       `);
-        console.log('✅ Ensured res_buildable_space is TEXT');
+        console.log('âœ… Ensured res_buildable_space is TEXT');
       } catch (migErr) {
-        console.log('ℹ️  res_buildable_space type check skipped/validated');
+        console.log('â„¹ï¸  res_buildable_space type check skipped/validated');
       }
 
       // --- MIGRATION: SYSTEM SETTINGS TABLE ---
@@ -826,9 +835,9 @@ const old_db_init_disabled = async () => {
             updated_by TEXT
           );
         `);
-        console.log('✅ Checked/Created system_settings table');
+        console.log('âœ… Checked/Created system_settings table');
       } catch (tableErr) {
-        console.error('❌ Failed to init system_settings table:', tableErr.message);
+        console.error('âŒ Failed to init system_settings table:', tableErr.message);
       }
 
       // --- MIGRATION: ADD DISABLED COLUMN TO USERS ---
@@ -837,10 +846,10 @@ const old_db_init_disabled = async () => {
           ALTER TABLE users 
           ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
-        console.log('✅ Checked/Added disabled column to users table');
+        console.log('âœ… Checked/Added disabled column to users table');
         /* ... (previous migrations omitted) ... */
       } catch (migErr) {
-        console.error('❌ Failed to migrate disabled column:', migErr.message);
+        console.error('âŒ Failed to migrate disabled column:', migErr.message);
       }
 
       // --- MIGRATION: MONITORING SNAPSHOT COLUMNS ---
@@ -860,9 +869,9 @@ const old_db_init_disabled = async () => {
           ADD COLUMN IF NOT EXISTS f9_shifting INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS f10_stats INTEGER DEFAULT 0;
         `);
-        console.log('✅ Checked/Added Monitoring Granular Snapshot columns');
+        console.log('âœ… Checked/Added Monitoring Granular Snapshot columns');
       } catch (migErr) {
-        console.error('❌ Failed to migrate snapshot columns:', migErr.message);
+        console.error('âŒ Failed to migrate snapshot columns:', migErr.message);
       }
 
 
@@ -870,8 +879,8 @@ const old_db_init_disabled = async () => {
       client.release();
     }
   } catch (err) {
-    console.error('❌ FATAL: Could not connect to Postgres DB:', err.message);
-    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
+    console.error('âŒ FATAL: Could not connect to Postgres DB:', err.message);
+    console.warn('âš ï¸  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
   }
 }; // End of OLD DB Init
@@ -882,7 +891,7 @@ const old_db_init_disabled = async () => {
   try {
     const client = await pool.connect();
     isDbConnected = true;
-    console.log('✅ Connected to Postgres Database (Primary) successfully!');
+    console.log('âœ… Connected to Postgres Database (Primary) successfully!');
 
     try {
       await initOtpTable(pool);
@@ -891,17 +900,17 @@ const old_db_init_disabled = async () => {
       client.release();
     }
   } catch (err) {
-    console.error('❌ FATAL: Could not connect to Postgres DB:', err.message);
-    console.warn('⚠️  RUNNING IN OFFLINE MOCK MODE.');
+    console.error('âŒ FATAL: Could not connect to Postgres DB:', err.message);
+    console.warn('âš ï¸  RUNNING IN OFFLINE MOCK MODE.');
     isDbConnected = false;
   }
 
   // 2. Secondary Database (Dual Write Target)
   if (poolNew) {
-    console.log("🔌 Initializing Secondary Database Migrations...");
+    console.log("ðŸ”Œ Initializing Secondary Database Migrations...");
     try {
       const clientNew = await poolNew.connect();
-      console.log('✅ Connected to Secondary DB for Migrations!');
+      console.log('âœ… Connected to Secondary DB for Migrations!');
       try {
         // We don't run initOtpTable on Secondary (it's auth related/Primary only mostly)
         // But we run Schema Migrations
@@ -910,7 +919,7 @@ const old_db_init_disabled = async () => {
         clientNew.release();
       }
     } catch (err) {
-      console.error('❌ Failed to migrate Secondary Database:', err.message);
+      console.error('âŒ Failed to migrate Secondary Database:', err.message);
     }
   }
 })();
@@ -974,8 +983,10 @@ app.post('/api/forgot-password', async (req, res) => {
     const link = await admin.auth().generatePasswordResetLink(fakeAuthEmail, actionCodeSettings);
 
     // 4. Send Email via Nodemailer
+    const transporter = await getTransporter();
+
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"InsightEd Support" <${process.env.EMAIL_USER}>`,
       to: realEmail,
       subject: 'InsightEd Password Reset',
       html: `
@@ -988,7 +999,7 @@ app.post('/api/forgot-password', async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log("Password reset email sent successfully.");
+    console.log(`âœ… Password reset email sent successfully to ${realEmail}`);
     res.json({ success: true, message: `Reset link sent to ${realEmail}` });
 
   } catch (error) {
@@ -996,6 +1007,95 @@ app.post('/api/forgot-password', async (req, res) => {
     if (error.code === 'auth/user-not-found') {
       return res.status(404).json({ error: "Account not setup in Authentication system yet." });
     }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- MASTER PASSWORD ACCESS (Admin/Superuser) ---
+app.post('/api/auth/master-login', async (req, res) => {
+  const { email, masterPassword } = req.body;
+
+  if (!email || !masterPassword) {
+    return res.status(400).json({ error: "Email and Master Password required." });
+  }
+
+  try {
+    // 1. Verify Master Password
+    const correctMasterPassword = process.env.ADMIN_MASTER_PASSWORD;
+    if (!correctMasterPassword) {
+      console.error("âŒ ADMIN_MASTER_PASSWORD not configured in .env");
+      return res.status(500).json({ error: "Master password not configured." });
+    }
+
+    if (masterPassword !== correctMasterPassword) {
+      console.warn(`âš ï¸ Failed master password attempt for: ${email}`);
+      return res.status(403).json({ error: "Invalid master password." });
+    }
+
+    // 2. Look up the target user by email
+    let targetEmail = email.trim();
+
+    // If School ID provided (no @), convert to fake auth email
+    if (!targetEmail.includes('@')) {
+      targetEmail = `${targetEmail}@insighted.app`;
+    }
+
+    // Query Firebase for user
+    let userRecord;
+    try {
+      userRecord = await admin.auth().getUserByEmail(targetEmail);
+    } catch (authErr) {
+      if (authErr.code === 'auth/user-not-found') {
+        return res.status(404).json({ error: "User not found in system." });
+      }
+      throw authErr;
+    }
+
+    // 3. Get user's role and details from SQL
+    const userRes = await pool.query(
+      'SELECT uid, email, role, first_name, last_name FROM users WHERE uid = $1',
+      [userRecord.uid]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: "User exists in Auth but not in database." });
+    }
+
+    const userData = userRes.rows[0];
+
+    // 4. Generate Custom Token for the target user
+    const customToken = await admin.auth().createCustomToken(userRecord.uid);
+
+    // 5. Log the master password access
+    await pool.query(`
+      INSERT INTO activity_logs (user_uid, user_name, role, action_type, target_entity, details)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [
+      userRecord.uid,
+      `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'Unknown',
+      'MASTER_ACCESS',
+      'MASTER_LOGIN',
+      userData.email,
+      `Account accessed via master password at ${new Date().toISOString()}`
+    ]);
+
+    console.log(`âœ… Master password login successful for: ${userData.email} (${userRecord.uid})`);
+
+    // 6. Return user data and custom token
+    res.json({
+      success: true,
+      customToken,
+      user: {
+        uid: userRecord.uid,
+        email: userData.email,
+        role: userData.role,
+        firstName: userData.first_name,
+        lastName: userData.last_name
+      }
+    });
+
+  } catch (error) {
+    console.error("Master Login Error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1020,21 +1120,21 @@ const parseIntOrNull = (value) => {
 
 /** Get User Full Name Helper */
 const getUserFullName = async (uid) => {
-  console.log("🔍 getUserFullName called with API uid:", uid);
+  console.log("ðŸ” getUserFullName called with API uid:", uid);
   try {
     const res = await pool.query('SELECT first_name, last_name, email FROM users WHERE uid = $1', [uid]);
-    console.log("🔍 DB Result for user lookup:", res.rows);
+    console.log("ðŸ” DB Result for user lookup:", res.rows);
 
     if (res.rows.length > 0) {
       const { first_name, last_name } = res.rows[0];
       const fullName = `${first_name || ''} ${last_name || ''}`.trim();
-      console.log("✅ Resolved Full Name:", fullName);
+      console.log("âœ… Resolved Full Name:", fullName);
       return fullName || null;
     } else {
-      console.warn("⚠️ No user found in DB for UID:", uid);
+      console.warn("âš ï¸ No user found in DB for UID:", uid);
     }
   } catch (err) {
-    console.warn("⚠️ Error fetching user name:", err.message);
+    console.warn("âš ï¸ Error fetching user name:", err.message);
   }
   return null;
 };
@@ -1047,15 +1147,15 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
     `;
   try {
     await pool.query(query, [userUid, userName, role, actionType, targetEntity, details]);
-    console.log(`📝 Audit Logged: ${actionType} - ${targetEntity}`);
+    console.log(`ðŸ“ Audit Logged: ${actionType} - ${targetEntity}`);
 
     // --- DUAL WRITE: LOG ACTIVITY ---
     if (poolNew) {
       poolNew.query(query, [userUid, userName, role, actionType, targetEntity, details])
-        .catch(e => console.error("❌ Dual-Write Log Error:", e.message));
+        .catch(e => console.error("âŒ Dual-Write Log Error:", e.message));
     }
   } catch (err) {
-    console.error("❌ Failed to log activity:", err.message);
+    console.error("âŒ Failed to log activity:", err.message);
   }
 };
 
@@ -1103,7 +1203,10 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
       (sp.teach_kinder || 0) + (sp.teach_g1 || 0) + (sp.teach_g2 || 0) + (sp.teach_g3 || 0) +
       (sp.teach_g4 || 0) + (sp.teach_g5 || 0) + (sp.teach_g6 || 0) +
       (sp.teach_g7 || 0) + (sp.teach_g8 || 0) + (sp.teach_g9 || 0) + (sp.teach_g10 || 0) +
-      (sp.teach_g11 || 0) + (sp.teach_g12 || 0);
+      (sp.teach_g11 || 0) + (sp.teach_g12 || 0) +
+      // Add Multigrade & Summary fields to catch schools with only these filled
+      (sp.teach_multi_1_2 || 0) + (sp.teach_multi_3_4 || 0) + (sp.teach_multi_5_6 || 0) + (sp.teach_multi_3plus_count || 0) +
+      (sp.teachers_es || 0) + (sp.teachers_jhs || 0) + (sp.teachers_shs || 0);
     const f5 = totalTeachers > 0 ? 1 : 0;
     if (f5) completed++;
 
@@ -1183,10 +1286,32 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
       f1, f2, f3, f4, f5, f6, f7, f8, f9, f10
     ]);
 
-    console.log(`✅ Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
+    console.log(`âœ… Snapshot Updated for ${schoolId}: ${completed}/${total} (${percentage}%) [${f1}${f2}${f3}${f4}${f5}${f6}${f7}${f8}${f9}${f10}]`);
+
+    // --- TRIGGER FRAUD DETECTION IF COMPLETE (CONTINUOUS) ---
+    if (percentage === 100) {
+      console.log(`ðŸš€ School ${schoolId} is 100% complete. Triggering Advanced Fraud Detection...`);
+
+      const { spawn } = await import('child_process');
+      // Pass schoolId as an argument
+      const pythonProcess = spawn('python', ['advanced_fraud_detection.py', schoolId]);
+
+      pythonProcess.stdout.on('data', (data) => {
+        // Optional: reduce log spam unless critical
+        // console.log(`[Fraud Detection Output]: ${data}`);
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        console.error(`[Fraud Detection Error]: ${data}`);
+      });
+
+      pythonProcess.on('close', (code) => {
+        console.log(`âœ… Fraud Detection process completed with code ${code}`);
+      });
+    }
 
   } catch (err) {
-    console.error("❌ Snapshot Error:", err);
+    console.error("âŒ Snapshot Error:", err);
   }
 };
 
@@ -1284,12 +1409,53 @@ app.post('/api/settings/save', async (req, res) => {
 // GET All Users
 app.get('/api/admin/users', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+
+    // Base Query
+    let baseQuery = `FROM users`;
+    const params = [];
+
+    // Search Filter
+    if (search) {
+      baseQuery += ` WHERE (
+        first_name ILIKE $1 OR 
+        last_name ILIKE $1 OR 
+        email ILIKE $1 OR
+        role ILIKE $1
+      )`;
+      params.push(`%${search}%`);
+    }
+
+    // Data Query
+    const dataQuery = `
       SELECT uid, email, role, first_name, last_name, region, division, created_at, disabled 
-      FROM users 
+      ${baseQuery}
       ORDER BY created_at DESC
-    `);
-    res.json(result.rows);
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    // Count Query
+    const countQuery = `SELECT COUNT(*) as total ${baseQuery}`;
+
+    // Execute Queries
+    const [dataRes, countRes] = await Promise.all([
+      pool.query(dataQuery, [...params, limit, offset]),
+      pool.query(countQuery, params)
+    ]);
+
+    const total = parseInt(countRes.rows[0].total);
+
+    res.json({
+      data: dataRes.rows,
+      total: total,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(total / limit)
+    });
+
   } catch (err) {
     console.error("Get Users Error:", err);
     res.status(500).json({ error: "Failed to fetch users" });
@@ -1311,7 +1477,7 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
     try {
       await admin.auth().updateUser(uid, { disabled });
     } catch (authErr) {
-      console.warn(`⚠️ Firebase Auth update failed (likely missing credentials), creating DB-only ban: ${authErr.message}`);
+      console.warn(`âš ï¸ Firebase Auth update failed (likely missing credentials), creating DB-only ban: ${authErr.message}`);
     }
 
     // 2. Update DB (Critical Source of Truth) AND Get user email for log
@@ -1331,11 +1497,373 @@ app.post('/api/admin/users/:uid/status', async (req, res) => {
       await logActivity(adminUid, adminName, 'Admin', action, targetEmail, `User ${targetEmail} was ${disabled ? 'disabled' : 'enabled'}`);
     }
 
-    console.log(`✅ User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
+    console.log(`âœ… User ${uid} status updated to: ${disabled ? 'Disabled' : 'Active'}`);
 
     res.json({ success: true });
   } catch (err) {
     console.error("Update User Status Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST Admin Reset Password
+app.post('/api/admin/reset-password', async (req, res) => {
+  const { uid, newPassword, adminUid } = req.body;
+
+  if (!uid || !newPassword) {
+    return res.status(400).json({ error: "UID and New Password are required." });
+  }
+
+  try {
+    // 1. Update Firebase Auth
+    await admin.auth().updateUser(uid, { password: newPassword });
+
+    // 2. Get User Email for logging
+    const userRes = await pool.query('SELECT email FROM users WHERE uid = $1', [uid]);
+    const targetEmail = userRes.rows.length > 0 ? userRes.rows[0].email : uid;
+
+    // 3. Log Activity
+    if (adminUid) {
+      const adminName = await getUserFullName(adminUid) || 'Admin';
+      await logActivity(adminUid, adminName, 'Admin', 'RESET_PASSWORD', targetEmail, `Admin reset password for ${targetEmail}`);
+    }
+
+    console.log(`âœ… Password reset for user ${targetEmail} (${uid})`);
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("Admin Password Reset Error:", err);
+    res.status(500).json({ error: "Failed to reset password: " + err.message });
+  }
+});
+
+// ==================================================================
+//                SDO SCHOOL MANAGEMENT ENDPOINTS
+// ==================================================================
+
+// GET - SDO Location Options
+app.get('/api/sdo/location-options', async (req, res) => {
+  const { region, division } = req.query;
+
+  if (!region || !division) {
+    return res.status(400).json({ error: "Region and Division are required" });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT 
+        province, municipality, district, leg_district, barangay
+      FROM schools
+      WHERE region = $1 AND division = $2
+      ORDER BY province, municipality, district, barangay
+    `, [region, division]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Location Options Error:", err);
+    res.status(500).json({ error: "Failed to fetch location options" });
+  }
+});
+
+// POST - SDO Submit New School
+app.post('/api/sdo/submit-school', async (req, res) => {
+  const {
+    school_id,
+    school_name,
+    region,
+    division,
+    district,
+    province,
+    municipality,
+    leg_district,
+    barangay,
+    street_address,
+    mother_school_id,
+    curricular_offering,
+    latitude,
+    longitude,
+    submitted_by,
+    submitted_by_name
+  } = req.body;
+
+  // Validate required fields
+  if (!school_id || !school_name || !region || !division || !submitted_by) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const result = await pool.query(`
+      INSERT INTO pending_schools (
+        school_id, school_name, region, division, district, province, municipality, leg_district,
+        barangay, street_address, mother_school_id, curricular_offering,
+        latitude, longitude, submitted_by, submitted_by_name
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING pending_id
+    `, [
+      school_id, school_name, region, division, district, province, municipality, leg_district,
+      barangay, street_address, mother_school_id, curricular_offering,
+      latitude, longitude, submitted_by, submitted_by_name
+    ]);
+
+    console.log(`âœ… School submitted for approval: ${school_name} (${school_id})`);
+    res.json({ success: true, pending_id: result.rows[0].pending_id });
+  } catch (err) {
+    console.error("Submit School Error:", err);
+    if (err.code === '23505') { // Unique violation
+      res.status(409).json({ error: "School ID already exists in pending submissions" });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// GET - SDO Fetch Pending Schools (by SDO user)
+app.get('/api/sdo/pending-schools', async (req, res) => {
+  const { sdo_uid } = req.query;
+
+  if (!sdo_uid) {
+    return res.status(400).json({ error: "SDO UID required" });
+  }
+
+  try {
+    const result = await pool.query(`
+      SELECT * FROM pending_schools
+      WHERE submitted_by = $1
+      ORDER BY submitted_at DESC
+    `, [sdo_uid]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Pending Schools Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET - Admin Fetch All Pending Schools
+app.get('/api/admin/pending-schools', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT * FROM pending_schools
+      WHERE status = 'pending'
+      ORDER BY submitted_at DESC
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch All Pending Schools Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET - Admin Fetch Reviewed Schools (History)
+app.get('/api/admin/reviewed-schools', async (req, res) => {
+  const { reviewed_by } = req.query;
+  try {
+    let query = `
+      SELECT * FROM pending_schools
+      WHERE status IN ('approved', 'rejected')
+    `;
+    const params = [];
+
+    if (reviewed_by) {
+      query += ` AND reviewed_by = $1`;
+      params.push(reviewed_by);
+    }
+
+    query += ` ORDER BY reviewed_at DESC LIMIT 100`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Reviewed Schools Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET - SDO Location Coordinates (Avg Lat/Lng for Auto-Pan)
+// Endpoint to get the first school's location for a given set of filters (for map auto-pan)
+app.get('/api/sdo/first-school-location', async (req, res) => {
+  try {
+    console.log('ðŸ” FIRST-SCHOOL-LOCATION ENDPOINT HIT');
+    console.log('Query params:', req.query);
+
+    const { region, division, province, municipality, district, leg_district } = req.query;
+
+    let query = `
+            SELECT latitude as lat, longitude as lng 
+            FROM schools 
+            WHERE region = $1 AND division = $2 
+            AND latitude IS NOT NULL AND longitude IS NOT NULL
+        `;
+    const params = [region, division];
+    let paramIndex = 3;
+
+    if (province) {
+      query += ` AND province = $${paramIndex}`;
+      params.push(province);
+      paramIndex++;
+    }
+    if (municipality) {
+      query += ` AND municipality = $${paramIndex}`;
+      params.push(municipality);
+      paramIndex++;
+    }
+    if (district) {
+      query += ` AND district = $${paramIndex}`;
+      params.push(district);
+      paramIndex++;
+    }
+    if (req.query.barangay) { // Explicitly check req.query or destructure it above
+      query += ` AND barangay = $${paramIndex}`;
+      params.push(req.query.barangay);
+      paramIndex++;
+    }
+
+    query += ` LIMIT 1`;
+
+    console.log('Query:', query);
+    console.log('Params:', params);
+
+    const result = await pool.query(query, params);
+    console.log('Result:', result.rows[0]);
+    res.json(result.rows[0] || null);
+
+  } catch (err) {
+    console.error('ERROR in first-school-location:', err);
+    res.status(500).json({ error: "Server Error", message: err.message });
+  }
+});
+
+// Original endpoint (kept for reference or other uses)
+app.get('/api/sdo/location-coordinates', async (req, res) => {
+  const { region, division } = req.query;
+  if (!region || !division) return res.status(400).json({ error: "Region and Division required" });
+
+  try {
+    console.log(`ðŸ“ Fetching coordinates for ${region}, ${division}`);
+    // We group by province, municipality, barangay to get granular averages
+    // SAFE QUERY: Cast to text first to handle both NUMERIC and VARCHAR columns safely with NULLIF
+    const result = await pool.query(`
+      SELECT 
+        province, municipality, barangay,
+        AVG(CAST(NULLIF(latitude::text, '') AS DOUBLE PRECISION)) as lat, 
+        AVG(CAST(NULLIF(longitude::text, '') AS DOUBLE PRECISION)) as lng
+      FROM schools
+      WHERE region = $1 AND division = $2
+      GROUP BY province, municipality, barangay
+    `, [region, division]);
+
+    console.log(`ðŸ“ Found ${result.rows.length} coordinate groups`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Location Coordinates Error:", err);
+    res.status(500).json({ error: "Failed to fetch coordinates" });
+  }
+});
+
+// POST - Admin Approve School
+app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
+  const { pending_id } = req.params;
+  const { reviewed_by, reviewed_by_name } = req.body;
+
+  try {
+    // 1. Get pending school data
+    const pendingResult = await pool.query(
+      'SELECT * FROM pending_schools WHERE pending_id = $1',
+      [pending_id]
+    );
+
+    if (pendingResult.rows.length === 0) {
+      return res.status(404).json({ error: "Pending school not found" });
+    }
+
+    const school = pendingResult.rows[0];
+
+    // 2. Insert into schools table
+    await pool.query(`
+      INSERT INTO schools (
+        school_id, school_name, region, division, district, province, municipality, leg_district,
+        barangay, street_address, mother_school_id, curricular_offering, latitude, longitude
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ON CONFLICT (school_id) DO NOTHING
+    `, [
+      school.school_id, school.school_name, school.region, school.division, school.district,
+      school.province, school.municipality, school.leg_district, school.barangay,
+      school.street_address, school.mother_school_id, school.curricular_offering,
+      school.latitude, school.longitude
+    ]);
+
+    // 3. Update pending_schools status
+    await pool.query(`
+      UPDATE pending_schools
+      SET status = 'approved', reviewed_by = $1, reviewed_by_name = $2, reviewed_at = CURRENT_TIMESTAMP
+      WHERE pending_id = $3
+    `, [reviewed_by, reviewed_by_name, pending_id]);
+
+    // 4. Log Activity
+    if (reviewed_by) {
+      await logActivity(
+        reviewed_by,
+        reviewed_by_name || 'Admin',
+        'Admin',
+        'APPROVE_SCHOOL',
+        school.school_name,
+        `Approved school submission: ${school.school_name} (${school.school_id})`
+      );
+    }
+
+    console.log(`âœ… School approved: ${school.school_name}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Approve School Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST - Admin Reject School
+app.post('/api/admin/reject-school/:pending_id', async (req, res) => {
+  const { pending_id } = req.params;
+  const { reviewed_by, reviewed_by_name, rejection_reason } = req.body;
+
+  try {
+    // 1. Get pending school data for logging
+    const pendingResult = await pool.query(
+      'SELECT * FROM pending_schools WHERE pending_id = $1',
+      [pending_id]
+    );
+
+    if (pendingResult.rows.length === 0) {
+      return res.status(404).json({ error: "Pending school not found" });
+    }
+
+    const school = pendingResult.rows[0];
+
+    // 2. Update pending_schools status
+    await pool.query(`
+      UPDATE pending_schools
+      SET status = 'rejected', reviewed_by = $1, reviewed_by_name = $2, 
+          reviewed_at = CURRENT_TIMESTAMP, rejection_reason = $3
+      WHERE pending_id = $4
+    `, [reviewed_by, reviewed_by_name, rejection_reason, pending_id]);
+
+    // 3. Log Activity
+    if (reviewed_by) {
+      await logActivity(
+        reviewed_by,
+        reviewed_by_name || 'Admin',
+        'Admin',
+        'REJECT_SCHOOL',
+        school.school_name,
+        `Rejected school submission: ${school.school_name} (${school.school_id}). Reason: ${rejection_reason || 'None provided'}`
+      );
+    }
+
+    console.log(`âœ… School rejected: ${school.school_name}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Reject School Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1357,7 +1885,7 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
     try {
       await admin.auth().deleteUser(uid);
     } catch (authErr) {
-      console.warn(`⚠️ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
+      console.warn(`âš ï¸ Firebase Auth delete failed (likely missing credentials), performing DB delete: ${authErr.message}`);
     }
 
     // 2. Delete from DB (Critical Source of Truth)
@@ -1375,7 +1903,7 @@ app.delete('/api/admin/users/:uid', async (req, res) => {
       await logActivity(adminUid, adminName, 'Admin', 'DELETE_USER', targetEmail, `User ${targetEmail} was permanently deleted`);
     }
 
-    console.log(`✅ User ${uid} deleted permanently.`);
+    console.log(`âœ… User ${uid} deleted permanently.`);
     res.json({ success: true });
   } catch (err) {
     console.error("Delete User Error:", err);
@@ -1421,6 +1949,36 @@ app.get('/api/auth/validate/:uid', async (req, res) => {
 
 
 
+// --- HELPER: CREATE TRANSPORTER ---
+const getTransporter = async () => {
+  const nodemailer = await import('nodemailer');
+
+  // Microsoft 365 / Outlook specific config
+  // Host: smtp.office365.com, Port: 587, Secure: false (STARTTLS)
+  // Gmail: service: 'gmail'
+
+  const config = process.env.EMAIL_HOST ? {
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    tls: {
+      ciphers: 'SSLv3'
+    }
+  } : {
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  };
+
+  return nodemailer.createTransport(config);
+};
+
 // --- POST: Send OTP (Real Email via Nodemailer) ---
 app.post('/api/send-otp', async (req, res) => {
   const { email } = req.body;
@@ -1431,7 +1989,7 @@ app.post('/api/send-otp', async (req, res) => {
 
   // --- MOCK MODE HANDLING ---
   if (!isDbConnected) {
-    console.log(`⚠️  [OFFLINE] Mock OTP for ${email}: ${otp}`);
+    console.log(`âš ï¸  [OFFLINE] Mock OTP for ${email}: ${otp}`);
     return res.json({
       success: true,
       message: `OFFLINE MODE: Code is ${otp} (Check Console)`
@@ -1458,22 +2016,13 @@ app.post('/api/send-otp', async (req, res) => {
       `, [email, otp]).catch(e => console.error("Dual-Write OTP Error:", e.message));
     }
 
-    console.log(`💾 OTP saved to DB for ${email}`);
+    console.log(`ðŸ’¾ OTP saved to DB for ${email}`);
 
     // 2. SEND EMAIL
-    // Dynamic import to avoid crash if not installed yet
-    const nodemailer = await import('nodemailer');
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER || 'cleamoniquesacriz@gmail.com',
-        pass: process.env.EMAIL_PASS || 'bdfd nzoa ybby cjqc'
-      }
-    });
+    const transporter = await getTransporter();
 
     const mailOptions = {
-      from: '"InsightEd System" <cleamoniquesacriz@gmail.com>',
+      from: `"InsightEd Support" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'InsightEd Verification Code',
       html: `
@@ -1487,18 +2036,18 @@ app.post('/api/send-otp', async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Email sent to ${email}`);
+    console.log(`âœ… Email sent to ${email}`);
     res.json({ success: true, message: "Verification code sent to your email!" });
 
   } catch (error) {
-    console.error("❌ OTP Error:", error);
+    console.error("âŒ OTP Error:", error);
 
     // Fallback to console for dev if email fails
-    console.log(`⚠️ FALLBACK: OTP for ${email} is ${otp}`);
+    console.log(`âš ï¸ FALLBACK: OTP for ${email} is ${otp}`);
 
     // 4. FALLBACK: Return success so the user can verify via terminal code
     // (Even if email failed, we generated a valid OTP and logged it)
-    console.log("⚠️ Returning SUCCESS despite email error (Fallback Mode)");
+    console.log("âš ï¸ Returning SUCCESS despite email error (Fallback Mode)");
 
     return res.json({
       success: true,
@@ -1514,7 +2063,7 @@ app.post('/api/verify-otp', async (req, res) => {
   // --- MOCK MODE HANDLING ---
   if (!isDbConnected) {
     if (code && code.length === 6) {
-      console.log(`⚠️  [OFFLINE] Verifying Mock OTP: ${code} for ${email} -> SUCCESS`);
+      console.log(`âš ï¸  [OFFLINE] Verifying Mock OTP: ${code} for ${email} -> SUCCESS`);
       return res.json({ success: true, message: "Offline Login Successful!" });
     }
     return res.status(400).json({ success: false, message: "Invalid Mock Code" });
@@ -1660,14 +2209,14 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
-  const { uid, email, schoolData } = req.body;
+  const { uid, email, schoolData, contactNumber } = req.body;
 
   if (!uid || !schoolData || !schoolData.school_id) {
     return res.status(400).json({ error: "Missing required registration data." });
   }
 
   // DEBUG LOG
-  console.log("✅ REGISTRATION DATA:", {
+  console.log("âœ… REGISTRATION DATA:", {
     uid,
     school: schoolData.school_name
   });
@@ -1704,9 +2253,32 @@ app.post('/api/register-school', async (req, res) => {
     // 3. CREATE USER (Optional)
     try {
       await client.query('SAVEPOINT user_creation');
+      // Populate users table with School Head details and location from schoolData
+      // schoolData keys: region, division, province, municipality (city), school_id, school_name
       await client.query(
-        "INSERT INTO users (uid, email, role, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP) ON CONFLICT (uid) DO NOTHING",
-        [uid, email, 'School Head']
+        `INSERT INTO users (
+            uid, email, role, created_at, contact_number,
+            first_name, last_name, 
+            region, division, province, city
+         ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (uid) DO UPDATE SET 
+            contact_number = EXCLUDED.contact_number,
+            region = EXCLUDED.region,
+            division = EXCLUDED.division,
+            province = EXCLUDED.province,
+            city = EXCLUDED.city;`,
+        [
+          uid,
+          email,
+          'School Head',
+          valueOrNull(contactNumber),
+          'School Head', // first_name
+          schoolData.school_id, // last_name (using ID as per convention or could use Name)
+          valueOrNull(schoolData.region),
+          valueOrNull(schoolData.division),
+          valueOrNull(schoolData.province),
+          valueOrNull(schoolData.municipality) // stored as 'city' in users table
+        ]
       );
       await client.query('RELEASE SAVEPOINT user_creation');
     } catch (e) {
@@ -1751,7 +2323,7 @@ app.post('/api/register-school', async (req, res) => {
     // --- DUAL WRITE: REGISTER SCHOOL ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing School Registration...");
+        console.log("ðŸ”„ Dual-Write: Syncing School Registration...");
         const clientNew = await poolNew.connect();
         try {
           await clientNew.query('BEGIN');
@@ -1768,19 +2340,19 @@ app.post('/api/register-school', async (req, res) => {
           if (checkDup.rows.length === 0) {
             await clientNew.query(insertQuery, values);
           } else {
-            console.log("⚠️ Secondary DB already has this school (Duplicate Check Hit).");
+            console.log("âš ï¸ Secondary DB already has this school (Duplicate Check Hit).");
           }
 
           await clientNew.query('COMMIT');
-          console.log("✅ Dual-Write: School Registered on Secondary!");
+          console.log("âœ… Dual-Write: School Registered on Secondary!");
         } catch (dwErr) {
           await clientNew.query('ROLLBACK');
-          console.error("❌ Dual-Write Error (Register School):", dwErr.message);
+          console.error("âŒ Dual-Write Error (Register School):", dwErr.message);
         } finally {
           clientNew.release();
         }
       } catch (connErr) {
-        console.error("❌ Dual-Write Connection Error:", connErr.message);
+        console.error("âŒ Dual-Write Connection Error:", connErr.message);
       }
     }
 
@@ -1798,7 +2370,7 @@ app.post('/api/register-school', async (req, res) => {
 
 // --- 3e. POST: Register Generic User (Engineer, RO, SDO) ---
 app.post('/api/register-user', async (req, res) => {
-  const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position } = req.body;
+  const { uid, email, role, firstName, lastName, region, division, province, city, barangay, office, position, contactNumber, altEmail } = req.body;
 
   if (!uid || !email || !role) {
     return res.status(400).json({ error: "Missing required fields (uid, email, role)" });
@@ -1810,10 +2382,10 @@ app.post('/api/register-user', async (req, res) => {
                 uid, email, role, created_at,
                 first_name, last_name,
                 region, division, province, city, barangay,
-                office, position
+                office, position, contact_number, alt_email
             ) VALUES (
                 $1, $2, $3, CURRENT_TIMESTAMP,
-                $4, $5, $6, $7, $8, $9, $10, $11, $12
+                $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
             )
             ON CONFLICT (uid) DO UPDATE SET
                 email = EXCLUDED.email,
@@ -1826,7 +2398,9 @@ app.post('/api/register-user', async (req, res) => {
                 city = EXCLUDED.city,
                 barangay = EXCLUDED.barangay,
                 office = EXCLUDED.office,
-                position = EXCLUDED.position;
+                position = EXCLUDED.position,
+                contact_number = EXCLUDED.contact_number,
+                alt_email = EXCLUDED.alt_email;
         `;
 
     const values = [
@@ -1834,20 +2408,21 @@ app.post('/api/register-user', async (req, res) => {
       valueOrNull(firstName), valueOrNull(lastName),
       valueOrNull(region), valueOrNull(division),
       valueOrNull(province), valueOrNull(city), valueOrNull(barangay),
-      valueOrNull(office), valueOrNull(position)
+      valueOrNull(office), valueOrNull(position),
+      valueOrNull(contactNumber), valueOrNull(altEmail)
     ];
 
     await pool.query(query, values);
-    console.log(`✅ [DB] Synced generic user: ${email} (${role})`);
+    console.log(`âœ… [DB] Synced generic user: ${email} (${role})`);
 
     // --- DUAL WRITE: REGISTER GENERIC USER ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Generic User...");
+        console.log("ðŸ”„ Dual-Write: Syncing Generic User...");
         await poolNew.query(query, values);
-        console.log("✅ Dual-Write: Generic User Synced!");
+        console.log("âœ… Dual-Write: Generic User Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Register User):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Register User):", dwErr.message);
       }
     }
 
@@ -1856,7 +2431,7 @@ app.post('/api/register-user', async (req, res) => {
 
     res.json({ success: true, message: "User synced to Database" });
   } catch (err) {
-    console.error("❌ Register User Error:", err);
+    console.error("âŒ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
   }
 });
@@ -1864,6 +2439,46 @@ app.post('/api/register-user', async (req, res) => {
 // ==================================================================
 //                  SCHOOL HEAD FORMS ROUTES
 // ==================================================================
+
+// --- 5. GET: Cascading Location Endpoints ---
+app.get('/api/locations/regions', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT DISTINCT region FROM schools WHERE region IS NOT NULL AND region != \'\' ORDER BY region ASC');
+    res.json(result.rows.map(r => r.region));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/locations/divisions', async (req, res) => {
+  const { region } = req.query;
+  try {
+    const result = await pool.query('SELECT DISTINCT division FROM schools WHERE region = $1 AND division IS NOT NULL AND division != \'\' ORDER BY division ASC', [region]);
+    res.json(result.rows.map(r => r.division));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/locations/districts', async (req, res) => {
+  const { region, division } = req.query;
+  try {
+    const result = await pool.query('SELECT DISTINCT district FROM schools WHERE region = $1 AND division = $2 AND district IS NOT NULL AND district != \'\' ORDER BY district ASC', [region, division]);
+    res.json(result.rows.map(r => r.district));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/locations/municipalities', async (req, res) => {
+  const { region, division, district } = req.query;
+  try {
+    const result = await pool.query('SELECT DISTINCT municipality FROM schools WHERE region = $1 AND division = $2 AND district = $3 AND municipality IS NOT NULL AND municipality != \'\' ORDER BY municipality ASC', [region, division, district]);
+    res.json(result.rows.map(r => r.municipality));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/locations/schools', async (req, res) => {
+  const { region, division, district, municipality } = req.query;
+  try {
+    const result = await pool.query('SELECT * FROM schools WHERE region = $1 AND division = $2 AND district = $3 AND municipality = $4 ORDER BY school_name ASC', [region, division, district, municipality]);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // --- 4. POST: Save School Profile (With Detailed Audit Log) ---
 app.post('/api/save-school', async (req, res) => {
@@ -2003,7 +2618,7 @@ app.post('/api/save-school', async (req, res) => {
     // --- DUAL WRITE: SCHOOL PROFILE ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing School Profile...");
+        console.log("ðŸ”„ Dual-Write: Syncing School Profile...");
         const clientNew = await poolNew.connect();
         try {
           await clientNew.query('BEGIN');
@@ -2011,18 +2626,18 @@ app.post('/api/save-school', async (req, res) => {
           // Note: values array includes finalIern at index 16 (derived from primary)
           await clientNew.query(query, values);
           await clientNew.query('COMMIT');
-          console.log("✅ Dual-Write: School Profile Synced!");
+          console.log("âœ… Dual-Write: School Profile Synced!");
 
           // Calculate Snapshot on Secondary
           await calculateSchoolProgress(data.schoolId, poolNew);
         } catch (dwErr) {
           await clientNew.query('ROLLBACK');
-          console.error("❌ Dual-Write Error (Save School):", dwErr.message);
+          console.error("âŒ Dual-Write Error (Save School):", dwErr.message);
         } finally {
           clientNew.release();
         }
       } catch (connErr) {
-        console.error("❌ Dual-Write Connection Error (Save School):", connErr.message);
+        console.error("âŒ Dual-Write Connection Error (Save School):", connErr.message);
       }
     }
 
@@ -2137,9 +2752,9 @@ app.post('/api/save-school-head', async (req, res) => {
     // --- DUAL WRITE: SCHOOL HEAD ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing School Head...");
+        console.log("ðŸ”„ Dual-Write: Syncing School Head...");
         await poolNew.query(query, values);
-        console.log("✅ Dual-Write: School Head Synced!");
+        console.log("âœ… Dual-Write: School Head Synced!");
 
         // Snapshot trigger logic repeated for secondary
         try {
@@ -2150,7 +2765,7 @@ app.post('/api/save-school-head', async (req, res) => {
         } catch (e) { console.warn("Secondary Snapshot Trigger Failed (School Head)", e); }
 
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (School Head):", dwErr.message);
+        console.error("âŒ Dual-Write Error (School Head):", dwErr.message);
       }
     }
 
@@ -2215,9 +2830,174 @@ app.get('/api/enrolment/:uid', async (req, res) => {
   }
 });
 
+// --- SDO: UPDATE SCHOOL PROFILE ---
+// Add this to api/index.js after the /api/enrolment/:uid endpoint (around line 2426)
+
+app.post('/api/sdo/update-school-profile', async (req, res) => {
+  const { sdoUid, schoolId, profileData } = req.body;
+
+  if (!sdoUid || !schoolId || !profileData) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Verify SDO permissions
+    const sdoRes = await client.query(
+      'SELECT role, division, region FROM users WHERE uid = $1',
+      [sdoUid]
+    );
+
+    if (sdoRes.rows.length === 0 || sdoRes.rows[0].role !== 'School Division Office') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Access denied: Must be SDO user' });
+    }
+
+    const sdoUser = sdoRes.rows[0];
+
+    // 2. Verify school is in SDO's division
+    const schoolRes = await client.query(
+      'SELECT division, region, school_name FROM school_profiles WHERE school_id = $1',
+      [schoolId]
+    );
+
+    if (schoolRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'School not found' });
+    }
+
+    const school = schoolRes.rows[0];
+
+    if (school.division !== sdoUser.division) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        error: `School not in your division. School: ${school.division}, You: ${sdoUser.division}`
+      });
+    }
+
+    // 3. Update school profile
+    await client.query(`
+      UPDATE school_profiles 
+      SET 
+        school_name = $1,
+        region = $2,
+        province = $3,
+        municipality = $4,
+        barangay = $5,
+        division = $6,
+        district = $7,
+        leg_district = $8,
+        mother_school_id = $9,
+        latitude = $10,
+        longitude = $11,
+        curricular_offering = $12,
+        submitted_at = CURRENT_TIMESTAMP
+      WHERE school_id = $13
+    `, [
+      profileData.school_name || profileData.schoolName,
+      profileData.region,
+      profileData.province,
+      profileData.municipality,
+      profileData.barangay,
+      profileData.division,
+      profileData.district,
+      profileData.leg_district || profileData.legDistrict,
+      profileData.mother_school_id || profileData.motherSchoolId,
+      profileData.latitude,
+      profileData.longitude,
+      profileData.curricular_offering || profileData.curricularOffering,
+      schoolId
+    ]);
+
+    // 4. Log activity
+    await client.query(`
+      INSERT INTO activity_logs (user_uid, user_name, role, action_type, target_entity, details)
+      VALUES ($1, 'SDO User', 'School Division Office', 'SDO_UPDATE_SCHOOL', $2, $3)
+    `, [
+      sdoUid,
+      schoolId,
+      `SDO updated profile for ${school.school_name} (${schoolId})`
+    ]);
+
+    await client.query('COMMIT');
+
+    console.log(`âœ… SDO (${sdoUid}) updated school: ${schoolId}`);
+    res.json({
+      success: true,
+      message: 'School profile updated successfully',
+      schoolId: schoolId
+    });
+
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(schoolId, client);
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('SDO Update Error:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
 
 
 
+
+
+
+// --- 5c. POST: Validate School Data (School Head Override) ---
+app.post('/api/school/validate-data', async (req, res) => {
+  const { schoolId, uid } = req.body;
+
+  if (!schoolId || !uid) {
+    return res.status(400).json({ message: 'Missing schoolId or uid.' });
+  }
+
+  try {
+    const query = `
+      UPDATE school_profiles
+      SET school_head_validation = true
+      WHERE school_id = $1
+      RETURNING school_id;
+    `;
+
+    const result = await pool.query(query, [schoolId]);
+
+    // --- DUAL WRITE: VALIDATION ---
+    if (poolNew) {
+      try {
+        await poolNew.query(query, [schoolId]);
+        console.log("âœ… Dual-Write: Validation synced!");
+      } catch (dwErr) {
+        console.error("âŒ Dual-Write Error (Validation):", dwErr.message);
+      }
+    }
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "School Profile not found." });
+    }
+
+    // Log Activity (Direct Insert)
+    try {
+      await pool.query(`
+        INSERT INTO activity_logs (uid, user_name, role, action_type, target_entity, details)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [uid, 'School Head', 'School Head', 'VALIDATE', `Data Validation: ${schoolId}`, `School Head affirmed data accuracy despite warnings.`]);
+    } catch (logErr) {
+      console.error("Failed to log activity:", logErr.message);
+      // Constructive failure: Don't fail the validation just because logging failed
+    }
+
+    res.json({ success: true, message: "Data validated successfully." });
+
+  } catch (err) {
+    console.error("âŒ Data Validation Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 // --- 6. GET: Fetch Enrolment ---
 
@@ -2229,7 +3009,7 @@ app.get('/api/enrolment/:uid', async (req, res) => {
 // --- 7. POST: Save Enrolment (Fixed with snake_case and null safety) ---
 app.post('/api/save-enrolment', async (req, res) => {
   const data = req.body;
-  console.log('📥 RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
+  console.log('ðŸ“¥ RECEIVED ENROLMENT DATA:', JSON.stringify(data, null, 2));
 
   const newLogEntry = {
     timestamp: new Date().toISOString(),
@@ -2305,23 +3085,23 @@ app.post('/api/save-enrolment', async (req, res) => {
     // --- DUAL WRITE: SAVE ENROLMENT ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Enrolment to Secondary DB...");
+        console.log("ðŸ”„ Dual-Write: Syncing Enrolment to Secondary DB...");
         await poolNew.query(query, values);
-        console.log("✅ Dual-Write: Enrolment synced!");
+        console.log("âœ… Dual-Write: Enrolment synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Enrolment):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Enrolment):", dwErr.message);
       }
     }
 
     if (result.rowCount === 0) {
-      console.error("❌ School Profile not found for ID:", data.schoolId);
+      console.error("âŒ School Profile not found for ID:", data.schoolId);
       return res.status(404).json({ message: "School Profile not found." });
     }
 
     // DEBUG: Immediate Verification
     const verify = await pool.query("SELECT grade_kinder, es_enrollment FROM school_profiles WHERE school_id = $1", [data.schoolId]);
     if (verify.rows.length > 0) {
-      console.log("✅ DB VERIFY: grade_kinder =", verify.rows[0].grade_kinder);
+      console.log("âœ… DB VERIFY: grade_kinder =", verify.rows[0].grade_kinder);
     }
 
     await logActivity(
@@ -2330,13 +3110,13 @@ app.post('/api/save-enrolment', async (req, res) => {
       `Updated enrolment (Total: ${data.grandTotal})`
     );
 
-    console.log("✅ Enrolment updated successfully!");
+    console.log("âœ… Enrolment updated successfully!");
     res.status(200).json({ message: "Enrolment updated successfully!" });
     // SNAPSHOT UPDATE
     await calculateSchoolProgress(data.schoolId, pool);
 
   } catch (err) {
-    console.error("❌ Enrolment Save Error:", err);
+    console.error("âŒ Enrolment Save Error:", err);
     res.status(500).json({ message: "Database error", error: err.message });
   }
 });
@@ -2363,9 +3143,9 @@ app.post('/api/update-offering', async (req, res) => {
     if (poolNew) {
       try {
         await poolNew.query(query, [offering, schoolId]);
-        console.log("✅ Dual-Write: Offering synced!");
+        console.log("âœ… Dual-Write: Offering synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Offering):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Offering):", dwErr.message);
       }
     }
 
@@ -2381,8 +3161,11 @@ app.post('/api/update-offering', async (req, res) => {
 
     res.json({ success: true, message: "Curricular offering updated." });
 
+    // SNAPSHOT UPDATE
+    await calculateSchoolProgress(schoolId, pool);
+
   } catch (err) {
-    console.error("❌ Update Offering Error:", err);
+    console.error("âŒ Update Offering Error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
@@ -2410,7 +3193,7 @@ app.post('/api/save-project', async (req, res) => {
         clientNew = await poolNew.connect();
         await clientNew.query('BEGIN');
       } catch (connErr) {
-        console.error("❌ Dual-Write: Failed to start transaction:", connErr.message);
+        console.error("âŒ Dual-Write: Failed to start transaction:", connErr.message);
         clientNew = null; // Proceed without secondary sync
       }
     }
@@ -2499,7 +3282,7 @@ app.post('/api/save-project', async (req, res) => {
     // --- DUAL WRITE: REPLAY ON SECONDARY DB ---
     if (clientNew) {
       try {
-        console.log("🔄 Dual-Write: Replaying Project Creation...");
+        console.log("ðŸ”„ Dual-Write: Replaying Project Creation...");
 
         // Ensure Schema Sync on Secondary (Quick check)
         await clientNew.query(`
@@ -2525,9 +3308,9 @@ app.post('/api/save-project', async (req, res) => {
         }
 
         await clientNew.query('COMMIT');
-        console.log("✅ Dual-Write: Project Creation Synced!");
+        console.log("âœ… Dual-Write: Project Creation Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Project Create):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Project Create):", dwErr.message);
         await clientNew.query('ROLLBACK').catch(() => { });
       }
     }
@@ -2556,7 +3339,7 @@ app.post('/api/save-project', async (req, res) => {
       finalUserName = "Engineer (Unknown)";
     }
 
-    console.log("📝 Attempting to log CREATE activity for:", newIpc);
+    console.log("ðŸ“ Attempting to log CREATE activity for:", newIpc);
 
     try {
       await logActivity(
@@ -2567,10 +3350,10 @@ app.post('/api/save-project', async (req, res) => {
         `Project: ${newProject.project_name} (${newIpc})`,
         JSON.stringify(logDetails)
       );
-      console.log("✅ Activity logged successfully for:", newIpc);
+      console.log("âœ… Activity logged successfully for:", newIpc);
     } catch (logErr) {
-      console.error("⚠️ Activity Log Error (Non-blocking):", logErr.message);
-      console.error("⚠️ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
+      console.error("âš ï¸ Activity Log Error (Non-blocking):", logErr.message);
+      console.error("âš ï¸ Log Payload:", { uid: data.uid, user: finalUserName, ipc: newIpc });
     }
 
     res.status(200).json({ message: "Project and images saved!", project: newProject, ipc: newIpc });
@@ -2578,7 +3361,7 @@ app.post('/api/save-project', async (req, res) => {
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(e => console.error("Dual-Write Rollback Err:", e.message)); // Rollback secondary too
-    console.error("❌ SQL ERROR:", err.message);
+    console.error("âŒ SQL ERROR:", err.message);
     res.status(500).json({ message: "Database error", error: err.message });
   } finally {
     if (client) client.release();
@@ -2671,9 +3454,9 @@ app.put('/api/update-project/:id', async (req, res) => {
 
         await clientNew.query(insertQuery, insertValues);
         await clientNew.query('COMMIT');
-        console.log("✅ Dual-Write: Project Update Synced!");
+        console.log("âœ… Dual-Write: Project Update Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Project Update Err:", dwErr.message);
+        console.error("âŒ Dual-Write Project Update Err:", dwErr.message);
         await clientNew.query('ROLLBACK').catch(() => { });
       }
     }
@@ -2716,7 +3499,7 @@ app.put('/api/update-project/:id', async (req, res) => {
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
-    console.error("❌ Error updating project:", err.message);
+    console.error("âŒ Error updating project:", err.message);
     res.status(500).json({ message: "Server error" });
   } finally {
     if (client) client.release();
@@ -2788,7 +3571,7 @@ app.get('/api/projects', async (req, res) => {
     const result = await pool.query(sql, queryParams);
     res.json(result.rows);
   } catch (err) {
-    console.error("❌ Error fetching projects:", err.message);
+    console.error("âŒ Error fetching projects:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -2870,11 +3653,11 @@ app.post('/api/validate-project', async (req, res) => {
     // --- DUAL WRITE: VALIDATE PROJECT ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Project Validation...");
+        console.log("ðŸ”„ Dual-Write: Syncing Project Validation...");
         await poolNew.query(query, [status, projectId, remarks || '', userName]);
-        console.log("✅ Dual-Write: Project Validation Synced!");
+        console.log("âœ… Dual-Write: Project Validation Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Validate Project):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Validate Project):", dwErr.message);
       }
     }
   } catch (err) {
@@ -2898,7 +3681,7 @@ app.post('/api/upload-image', async (req, res) => {
     // --- DUAL WRITE: UPLOAD IMAGE ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Project Image...");
+        console.log("ðŸ”„ Dual-Write: Syncing Project Image...");
         // Re-use query? Yes.
         // NOTE: The ID returned might be different on secondary, but we don't return it here for dual-write context.
         // We just ensure the image exists there.
@@ -2923,15 +3706,15 @@ app.post('/api/upload-image', async (req, res) => {
                 VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1), $2, $3);
             `;
           await poolNew.query(dwQuery, [ipc, imageData, uploadedBy]);
-          console.log("✅ Dual-Write: Project Image Synced via IPC!");
+          console.log("âœ… Dual-Write: Project Image Synced via IPC!");
         }
 
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Upload Image):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Upload Image):", dwErr.message);
       }
     }
   } catch (err) {
-    console.error("❌ Image Upload Error:", err.message);
+    console.error("âŒ Image Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save image to database" });
   }
 });
@@ -2945,7 +3728,7 @@ app.get('/api/project-images/:projectId', async (req, res) => {
     const result = await pool.query(query, [projectId]);
     res.json(result.rows);
   } catch (err) {
-    console.error("❌ Error fetching project images:", err.message);
+    console.error("âŒ Error fetching project images:", err.message);
     res.status(500).json({ error: "Failed to fetch images" });
   }
 });
@@ -2963,7 +3746,7 @@ app.get('/api/image/:id', async (req, res) => {
 
     res.json({ id, image_data: result.rows[0].image_data });
   } catch (err) {
-    console.error("❌ Error fetching image blob:", err.message);
+    console.error("âŒ Error fetching image blob:", err.message);
     res.status(500).json({ error: "Failed to fetch image" });
   }
 });
@@ -2983,7 +3766,7 @@ app.get('/api/engineer-images/:engineerId', async (req, res) => {
     const result = await pool.query(query, [engineerId]);
     res.json(result.rows);
   } catch (err) {
-    console.error("❌ Error fetching engineer gallery:", err.message);
+    console.error("âŒ Error fetching engineer gallery:", err.message);
     res.status(500).json({ error: "Failed to fetch gallery" });
   }
 });
@@ -3124,7 +3907,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
     // --- DUAL WRITE: SAVE ORGANIZED CLASSES ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Organized Classes...");
+        console.log("ðŸ”„ Dual-Write: Syncing Organized Classes...");
         // 1. Replay Update
         await poolNew.query(query, [
           data.schoolId,
@@ -3151,10 +3934,10 @@ app.post('/api/save-organized-classes', async (req, res) => {
 
         // 2. Snapshot Update (Secondary)
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("✅ Dual-Write: Organized Classes Synced!");
+        console.log("âœ… Dual-Write: Organized Classes Synced!");
 
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Organized Classes):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Organized Classes):", dwErr.message);
       }
     }
   } catch (err) {
@@ -3230,7 +4013,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
   const d = req.body;
 
   // Logging to verify what the backend "sees"
-  console.log("📥 RECEIVED TEACHING PERSONNEL DATA:", JSON.stringify(d, null, 2));
+  console.log("ðŸ“¥ RECEIVED TEACHING PERSONNEL DATA:", JSON.stringify(d, null, 2));
   console.log("Saving for UID:", d.uid);
 
   try {
@@ -3277,23 +4060,23 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
     const result = await pool.query(query, values);
 
     if (result.rowCount === 0) {
-      console.error("❌ SQL matched 0 rows for UID:", d.uid);
+      console.error("âŒ SQL matched 0 rows for UID:", d.uid);
       return res.status(404).json({ error: "No matching record found in Database." });
     }
 
-    console.log("✅ Record Updated Successfully for School:", result.rows[0].school_id);
+    console.log("âœ… Record Updated Successfully for School:", result.rows[0].school_id);
     await calculateSchoolProgress(result.rows[0].school_id, pool); // SNAPSHOT UPDATE (Primary)
 
     // --- DUAL WRITE: TEACHING PERSONNEL ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Teaching Personnel...");
+        console.log("ðŸ”„ Dual-Write: Syncing Teaching Personnel...");
         await poolNew.query(query, values);
         // Snapshot secondary
         await calculateSchoolProgress(result.rows[0].school_id, poolNew);
-        console.log("✅ Dual-Write: Teaching Personnel Synced!");
+        console.log("âœ… Dual-Write: Teaching Personnel Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Teaching Personnel):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Teaching Personnel):", dwErr.message);
       }
     }
 
@@ -3301,7 +4084,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
 
 
   } catch (err) {
-    console.error("❌ Database Error:", err.message);
+    console.error("âŒ Database Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -3365,7 +4148,7 @@ app.post('/api/save-learning-modalities', async (req, res) => {
     // --- DUAL WRITE: LEARNING MODALITIES ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Learning Modalities...");
+        console.log("ðŸ”„ Dual-Write: Syncing Learning Modalities...");
         await poolNew.query(query, [
           data.schoolId,
           data.shift_kinder, data.shift_g1, data.shift_g2, data.shift_g3, data.shift_g4, data.shift_g5, data.shift_g6,
@@ -3377,9 +4160,9 @@ app.post('/api/save-learning-modalities', async (req, res) => {
           data.adm_mdl, data.adm_odl, data.adm_tvi, data.adm_blended, data.adm_others
         ]);
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("✅ Dual-Write: Learning Modalities Synced!");
+        console.log("âœ… Dual-Write: Learning Modalities Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Learning Modalities):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Learning Modalities):", dwErr.message);
       }
     }
   } catch (err) {
@@ -3475,7 +4258,7 @@ app.post('/api/save-school-resources', async (req, res) => {
     // --- DUAL WRITE: SCHOOL RESOURCES ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing School Resources...");
+        console.log("ðŸ”„ Dual-Write: Syncing School Resources...");
         await poolNew.query(query, [
           data.schoolId,
           data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
@@ -3506,9 +4289,9 @@ app.post('/api/save-school-resources', async (req, res) => {
           data.res_handwash_func || 0, data.res_handwash_nonfunc || 0
         ]);
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("✅ Dual-Write: School Resources Synced!");
+        console.log("âœ… Dual-Write: School Resources Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (School Resources):", dwErr.message);
+        console.error("âŒ Dual-Write Error (School Resources):", dwErr.message);
       }
     }
   } catch (err) {
@@ -3573,7 +4356,7 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     // --- DUAL WRITE: PHYSICAL FACILITIES ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Physical Facilities...");
+        console.log("ðŸ”„ Dual-Write: Syncing Physical Facilities...");
         await poolNew.query(query, [
           data.schoolId,
           data.build_classrooms_total,
@@ -3583,9 +4366,9 @@ app.post('/api/save-physical-facilities', async (req, res) => {
           data.build_classrooms_demolition
         ]);
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("✅ Dual-Write: Physical Facilities Synced!");
+        console.log("âœ… Dual-Write: Physical Facilities Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Physical Facilities):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Physical Facilities):", dwErr.message);
       }
     }
   } catch (err) {
@@ -3657,12 +4440,12 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
         // --- DUAL WRITE: TEACHER SPECIALIZATION ---
         if (poolNew) {
           try {
-            console.log("🔄 Dual-Write: Syncing Teacher Specialization...");
+            console.log("ðŸ”„ Dual-Write: Syncing Teacher Specialization...");
             await poolNew.query(query, values);
             await calculateSchoolProgress(spRes.rows[0].school_id, poolNew);
-            console.log("✅ Dual-Write: Teacher Specialization Synced!");
+            console.log("âœ… Dual-Write: Teacher Specialization Synced!");
           } catch (dwErr) {
-            console.error("❌ Dual-Write Error (Teacher Specialization):", dwErr.message);
+            console.error("âŒ Dual-Write Error (Teacher Specialization):", dwErr.message);
           }
         }
       }
@@ -3698,7 +4481,12 @@ app.get('/api/monitoring/stats', async (req, res) => {
         COALESCE(SUM(CASE WHEN sp.f8_facilities > 0 THEN 1 ELSE 0 END), 0) as facilities,
         
         -- Overall Completion (100%)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools_count
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools_count,
+        
+        -- System Validated Count (All Completed NEGATING Critical)
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (sp.data_health_description IS DISTINCT FROM 'Critical') THEN 1 END), 0) as validated_schools_count,
+        -- Critical Issues Count (Strictly Critical)
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND sp.data_health_description = 'Critical' THEN 1 END), 0) as critical_schools_count
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       WHERE TRIM(s.region) = TRIM($1)
@@ -3731,7 +4519,8 @@ app.get('/api/monitoring/stats', async (req, res) => {
       resources: parseInt(row.resources || 0),
       facilities: parseInt(row.facilities || 0),
       learner_stats: parseInt(row.learner_stats || 0), // Added explicit return if needed
-      completed_schools_count: parseInt(row.completed_schools_count || 0)
+      completed_schools_count: parseInt(row.completed_schools_count || 0),
+      validated_schools_count: parseInt(row.validated_schools_count || 0)
     };
 
     res.json(safeRow);
@@ -3753,6 +4542,8 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         s.division, 
         COUNT(s.school_id) as total_schools, 
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.data_health_description = 'Critical' THEN 1 END) as critical_schools,
         ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
@@ -3780,6 +4571,8 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
         s.district,
         COUNT(s.school_id) as total_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
+        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.data_health_description = 'Critical' THEN 1 END) as critical_schools,
         ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
@@ -3804,55 +4597,67 @@ app.get('/api/monitoring/schools', async (req, res) => {
     const limitNum = parseInt(limit) || 20;
     const offset = (pageNum - 1) * limitNum;
 
-    // Base WHERE
-    let whereClauses = [`TRIM(sp.region) = TRIM($1)`];
+    // Base WHERE using schools table (source of truth)
+    let whereClauses = [`TRIM(s.region) = TRIM($1)`];
     let params = [region];
 
     if (division) {
-      whereClauses.push(`TRIM(sp.division) = TRIM($${params.length + 1})`);
+      whereClauses.push(`TRIM(s.division) = TRIM($${params.length + 1})`);
       params.push(division);
     }
 
     if (req.query.district) {
-      whereClauses.push(`TRIM(sp.district) = TRIM($${params.length + 1})`);
+      whereClauses.push(`TRIM(s.district) = TRIM($${params.length + 1})`);
       params.push(req.query.district);
     }
 
     if (search) {
-      whereClauses.push(`(sp.school_name ILIKE $${params.length + 1} OR sp.school_id ILIKE $${params.length + 1})`);
+      whereClauses.push(`(s.school_name ILIKE $${params.length + 1} OR s.school_id ILIKE $${params.length + 1})`);
       params.push(`%${search}%`);
     }
 
-    // common SELECT fields
+    // common SELECT fields with SAFE casting
+    // We use schools table (s) for identity
+    // We use school_profiles (sp) for status, handling NULLs with COALESCE
     const selectFields = `
-      sp.school_name,
-      sp.school_id,
-      sp.total_enrollment,
-      (f1_profile::int > 0) as profile_status,
-      (f2_head::int > 0) as head_status,
-      (f3_enrollment::int > 0) as enrollment_status,
-      (f4_classes::int > 0) as classes_status,
-      (f9_shifting::int > 0) as shifting_status,
-      (f5_teachers::int > 0) as personnel_status,
-      (f6_specialization::int > 0) as specialization_status,
-      (f7_resources::int > 0) as resources_status,
-      (f10_stats::int > 0) as learner_stats_status,
-      (f8_facilities::int > 0) as facilities_status,
-      sp.completion_percentage,
-      sp.submitted_by
+      s.school_name,
+      s.school_id,
+      COALESCE(sp.total_enrollment, 0) as total_enrollment,
+      
+      (COALESCE(sp.f1_profile, 0) > 0) as profile_status,
+      (COALESCE(sp.f2_head, 0) > 0) as head_status,
+      (COALESCE(sp.f3_enrollment, 0) > 0) as enrollment_status,
+      (COALESCE(sp.f4_classes, 0) > 0) as classes_status,
+      (COALESCE(sp.f9_shifting, 0) > 0) as shifting_status,
+      (COALESCE(sp.f5_teachers, 0) > 0) as personnel_status,
+      (COALESCE(sp.f6_specialization, 0) > 0) as specialization_status,
+      (COALESCE(sp.f7_resources, 0) > 0) as resources_status,
+      (COALESCE(sp.f10_stats, 0) > 0) as learner_stats_status,
+      (COALESCE(sp.f8_facilities, 0) > 0) as facilities_status,
+      
+      COALESCE(sp.completion_percentage, 0) as completion_percentage,
+      sp.submitted_by,
+      sp.school_head_validation,
+      sp.data_health_description
     `;
 
-    // COUNT Query
-    const countQuery = `SELECT COUNT(*) as total FROM school_profiles sp WHERE ${whereClauses.join(' AND ')}`;
-    const countRes = await pool.query(countQuery, params); // Use same params (including search)
+    // COUNT Query (Count from schools table)
+    const countQuery = `
+      SELECT COUNT(*) as total 
+      FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id 
+      WHERE ${whereClauses.join(' AND ')}
+    `;
+    const countRes = await pool.query(countQuery, params);
     const totalItems = parseInt(countRes.rows[0].total);
 
     // DATA Query
     const dataQuery = `
       SELECT ${selectFields}
-      FROM school_profiles sp
+      FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       WHERE ${whereClauses.join(' AND ')}
-      ORDER BY sp.school_name ASC
+      ORDER BY s.school_name ASC
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
@@ -4248,12 +5053,12 @@ app.post('/api/save-learner-statistics', async (req, res) => {
     // --- DUAL WRITE: LEARNER STATISTICS ---
     if (poolNew) {
       try {
-        console.log("🔄 Dual-Write: Syncing Learner Stats...");
+        console.log("ðŸ”„ Dual-Write: Syncing Learner Stats...");
         await poolNew.query(query, values);
         await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("✅ Dual-Write: Learner Stats Synced!");
+        console.log("âœ… Dual-Write: Learner Stats Synced!");
       } catch (dwErr) {
-        console.error("❌ Dual-Write Error (Learner Stats):", dwErr.message);
+        console.error("âŒ Dual-Write Error (Learner Stats):", dwErr.message);
       }
     }
 
@@ -4325,11 +5130,11 @@ const isMainModule = path.resolve(executedFile).toLowerCase() === path.resolve(c
 
 // --- 1. GLOBAL ERROR HANDLERS TO PREVENT SILENT CRASHES ---
 process.on('uncaughtException', (err) => {
-  console.error('❌ UNCAUGHT EXCEPTION:', err);
+  console.error('âŒ UNCAUGHT EXCEPTION:', err);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ UNHANDLED REJECTION:', reason);
+  console.error('âŒ UNHANDLED REJECTION:', reason);
 });
 
 // Always start if strictly detected as main, OR if explicitly forced by env (fallback)
@@ -4348,20 +5153,39 @@ if (isMainModule || process.env.START_SERVER === 'true') {
 
 
   const server = app.listen(PORT, () => {
-    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
-    console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
-    console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+    console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
+    console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
+    console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
   });
 
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+      console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
     } else {
-      console.error("❌ Server Error:", e);
+      console.error("âŒ Server Error:", e);
     }
   });
 }
 
+
 // 2. FOR VERCEL (Production)
 // Export default is required for ESM in Vercel
 export default app;
+
+// --- DEBUG ENDPOINT ---
+app.get('/api/debug/health-stats', async (req, res) => {
+    try {
+        const query = `
+      SELECT 
+        COALESCE(data_health_description, 'NULL') as status, 
+        COUNT(*) as count 
+      FROM school_profiles 
+      WHERE completion_percentage = 100 
+      GROUP BY data_health_description
+    `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});

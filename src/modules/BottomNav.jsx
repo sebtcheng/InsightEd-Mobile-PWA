@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Icons 
-import { TbHomeEdit, TbCloudUpload, TbClipboardList } from "react-icons/tb";
+import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare } from "react-icons/fi"; // Changed to Gear icon
 
@@ -16,7 +16,7 @@ const BottomNav = ({ userRole }) => {
 
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
-        'Engineer': [
+        'Division Engineer': [
             { label: 'Home', path: '/engineer-dashboard', icon: TbHomeEdit },
             { label: 'Projects', path: '/engineer-projects', icon: TbClipboardList },
             { label: 'Sync', path: '/engineer-outbox', icon: TbCloudUpload },
@@ -54,6 +54,7 @@ const BottomNav = ({ userRole }) => {
         'School Division Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
             { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'Management', path: '/school-management', icon: TbSchool },
             //{ label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare }, 
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
