@@ -43,8 +43,21 @@ const NewProjects = () => {
     // --- NEW STATE FOR FAB AND IMAGES ---
     const fileInputRef = useRef(null);
     const [showUploadOptions, setShowUploadOptions] = useState(false);
-    const [selectedFiles, setSelectedFiles] = useState([]);
-    const [previews, setPreviews] = useState([]);
+    
+    // Split State for Internal/External
+    const [internalFiles, setInternalFiles] = useState([]);
+    const [internalPreviews, setInternalPreviews] = useState([]);
+    
+    const [externalFiles, setExternalFiles] = useState([]);
+    const [externalPreviews, setExternalPreviews] = useState([]);
+    
+    const [activeCategory, setActiveCategory] = useState('Internal'); // To track which button clicked
+    
+    // Removed legacy selectedFiles/previews
+    const [selectedFiles, setSelectedFiles] = useState([]); // Kept for backward compat checks if needed, but we will use the new ones. 
+    // Actually best to remove selectedFiles usage entirely to avoid confusion, but handleSubmit uses it. 
+    // I will update handleSubmit. Let's keep these lines commented out or remove them.
+
     const [documents, setDocuments] = useState({
         POW: null,
         DUPA: null,
@@ -177,17 +190,28 @@ const NewProjects = () => {
         const files = e.target.files;
         if (files) {
             const newFiles = Array.from(files);
-            // Limit removed
-            setSelectedFiles((prev) => [...prev, ...newFiles]);
-            
             const newPreviews = newFiles.map(file => URL.createObjectURL(file));
-            setPreviews(prev => [...prev, ...newPreviews]);
+            
+            if (activeCategory === 'Internal') {
+                setInternalFiles(prev => [...prev, ...newFiles]);
+                setInternalPreviews(prev => [...prev, ...newPreviews]);
+            } else {
+                setExternalFiles(prev => [...prev, ...newFiles]);
+                setExternalPreviews(prev => [...prev, ...newPreviews]);
+            }
         }
+        // Reset input
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const removeFile = (index) => {
-        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-        setPreviews(prev => prev.filter((_, i) => i !== index));
+    const removeFile = (index, category) => {
+        if (category === 'Internal') {
+            setInternalFiles(prev => prev.filter((_, i) => i !== index));
+            setInternalPreviews(prev => prev.filter((_, i) => i !== index));
+        } else {
+            setExternalFiles(prev => prev.filter((_, i) => i !== index));
+            setExternalPreviews(prev => prev.filter((_, i) => i !== index));
+        }
     };
 
     const handleDocumentSelect = (e, type) => {
@@ -206,7 +230,8 @@ const NewProjects = () => {
         setDocuments(prev => ({ ...prev, [type]: null }));
     };
 
-    const triggerFilePicker = (mode) => {
+    const triggerFilePicker = (mode, category) => {
+        setActiveCategory(category);
         if (fileInputRef.current) {
             if (mode === 'camera') {
                 fileInputRef.current.setAttribute('capture', 'environment');
@@ -272,7 +297,32 @@ const NewProjects = () => {
                 value = parts.join('.');
             }
         }
-        setFormData(prev => ({ ...prev, [name]: value }));
+        
+        setFormData(prev => {
+            const newData = { ...prev, [name]: value };
+            
+            // Auto-update percentage based on status
+            if (name === 'status') {
+                if (['Not Yet Started', 'Under Procurement'].includes(value)) {
+                    newData.accomplishmentPercentage = 0;
+                } else if (['Completed', 'For Final Inspection'].includes(value)) {
+                    newData.accomplishmentPercentage = 100;
+                }
+            }
+            // Auto-update status based on percentage
+            if (name === 'accomplishmentPercentage') {
+                 const percent = Number(value);
+                 if (percent === 100 && prev.status !== 'Completed') {
+                     newData.status = 'For Final Inspection';
+                 } else if (percent > 0 && percent < 100 && ['Not Yet Started', 'Under Procurement', 'Completed'].includes(prev.status)) {
+                     newData.status = 'Ongoing';
+                 } else if (percent === 0) {
+                     newData.status = 'Not Yet Started';
+                 }
+            }
+            
+            return newData;
+        });
     };
 
     // --- 4. SUBMIT LOGIC (3-STEP PROCESS) ---
@@ -296,7 +346,7 @@ const NewProjects = () => {
             return;
         }
 
-        if (selectedFiles.length === 0) {
+        if (internalFiles.length === 0 && externalFiles.length === 0) {
             alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
             return;
         }
@@ -327,11 +377,18 @@ const NewProjects = () => {
         setIsSubmitting(true);
 
         try {
-            // A. Prepare Images (Base64)
+            // A. Prepare Images (Base64) with Category
             const compressedImages = [];
-            for (const file of selectedFiles) {
+            
+            // Process Internal
+            for (const file of internalFiles) {
                 const base64 = await compressImage(file);
-                compressedImages.push(base64);
+                compressedImages.push({ image_data: base64, category: 'Internal' });
+            }
+            // Process External
+            for (const file of externalFiles) {
+                 const base64 = await compressImage(file);
+                 compressedImages.push({ image_data: base64, category: 'External' });
             }
 
             // B. Prepare Documents (Base64)
@@ -561,21 +618,87 @@ const NewProjects = () => {
                                     <option value="Completed">Completed</option>
                                 </select>
                             </div>
-                            <div>
-                                <div className="flex justify-between items-center mb-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
-                                    {!isDummy && (
-                                        <div className="flex gap-1">
-                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
-                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
-                                        </div>
-                                    )}
+                            {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+                                <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
+                                        {!isDummy && (
+                                            <div className="flex gap-1">
+                                                <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
+                                                <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                                 </div>
-                                <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
-                            </div>
+                            )}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status As Of Date</label>
                                 <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                        </div>
+
+                        {/* --- SITE PHOTOS SECTION (Moved Here) --- */}
+                        <div className="mt-4 pt-4 border-t border-slate-100">
+                            <SectionHeader title="Site Photos" icon="📸" />
+                            <div className="space-y-6">
+                                
+                                {/* INTERNAL PHOTOS */}
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
+                                        <span className="text-[10px] font-bold text-blue-500">{internalFiles.length} Added</span>
+                                    </div>
+                                    {!isDummy && (
+                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <button type="button" onClick={() => triggerFilePicker('camera', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
+                                            </button>
+                                            <button type="button" onClick={() => triggerFilePicker('gallery', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                    {internalPreviews.length > 0 && (
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {internalPreviews.map((url, index) => (
+                                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
+                                                    <img src={url} alt="internal" className="w-full h-full object-cover" />
+                                                    <button type="button" onClick={() => removeFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* EXTERNAL PHOTOS */}
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
+                                        <span className="text-[10px] font-bold text-blue-500">{externalFiles.length} Added</span>
+                                    </div>
+                                    {!isDummy && (
+                                        <div className="grid grid-cols-2 gap-3 mb-3">
+                                            <button type="button" onClick={() => triggerFilePicker('camera', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
+                                            </button>
+                                            <button type="button" onClick={() => triggerFilePicker('gallery', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                    {externalPreviews.length > 0 && (
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {externalPreviews.map((url, index) => (
+                                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
+                                                    <img src={url} alt="external" className="w-full h-full object-cover" />
+                                                    <button type="button" onClick={() => removeFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                
                             </div>
                         </div>
 
@@ -675,51 +798,7 @@ const NewProjects = () => {
                              ))}
                         </div>
 
-                        {/* --- SITE PHOTOS SECTION --- */}
-                        <div className="mt-4 pt-4 border-t border-slate-100">
-                            <div className="flex justify-between items-center mb-3">
-                                <label className="block text-xs font-bold text-slate-500 uppercase">Attach Site Photos</label>
-                                <span className="text-[10px] font-bold text-blue-500">{selectedFiles.length} Images Added</span>
-                            </div>
-                            {!isDummy && (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => triggerFilePicker('camera')}
-                                        className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
-                                    >
-                                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">📸</div>
-                                        <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">Take Photo</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => triggerFilePicker('gallery')}
-                                        className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all group"
-                                    >
-                                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">🖼️</div>
-                                        <span className="text-xs font-bold text-slate-600 group-hover:text-blue-600">From Gallery</span>
-                                    </button>
-                                </div>
-                            )}
 
-                            {previews.length > 0 && (
-                                <div className="grid grid-cols-4 gap-3 p-2 bg-slate-50 rounded-2xl border border-slate-100 mt-3">
-                                    {previews.map((url, index) => (
-                                        <div key={index} className="relative group aspect-square rounded-xl overflow-hidden shadow-sm ring-2 ring-white">
-                                            <img src={url} alt="preview" className="w-full h-full object-cover" />
-                                            <button
-                                                type="button"
-                                                onClick={() => removeFile(index)}
-                                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center shadow-md active:scale-95"
-                                            >✕</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            {isDummy && (
-                                <p className="text-xs text-slate-400 italic text-center py-4">Photo uploading disabled in preview mode.</p>
-                            )}
-                        </div>
 
                     </div>
 

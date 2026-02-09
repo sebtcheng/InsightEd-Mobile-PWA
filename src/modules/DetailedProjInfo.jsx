@@ -232,13 +232,13 @@ const DetailedProjInfo = () => {
                     </div>
 
                     {/* Photos Section */}
-                    <div className="space-y-3">
+                    <div className="space-y-6 pt-4 border-t border-slate-200">
                         <div className="flex items-center justify-between px-1">
-                            <h3 className="text-slate-700 font-bold text-sm flex items-center gap-2">
-                                <TbPhoto /> Project Photos
+                             <h3 className="text-slate-700 font-bold text-sm flex items-center gap-2">
+                                <TbPhoto /> Project Documentation
                             </h3>
-                            <span className="bg-slate-200 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full">
-                                {projectImages.length} Images
+                             <span className="bg-slate-200 text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full">
+                                {projectImages.length} Total
                             </span>
                         </div>
 
@@ -246,21 +246,101 @@ const DetailedProjInfo = () => {
                             <div className="bg-white rounded-2xl p-8 border border-slate-100 flex justify-center">
                                 <div className="w-8 h-8 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin"></div>
                             </div>
-                        ) : projectImages.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-3">
-                                {projectImages.map((img, idx) => (
-                                    <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
-                                        <img src={img.image_url || img.image_data} alt={`Project ${idx}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
-                                            <p className="text-white text-[10px] font-medium truncate w-full">By: {img.uploaded_by}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
                         ) : (
-                            <div className="bg-white rounded-2xl p-8 text-center border border-dashed border-slate-200 text-slate-400 text-sm">
-                                No photos available for this project.
-                            </div>
+                            <>
+                                {/* INTERNAL */}
+                                <div>
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">Internal Photos</h4>
+                                    {projectImages.filter(img => img.category === 'Internal' || !img.category).length > 0 ? (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {projectImages.filter(img => img.category === 'Internal' || !img.category).map((img, idx) => {
+                                                const getImageSrc = (imageItem) => {
+                                                    if (imageItem.image_url) return imageItem.image_url;
+                                                    if (imageItem.image_data) {
+                                                        // Check for JSON stringified data (The Fix for 431 Error)
+                                                        if (typeof imageItem.image_data === 'string' && imageItem.image_data.trim().startsWith('{')) {
+                                                            try {
+                                                                const parsed = JSON.parse(imageItem.image_data);
+                                                                // Recursively check if the parsed object has image_data or is the data itself
+                                                                return parsed.image_data || parsed; 
+                                                            } catch (e) {
+                                                                console.warn("Failed to parse potential JSON image data", e);
+                                                                return imageItem.image_data; // Fallback
+                                                            }
+                                                        }
+                                                        return imageItem.image_data;
+                                                    }
+                                                    return null;
+                                                };
+                                                const imgSrc = getImageSrc(img);
+
+                                                return (
+                                                <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
+                                                    <img 
+                                                        src={imgSrc} 
+                                                        alt={`Internal ${idx}`} 
+                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                                                        onError={(e) => {e.target.style.display = 'none'}}
+                                                    />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
+                                                        <p className="text-white text-[10px] font-medium truncate w-full">By: {img.uploaded_by}</p>
+                                                    </div>
+                                                </div>
+                                            )})}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-dashed border-slate-200 text-slate-400 text-xs italic">
+                                            No internal photos uploaded.
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* EXTERNAL */}
+                                <div>
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1 ml-1">External Photos</h4>
+                                    {projectImages.filter(img => img.category === 'External').length > 0 ? (
+                                         <div className="grid grid-cols-2 gap-3">
+                                            {projectImages.filter(img => img.category === 'External').map((img, idx) => {
+                                                 const getImageSrc = (imageItem) => {
+                                                    if (imageItem.image_url) return imageItem.image_url;
+                                                    if (imageItem.image_data) {
+                                                        // Check for JSON stringified data (The Fix for 431 Error)
+                                                        if (typeof imageItem.image_data === 'string' && imageItem.image_data.trim().startsWith('{')) {
+                                                            try {
+                                                                const parsed = JSON.parse(imageItem.image_data);
+                                                                return parsed.image_data || parsed; 
+                                                            } catch (e) {
+                                                                console.warn("Failed to parse potential JSON image data", e);
+                                                                return imageItem.image_data; // Fallback
+                                                            }
+                                                        }
+                                                        return imageItem.image_data;
+                                                    }
+                                                    return null;
+                                                };
+                                                const imgSrc = getImageSrc(img);
+
+                                                return (
+                                                <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-200 shadow-sm border border-white group">
+                                                    <img 
+                                                        src={imgSrc} 
+                                                        alt={`External ${idx}`} 
+                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                                                        onError={(e) => {e.target.style.display = 'none'}}
+                                                    />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
+                                                        <p className="text-white text-[10px] font-medium truncate w-full">By: {img.uploaded_by}</p>
+                                                    </div>
+                                                </div>
+                                            )})}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-slate-50 rounded-xl p-4 text-center border border-dashed border-slate-200 text-slate-400 text-xs italic">
+                                            No external photos uploaded.
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </div>
 

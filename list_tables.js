@@ -14,7 +14,8 @@ const run = async () => {
             WHERE table_schema = 'public' 
             ORDER BY table_name
         `);
-        console.log('Tables:', res.rows.map(r => r.table_name));
+        console.log('Tables:');
+        res.rows.forEach(r => console.log(r.table_name));
     } catch (err) {
         console.error(err);
     } finally {

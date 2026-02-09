@@ -329,6 +329,26 @@ const runMigrations = async (client, dbLabel) => {
             ADD COLUMN IF NOT EXISTS longitude TEXT,
             ADD COLUMN IF NOT EXISTS engineer_name TEXT;
         `);
+
+        // --- 8b. ENGINEER IMAGE EXTENSIONS ---
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS engineer_image (
+                    id SERIAL PRIMARY KEY,
+                    project_id INTEGER REFERENCES engineer_form(project_id),
+                    image_data TEXT,
+                    uploaded_by TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            await client.query(`
+                ALTER TABLE engineer_image 
+                ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Internal';
+            `);
+            console.log(`✅ [${dbLabel}] Engineer Image Schema Updated`);
+        } catch (imgErr) {
+            console.error(`❌ [${dbLabel}] Failed to migrate engineer_image:`, imgErr.message);
+        }
         await client.query(`
           ALTER TABLE engineer_form 
           DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 

@@ -242,7 +242,8 @@ const EditProjectModal = ({
   onSave,
   onCameraClick,
   onGalleryClick,
-  previews,
+  internalPreviews,
+  externalPreviews,
   onRemoveFile,
   isUploading
 }) => {
@@ -403,30 +404,89 @@ const EditProjectModal = ({
                 </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center ml-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
-                <div className="flex gap-1.5">
-                  <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
-                  <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
+            {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center ml-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Percentage (%)</label>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 5)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+5%</button>
+                    <button type="button" onClick={() => handleUpdatePercentage(Number(formData.accomplishmentPercentage || 0) + 10)} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded hover:bg-blue-100 transition">+10%</button>
+                  </div>
                 </div>
+                <input
+                  type="number"
+                  name="accomplishmentPercentage"
+                  value={formData.accomplishmentPercentage}
+                  onChange={handleChange}
+                  min="0"
+                  max="100"
+                  disabled={isDisabledPercentageInput}
+                  className={`w-full p-3 border rounded-2xl text-sm font-black text-center ${isDisabledPercentageInput
+                    ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                    : "bg-blue-50 text-[#004A99] border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    }`}
+                />
               </div>
-              <input
-                type="number"
-                name="accomplishmentPercentage"
-                value={formData.accomplishmentPercentage}
-                onChange={handleChange}
-                min="0"
-                max="100"
-                disabled={isDisabledPercentageInput}
-                className={`w-full p-3 border rounded-2xl text-sm font-black text-center ${isDisabledPercentageInput
-                  ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
-                  : "bg-blue-50 text-[#004A99] border-blue-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                  }`}
-              />
-            </div>
+            )}
           </div>
+          
+          {/* --- SITE PHOTOS SECTION (Moved Here) --- */}
+           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Site Photos</h3>
+             <div className="space-y-4">
+                 {/* Internal */}
+                 <div>
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-slate-600 uppercase">Internal</span>
+                        <span className="text-[9px] font-bold text-blue-500">{internalPreviews?.length || 0} Added</span>
+                    </div>
+                     <div className="flex gap-2 mb-2">
+                        <button onClick={() => onCameraClick('Internal')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                            📷 Camera
+                        </button>
+                        <button onClick={() => onGalleryClick('Internal')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                            🖼️ Gallery
+                        </button>
+                     </div>
+                     {internalPreviews?.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2">
+                            {internalPreviews.map((url, index) => (
+                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
+                                    <img src={url} alt="internal" className="w-full h-full object-cover" />
+                                    <button onClick={() => onRemoveFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                     )}
+                 </div>
 
+                 {/* External */}
+                 <div>
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-slate-600 uppercase">External</span>
+                         <span className="text-[9px] font-bold text-blue-500">{externalPreviews?.length || 0} Added</span>
+                    </div>
+                     <div className="flex gap-2 mb-2">
+                        <button onClick={() => onCameraClick('External')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                            📷 Camera
+                        </button>
+                        <button onClick={() => onGalleryClick('External')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                            🖼️ Gallery
+                        </button>
+                     </div>
+                     {externalPreviews?.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2">
+                            {externalPreviews.map((url, index) => (
+                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
+                                    <img src={url} alt="external" className="w-full h-full object-cover" />
+                                    <button onClick={() => onRemoveFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                     )}
+                 </div>
+             </div>
+           </div>
           
           {/* --- LOCATION SECTION --- */}
           <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
@@ -525,43 +585,7 @@ const EditProjectModal = ({
             />
           </div>
 
-          <div className="space-y-3">
-            <div className="flex justify-between items-center ml-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Site Photos</label>
-              <span className="text-[10px] font-bold text-blue-500">{previews?.length || 0} Added</span>
-            </div>
 
-            <div className="flex gap-4">
-              <button
-                onClick={onCameraClick}
-                className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 hover:border-blue-400 hover:text-blue-500 transition-all active:scale-95"
-              >
-                <FiCamera size={20} />
-                <span className="text-[10px] font-black uppercase tracking-tighter">Snap Photo</span>
-              </button>
-              <button
-                onClick={onGalleryClick}
-                className="flex-1 py-4 bg-white border-2 border-dashed border-slate-200 text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 hover:border-blue-400 hover:text-blue-500 transition-all active:scale-95"
-              >
-                <FiImage size={20} />
-                <span className="text-[10px] font-black uppercase tracking-tighter">Upload Lab</span>
-              </button>
-            </div>
-
-            {previews && previews.length > 0 && (
-              <div className="grid grid-cols-4 gap-3 p-2 bg-slate-50 rounded-2xl border border-slate-100 mt-2">
-                {previews.map((url, index) => (
-                  <div key={index} className="relative group aspect-square rounded-xl overflow-hidden shadow-sm ring-2 ring-white">
-                    <img src={url} alt="preview" className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => onRemoveFile(index)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* --- FOOTER --- */}
@@ -623,8 +647,14 @@ const EngineerProjects = () => {
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [previews, setPreviews] = useState([]);
+  
+  // Categorized State
+  const [internalFiles, setInternalFiles] = useState([]);
+  const [internalPreviews, setInternalPreviews] = useState([]);
+  const [externalFiles, setExternalFiles] = useState([]);
+  const [externalPreviews, setExternalPreviews] = useState([]);
+  const [activeCategory, setActiveCategory] = useState('Internal');
+
 
   // AI Modal State
   const [aiModalOpen, setAiModalOpen] = useState(false);
@@ -757,7 +787,10 @@ const EngineerProjects = () => {
   const handleViewProject = (project) => navigate(`/project-details/${project.id}`);
   const handleEditProject = (project) => {
     setSelectedProject(project);
-    setPreviews([]); // Clear old previews
+    setInternalFiles([]);
+    setInternalPreviews([]);
+    setExternalFiles([]);
+    setExternalPreviews([]); // Clear old previews
     setEditModalOpen(true);
   };
 
@@ -766,7 +799,7 @@ const EngineerProjects = () => {
     if (!user) return;
     
     // CHECK: Mandatory Photo Upload
-    if (selectedFiles.length === 0) {
+    if (internalFiles.length === 0 && externalFiles.length === 0) {
         alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project update.");
         return;
     }
@@ -787,18 +820,25 @@ const EngineerProjects = () => {
           body: body,
           formName: `Update: ${updatedProject.schoolName}`
         });
-        if (selectedFiles.length > 0) {
-          for (const file of selectedFiles) {
+        
+        // Save images offline
+        const allFiles = [
+            ...internalFiles.map(f => ({ file: f, category: 'Internal' })), 
+            ...externalFiles.map(f => ({ file: f, category: 'External' }))
+        ];
+
+        if (allFiles.length > 0) {
+          for (const item of allFiles) {
             try {
-              const base64Image = await compressImage(file);
+              const base64Image = await compressImage(item.file);
               await addEngineerToOutbox({
                 url: `${API_BASE}/api/upload-image`,
                 method: 'POST',
-                body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid },
-                formName: `Photo: ${updatedProject.schoolName}`
+                body: { projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid, category: item.category },
+                formName: `Photo (${item.category}): ${updatedProject.schoolName}`
               });
             } catch (err) {
-              console.error("Compression failed for file:", file.name, err);
+              console.error("Compression failed for file:", item.file.name, err);
             }
           }
         }
@@ -807,29 +847,39 @@ const EngineerProjects = () => {
         setEditModalOpen(false);
         return;
       }
+
+      // Online Save Project
       const response = await fetch(`${API_BASE}/api/update-project/${updatedProject.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Update failed");
-      if (selectedFiles.length > 0) {
-        for (const file of selectedFiles) {
+
+      // Online Upload Images
+      const allFiles = [
+            ...internalFiles.map(f => ({ file: f, category: 'Internal' })), 
+            ...externalFiles.map(f => ({ file: f, category: 'External' }))
+      ];
+
+      if (allFiles.length > 0) {
+        for (const item of allFiles) {
           try {
-            const base64Image = await compressImage(file);
+            const base64Image = await compressImage(item.file);
             await fetch(`${API_BASE}/api/upload-image`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid }),
+              body: JSON.stringify({ projectId: updatedProject.id, imageData: base64Image, uploadedBy: user.uid, category: item.category }),
             });
           } catch (err) {
-            console.error("Compression failed for file:", file.name, err);
+            console.error("Compression failed for file:", item.file.name, err);
           }
         }
       }
       setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
       alert("Success: Changes synced to database!");
-      setSelectedFiles([]);
+      setInternalFiles([]);
+      setExternalFiles([]);
       setEditModalOpen(false);
     } catch (err) {
       console.error("Save Error:", err);
@@ -844,18 +894,28 @@ const EngineerProjects = () => {
     if (files.length === 0) return;
 
     // Limit removed
-
-
     const validFiles = files.filter(file => file.size <= 5 * 1024 * 1024);
     const newPreviews = validFiles.map(file => URL.createObjectURL(file));
-    setSelectedFiles(prev => [...prev, ...validFiles]);
-    setPreviews(prev => [...prev, ...newPreviews]);
+    
+    if (activeCategory === 'Internal') {
+        setInternalFiles(prev => [...prev, ...validFiles]);
+        setInternalPreviews(prev => [...prev, ...newPreviews]);
+    } else {
+        setExternalFiles(prev => [...prev, ...validFiles]);
+        setExternalPreviews(prev => [...prev, ...newPreviews]);
+    }
+    
     e.target.value = null;
   };
 
-  const removeFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-    setPreviews(prev => prev.filter((_, i) => i !== index));
+  const removeFile = (index, category) => {
+    if (category === 'Internal') {
+        setInternalFiles(prev => prev.filter((_, i) => i !== index));
+        setInternalPreviews(prev => prev.filter((_, i) => i !== index));
+    } else {
+        setExternalFiles(prev => prev.filter((_, i) => i !== index));
+        setExternalPreviews(prev => prev.filter((_, i) => i !== index));
+    }
   };
 
   return (
@@ -941,9 +1001,16 @@ const EngineerProjects = () => {
           isOpen={editModalOpen}
           onClose={() => setEditModalOpen(false)}
           onSave={handleSaveProject}
-          onCameraClick={() => cameraInputRef.current?.click()}
-          onGalleryClick={() => fileInputRef.current?.click()}
-          previews={previews}
+          onCameraClick={(category) => {
+             setActiveCategory(category);
+             cameraInputRef.current?.click();
+          }}
+          onGalleryClick={(category) => {
+             setActiveCategory(category);
+             fileInputRef.current?.click();
+          }}
+          internalPreviews={internalPreviews}
+          externalPreviews={externalPreviews}
           onRemoveFile={removeFile}
           isUploading={isUploading}
         />
