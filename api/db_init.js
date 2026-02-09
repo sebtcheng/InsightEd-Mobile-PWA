@@ -50,6 +50,25 @@ const runMigrations = async (client, dbLabel) => {
         console.error(`❌ [${dbLabel}] Failed to init notifications table:`, tableErr.message);
     }
 
+    // --- 2.5. ACTIVITY LOGS TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS activity_logs (
+                log_id SERIAL PRIMARY KEY,
+                user_uid TEXT,
+                user_name TEXT,
+                role TEXT,
+                action_type TEXT,
+                target_entity TEXT,
+                details TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log(`✅ [${dbLabel}] Activity Logs Table Initialized`);
+    } catch (tableErr) {
+        console.error(`❌ [${dbLabel}] Failed to init activity_logs table:`, tableErr.message);
+    }
+
     // --- 3. SCHOOL PROFILES EXTENSIONS ---
     try {
         // Add Email

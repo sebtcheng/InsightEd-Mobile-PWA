@@ -1111,7 +1111,8 @@ const MonitoringDashboard = () => {
                                                         // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
                                                         // Clamp to 100%
                                                         const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
-                                                        const percentage = Math.min(Math.round(rawPercentage), 100);
+                                                        // Use toFixed(1) to avoid rounding up to 100%
+                                                        const percentage = totalSchools > 0 ? Math.min(rawPercentage, 100).toFixed(1) : 0;
 
                                                         // Validation Percentages for Stacked Bar
                                                         const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;
@@ -1469,7 +1470,8 @@ const MonitoringDashboard = () => {
                                                         // 4. Calculate Percentage (User Logic: Completed Schools / Total Schools)
                                                         // Clamp to 100% to prevent edge cases
                                                         const rawPercentage = totalSchools > 0 ? (completedCount / totalSchools) * 100 : 0;
-                                                        const percentage = Math.min(Math.round(rawPercentage), 100);
+                                                        // Use toFixed(1) to avoid rounding up to 100%
+                                                        const percentage = totalSchools > 0 ? Math.min(rawPercentage, 100).toFixed(1) : 0;
 
                                                         // Validation Percentages for Stacked Bar
                                                         const validatedPct = totalSchools > 0 ? (validatedCount / totalSchools) * 100 : 0;

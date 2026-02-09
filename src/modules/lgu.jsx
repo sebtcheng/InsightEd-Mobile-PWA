@@ -37,7 +37,7 @@ const StatsOverview = ({ projects }) => {
   const isProjectDelayed = (p) => {
     if (p.status === ProjectStatus.Completed) return false;
     if (!p.targetCompletionDate) return false;
-    
+
     const target = new Date(p.targetCompletionDate);
     return now > target && p.accomplishmentPercentage < 100;
   };
@@ -46,7 +46,7 @@ const StatsOverview = ({ projects }) => {
     total: projects.length,
     completed: projects.filter((p) => p.status === ProjectStatus.Completed).length,
     delayed: projects.filter((p) => isProjectDelayed(p)).length,
-    ongoing: projects.filter((p) => 
+    ongoing: projects.filter((p) =>
       p.status === ProjectStatus.Ongoing && !isProjectDelayed(p)
     ).length,
     totalAllocation: projects.reduce(
@@ -56,123 +56,120 @@ const StatsOverview = ({ projects }) => {
   };
 
   return (
-      <div className="grid grid-cols-3 gap-2">
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
-            Allocation
-          </p>
-          <p className="text-sm font-bold text-[#004A99] dark:text-blue-400 mt-1">
-            {formatAllocation(stats.totalAllocation)}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
-            Projects
-          </p>
-          <p className="text-xl font-bold text-slate-800 dark:text-white mt-1">{stats.total}</p>
-        </div>
-        <div
-          className={`p-3 rounded-xl shadow-sm border flex flex-col justify-center items-center text-center ${
-            stats.delayed > 0
-              ? "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800"
-              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+    <div className="grid grid-cols-3 gap-2">
+      <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
+          Allocation
+        </p>
+        <p className="text-sm font-bold text-[#004A99] dark:text-blue-400 mt-1">
+          {formatAllocation(stats.totalAllocation)}
+        </p>
+      </div>
+      <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-center items-center text-center">
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wide">
+          Projects
+        </p>
+        <p className="text-xl font-bold text-slate-800 dark:text-white mt-1">{stats.total}</p>
+      </div>
+      <div
+        className={`p-3 rounded-xl shadow-sm border flex flex-col justify-center items-center text-center ${stats.delayed > 0
+            ? "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800"
+            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
           }`}
-        >
-          <p
-            className={`text-[10px] font-bold uppercase tracking-wide ${
-              stats.delayed > 0 ? "text-red-500 dark:text-red-400" : "text-slate-500 dark:text-slate-400"
+      >
+        <p
+          className={`text-[10px] font-bold uppercase tracking-wide ${stats.delayed > 0 ? "text-red-500 dark:text-red-400" : "text-slate-500 dark:text-slate-400"
             }`}
-          >
-            Delayed
-          </p>
-          <div className="flex items-center gap-1 mt-1">
-            <p
-              className={`text-xl font-bold ${
-                stats.delayed > 0 ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-white"
+        >
+          Delayed
+        </p>
+        <div className="flex items-center gap-1 mt-1">
+          <p
+            className={`text-xl font-bold ${stats.delayed > 0 ? "text-red-600 dark:text-red-400" : "text-slate-800 dark:text-white"
               }`}
-            >
-              {stats.delayed}
-            </p>
-            {stats.delayed > 0 && (
-              <span className="text-[10px] animate-pulse">⚠️</span>
-            )}
-          </div>
+          >
+            {stats.delayed}
+          </p>
+          {stats.delayed > 0 && (
+            <span className="text-[10px] animate-pulse">⚠️</span>
+          )}
         </div>
       </div>
+    </div>
   );
 };
 
 const StatsChart = ({ projects }) => {
-    const now = new Date();
-    const isProjectDelayed = (p) => {
-        if (p.status === ProjectStatus.Completed) return false;
-        if (!p.targetCompletionDate) return false;
-        const target = new Date(p.targetCompletionDate);
-        return now > target && p.accomplishmentPercentage < 100;
-    };
+  const now = new Date();
+  const isProjectDelayed = (p) => {
+    if (p.status === ProjectStatus.Completed) return false;
+    if (!p.targetCompletionDate) return false;
+    const target = new Date(p.targetCompletionDate);
+    return now > target && p.accomplishmentPercentage < 100;
+  };
 
-    const stats = {
-        total: projects.length,
-        completed: projects.filter((p) => p.status === ProjectStatus.Completed).length,
-        delayed: projects.filter((p) => isProjectDelayed(p)).length,
-        ongoing: projects.filter((p) => 
-          p.status === ProjectStatus.Ongoing && !isProjectDelayed(p)
-        ).length,
-    };
+  const stats = {
+    total: projects.length,
+    completed: projects.filter((p) => p.status === ProjectStatus.Completed).length,
+    delayed: projects.filter((p) => isProjectDelayed(p)).length,
+    ongoing: projects.filter((p) =>
+      p.status === ProjectStatus.Ongoing && !isProjectDelayed(p)
+    ).length,
+  };
 
-    const data = [
-        { name: "Completed", value: stats.completed, color: "#10B981" },
-        { name: "Ongoing", value: stats.ongoing, color: "#3B82F6" }, 
-        { name: "Delayed", value: stats.delayed, color: "#EF4444" },
-        {
-          name: "Others",
-          value: stats.total - (stats.completed + stats.ongoing + stats.delayed),
-          color: "#94A3B8",
-        },
-    ].filter((d) => d.value > 0);
+  const data = [
+    { name: "Completed", value: stats.completed, color: "#10B981" },
+    { name: "Ongoing", value: stats.ongoing, color: "#3B82F6" },
+    { name: "Delayed", value: stats.delayed, color: "#EF4444" },
+    {
+      name: "Others",
+      value: stats.total - (stats.completed + stats.ongoing + stats.delayed),
+      color: "#94A3B8",
+    },
+  ].filter((d) => d.value > 0);
 
-    return (
-      <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-        <div className="flex flex-col justify-center ml-2">
-          <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
-            Project Status Mix
-          </p>
-          <div className="text-[10px] text-slate-500 dark:text-slate-300 space-y-1">
-            {data.map((d) => (
-              <div key={d.name} className="flex items-center gap-2">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: d.color }}
-                ></span>
-                <span>
-                  {d.name}: {d.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="w-24 h-24 mr-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={18}
-                outerRadius={35}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
+  return (
+    <div className="bg-white dark:bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+      <div className="flex flex-col justify-center ml-2">
+        <p className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2">
+          Project Status Mix
+        </p>
+        <div className="text-[10px] text-slate-500 dark:text-slate-300 space-y-1">
+          {data.map((d) => (
+            <div key={d.name} className="flex items-center gap-2">
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: d.color }}
+              ></span>
+              <span>
+                {d.name}: {d.value}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
-    );
+      <div className="w-24 h-24 mr-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={18}
+              outerRadius={35}
+              paddingAngle={5}
+              dataKey="value"
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 }
 
 // --- MAIN DASHBOARD COMPONENT ---
@@ -181,7 +178,7 @@ const LguDashboard = () => {
   const [userName, setUserName] = useState("User");
   const [userRole, setUserRole] = useState("");
   const [projects, setProjects] = useState([]);
-  const [activities, setActivities] = useState([]); 
+  const [activities, setActivities] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const API_BASE = "";
@@ -202,77 +199,90 @@ const LguDashboard = () => {
         }
 
         try {
-            setIsLoading(true);
-            let url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
-            let currentProjects = [];
-            
-            if (currentRole === 'Super User') {
-                 url = `${API_BASE}/api/projects`; // Fetch all
+          setIsLoading(true);
+
+          // DEFAULT: Fetch all projects if Super User
+          let url = `${API_BASE}/api/projects`;
+
+          // CUSTOM LOGIC: Filter by Municipality for LGU
+          if (currentRole === 'Local Government Unit') {
+            // Ensure we have a valid city/municipality from user profile
+            if (userData.city) {
+              url = `${API_BASE}/api/projects?municipality=${encodeURIComponent(userData.city)}`;
+            } else if (userData.municipality) {
+              url = `${API_BASE}/api/projects?municipality=${encodeURIComponent(userData.municipality)}`;
+            } else {
+              console.warn("LGU user has no city/municipality defined.");
+            }
+          } else if (currentRole === 'Division Engineer') {
+            url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
+          }
+
+          let currentProjects = [];
+
+          // ENGINEER: Stale-While-Revalidate Strategy
+
+          // 1. Immediate Cache Load (Fast Render)
+          try {
+            const cachedData = await getCachedProjects();
+            if (cachedData && cachedData.length > 0) {
+              // If we have cache, show it immediately
+              setProjects(cachedData);
+              currentProjects = cachedData; // Prevent overwrite by empty array later
+              setIsLoading(false); // Stop spinner early if we have data
+            }
+          } catch (err) {
+            console.warn("Cache read failed", err);
+          }
+
+          // 2. Network Request (Background Sync)
+          try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Failed to fetch projects");
+            const data = await response.json();
+
+            currentProjects = data.map((item) => ({
+              id: item.id,
+              projectName: item.projectName,
+              schoolName: item.schoolName,
+              schoolId: item.schoolId,
+              status: item.status,
+              accomplishmentPercentage: item.accomplishmentPercentage,
+              projectAllocation: item.projectAllocation,
+              targetCompletionDate: item.targetCompletionDate,
+              projects_count: 1,
+              // Additional fields for charts
+              region: item.region,
+              division: item.division,
+              statusAsOfDate: item.statusAsOfDate,
+              otherRemarks: item.otherRemarks,
+              contractorName: item.contractorName,
+            }));
+
+            // Cache data 
+            if (currentRole !== 'Super User') {
+              await cacheProjects(currentProjects);
             }
 
-            // ENGINEER: Stale-While-Revalidate Strategy
-            
-            // 1. Immediate Cache Load (Fast Render)
-            try {
-                const cachedData = await getCachedProjects();
-                if (cachedData && cachedData.length > 0) {
-                    // If we have cache, show it immediately
-                    setProjects(cachedData);
-                    currentProjects = cachedData; // Prevent overwrite by empty array later
-                    setIsLoading(false); // Stop spinner early if we have data
-                }
-            } catch (err) {
-                 console.warn("Cache read failed", err);
+            // Update state with fresh data
+            setProjects(currentProjects);
+
+          } catch (networkError) {
+            console.warn("Dashboard network request failed:", networkError);
+            // If we didn't have cached data before, we might need to rely on the fallback from the 'cache read' block above
+            // But typically if cache read passed, we are good. 
+            // We basically just suppress the network error UI-wise if we have stale data.
+          }
+
+          try {
+            const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${user.uid}`);
+            if (actResponse.ok) {
+              const actData = await actResponse.json();
+              setActivities(actData);
             }
-
-            // 2. Network Request (Background Sync)
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error("Failed to fetch projects");
-                const data = await response.json();
-
-                currentProjects = data.map((item) => ({
-                    id: item.id,
-                    projectName: item.projectName,
-                    schoolName: item.schoolName,
-                    schoolId: item.schoolId,
-                    status: item.status,
-                    accomplishmentPercentage: item.accomplishmentPercentage,
-                    projectAllocation: item.projectAllocation,
-                    targetCompletionDate: item.targetCompletionDate,
-                    projects_count: 1,
-                    // Additional fields for charts
-                    region: item.region,
-                    division: item.division,
-                    statusAsOfDate: item.statusAsOfDate,
-                    otherRemarks: item.otherRemarks,
-                    contractorName: item.contractorName,
-                }));
-                
-                // Cache data 
-                if (currentRole !== 'Super User') { 
-                     await cacheProjects(currentProjects);
-                }
-                
-                // Update state with fresh data
-                setProjects(currentProjects);
-
-            } catch (networkError) {
-                console.warn("Dashboard network request failed:", networkError);
-                // If we didn't have cached data before, we might need to rely on the fallback from the 'cache read' block above
-                // But typically if cache read passed, we are good. 
-                // We basically just suppress the network error UI-wise if we have stale data.
-            }
-
-            try {
-                const actResponse = await fetch(`${API_BASE}/api/activities?user_uid=${user.uid}`);
-                if (actResponse.ok) {
-                    const actData = await actResponse.json();
-                    setActivities(actData);
-                }
-            } catch (actErr) {
-                console.log("Offline: Cannot fetch recent activities.");
-            }
+          } catch (actErr) {
+            console.log("Offline: Cannot fetch recent activities.");
+          }
 
         } catch (err) {
           console.error("Error loading projects/activities:", err);
@@ -300,17 +310,17 @@ const LguDashboard = () => {
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
-                 {userRole === 'Super User' && (
-                    <button 
-                        onClick={() => navigate('/super-admin')}
-                        className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white mb-2 transition"
-                    >
-                        ← Back to Hub
-                    </button>
-                )}
-                <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
-                 🏛️
-                </div>
+              {userRole === 'Super User' && (
+                <button
+                  onClick={() => navigate('/super-admin')}
+                  className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white mb-2 transition"
+                >
+                  ← Back to Hub
+                </button>
+              )}
+              <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
+                🏛️
+              </div>
             </div>
           </div>
         </div>
@@ -387,7 +397,7 @@ const LguDashboard = () => {
           </div>
 
           <StatsChart projects={projects} />
-          
+
           <CalendarWidget projects={projects} />
 
         </div>

@@ -3535,38 +3535,45 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(actual_completion_date, 'YYYY-MM-DD') AS "actualCompletionDate",
         TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
         latitude, longitude
-      FROM LatestProjects
+      FROM LatestProjects p
+      LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
     `;
 
     // 1. ADD FILTER: Only show projects belonging to this engineer
     if (engineer_id) {
       queryParams.push(engineer_id);
-      whereClauses.push(`engineer_id = $${queryParams.length}`);
+      whereClauses.push(`p.engineer_id = $${queryParams.length}`);
     }
 
     // 2. Add your existing filters
     if (status) {
       queryParams.push(status);
-      whereClauses.push(`status = $${queryParams.length}`);
+      whereClauses.push(`p.status = $${queryParams.length}`);
     }
     if (region) {
       queryParams.push(region);
-      whereClauses.push(`region = $${queryParams.length}`);
+      whereClauses.push(`p.region = $${queryParams.length}`);
     }
     if (division) {
       queryParams.push(division);
-      whereClauses.push(`division = $${queryParams.length}`);
+      whereClauses.push(`p.division = $${queryParams.length}`);
     }
+    // NEW: Municipality Filter for LGU
+    if (req.query.municipality) {
+      queryParams.push(req.query.municipality);
+      whereClauses.push(`sp.municipality = $${queryParams.length}`);
+    }
+
     if (search) {
       queryParams.push(`%${search}%`);
-      whereClauses.push(`(school_name ILIKE $${queryParams.length} OR project_name ILIKE $${queryParams.length})`);
+      whereClauses.push(`(p.school_name ILIKE $${queryParams.length} OR p.project_name ILIKE $${queryParams.length})`);
     }
 
     if (whereClauses.length > 0) {
       sql += ` WHERE ` + whereClauses.join(' AND ');
     }
 
-    sql += ` ORDER BY project_id DESC`;
+    sql += ` ORDER BY p.project_id DESC`;
 
     const result = await pool.query(sql, queryParams);
     res.json(result.rows);
@@ -5174,8 +5181,8 @@ export default app;
 
 // --- DEBUG ENDPOINT ---
 app.get('/api/debug/health-stats', async (req, res) => {
-    try {
-        const query = `
+  try {
+    const query = `
       SELECT 
         COALESCE(data_health_description, 'NULL') as status, 
         COUNT(*) as count 
@@ -5183,9 +5190,9 @@ app.get('/api/debug/health-stats', async (req, res) => {
       WHERE completion_percentage = 100 
       GROUP BY data_health_description
     `;
-        const result = await pool.query(query);
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
