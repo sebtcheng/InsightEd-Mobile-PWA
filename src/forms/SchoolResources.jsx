@@ -186,14 +186,12 @@ const SchoolResources = () => {
 
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
-        res_internet_type: '',
         res_toilets_male: 0,
         res_toilets_female: 0,
         res_toilets_common: 0, // [NEW] Common CR
         res_toilets_pwd: 0,
         res_water_source: '',
         res_tvl_workshops: 0,
-        res_faucets: 0,
         res_electricity_source: '',
         res_buildable_space: '',
         sha_category: '', // [NEW] SHA Category
@@ -396,7 +394,7 @@ const SchoolResources = () => {
         const { name, value, type } = e.target;
 
         // Check if one of the known non-numeric fields
-        const isStringField = ['res_internet_type', 'res_water_source', 'res_electricity_source', 'res_ownership_type', 'res_buildable_space', 'sha_category'].includes(name);
+        const isStringField = ['res_water_source', 'res_electricity_source', 'res_buildable_space', 'sha_category'].includes(name);
 
         if (isStringField) {
             setFormData(prev => ({ ...prev, [name]: value }));
@@ -467,8 +465,8 @@ const SchoolResources = () => {
         // Sanitize Payload: Convert empty strings to 0 for numeric fields
         // Define fields that are ALLOWED to be strings (nullable in DB or handled by valueOrNull)
         const stringFields = [
-            'res_internet_type', 'res_water_source', 'res_electricity_source',
-            'res_ownership_type', 'res_buildable_space', 'sha_category',
+            'res_water_source', 'res_electricity_source',
+            'res_buildable_space', 'sha_category',
             'schoolId', 'uid'
         ];
 

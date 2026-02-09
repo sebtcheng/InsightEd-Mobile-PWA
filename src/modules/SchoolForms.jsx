@@ -219,7 +219,7 @@ const SchoolForms = () => {
                 const hasSpecialization = specFields.some(field => (schoolProfile[field] || 0) > 0);
                 return hasSpecialization ? 'completed' : 'pending';
             case 'resources':
-                return ((schoolProfile.res_electricity_source || schoolProfile.res_water_source || schoolProfile.res_buildable_space || schoolProfile.sha_category || schoolProfile.res_armchair_func > 0 || schoolProfile.res_armchairs_good > 0 || schoolProfile.res_toilets_male > 0)) ? 'completed' : 'pending';
+                return ((schoolProfile.res_electricity_source || schoolProfile.res_water_source || schoolProfile.res_buildable_space || schoolProfile.sha_category || schoolProfile.res_armchair_func > 0 || schoolProfile.res_toilets_male > 0)) ? 'completed' : 'pending';
             case 'facilities':
                 return (schoolProfile.build_classrooms_total > 0) ? 'completed' : 'pending';
             case 'infra':

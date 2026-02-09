@@ -497,8 +497,7 @@ const old_db_init_disabled = async () => {
         await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS sha_category TEXT,
-        ADD COLUMN IF NOT EXISTS res_faucets INTEGER DEFAULT 0;
+        ADD COLUMN IF NOT EXISTS sha_category TEXT;
       `);
         console.log('âœ… Checked/Added new School Resources columns');
       } catch (migErr) {
@@ -510,11 +509,9 @@ const old_db_init_disabled = async () => {
         await client.query(`
         ALTER TABLE school_profiles 
         -- Site & Utils
-        ADD COLUMN IF NOT EXISTS res_ownership_type TEXT,
         ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
         ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
         ADD COLUMN IF NOT EXISTS res_water_source TEXT,
-        ADD COLUMN IF NOT EXISTS res_internet_type TEXT,
         
         -- Toilets & Labs
         ADD COLUMN IF NOT EXISTS res_toilets_pwd INTEGER DEFAULT 0,
@@ -4214,62 +4211,58 @@ app.post('/api/save-school-resources', async (req, res) => {
   try {
     const query = `
             UPDATE school_profiles SET
-                res_armchairs_good=$2, res_armchairs_repair=$3, res_teacher_tables_good=$4, res_teacher_tables_repair=$5,
-                res_blackboards_good=$6, res_blackboards_defective=$7,
-                res_desktops_instructional=$8, res_desktops_admin=$9, res_laptops_teachers=$10, res_tablets_learners=$11,
-                res_printers_working=$12, res_projectors_working=$13, res_internet_type=$14,
-                res_toilets_male=$15, res_toilets_female=$16, res_toilets_pwd=$17, res_toilets_common=$39, res_faucets=$18, res_water_source=$19,
-                res_sci_labs=$20, res_com_labs=$21, res_tvl_workshops=$22,
+                res_toilets_male=$2, res_toilets_female=$3, res_toilets_pwd=$4, res_toilets_common=$25, 
+                res_water_source=$5,
+                res_sci_labs=$6, res_com_labs=$7, res_tvl_workshops=$8,
                 
-                res_ownership_type=$23, res_electricity_source=$24, res_buildable_space=$25,
-                sha_category=$40,
+                res_ownership_type=$9, res_electricity_source=$10, res_buildable_space=$11,
+                sha_category=$26,
 
-                seats_kinder=$26, seats_grade_1=$27, seats_grade_2=$28, seats_grade_3=$29,
-                seats_grade_4=$30, seats_grade_5=$31, seats_grade_6=$32,
-                seats_grade_7=$33, seats_grade_8=$34, seats_grade_9=$35, seats_grade_10=$36,
-                seats_grade_11=$37, seats_grade_12=$38,
+                seats_kinder=$12, seats_grade_1=$13, seats_grade_2=$14, seats_grade_3=$15,
+                seats_grade_4=$16, seats_grade_5=$17, seats_grade_6=$18,
+                seats_grade_7=$19, seats_grade_8=$20, seats_grade_9=$21, seats_grade_10=$22,
+                seats_grade_11=$23, seats_grade_12=$24,
 
                 -- New Inventory Fields
-                res_ecart_func=$41, res_ecart_nonfunc=$42,
-                res_laptop_func=$43, res_laptop_nonfunc=$44,
-                res_tv_func=$45, res_tv_nonfunc=$46,
-                res_printer_func=$47, res_printer_nonfunc=$48,
-                res_desk_func=$49, res_desk_nonfunc=$50,
-                res_armchair_func=$51, res_armchair_nonfunc=$52,
-                res_toilet_func=$53, res_toilet_nonfunc=$54,
-                res_handwash_func=$55, res_handwash_nonfunc=$56,
+                res_ecart_func=$27, res_ecart_nonfunc=$28,
+                res_laptop_func=$29, res_laptop_nonfunc=$30,
+                res_tv_func=$31, res_tv_nonfunc=$32,
+                res_printer_func=$33, res_printer_nonfunc=$34,
+                res_desk_func=$35, res_desk_nonfunc=$36,
+                res_armchair_func=$37, res_armchair_nonfunc=$38,
+                res_toilet_func=$39, res_toilet_nonfunc=$40,
+                res_handwash_func=$41, res_handwash_nonfunc=$42,
 
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
     const result = await pool.query(query, [
-      data.schoolId,
-      data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
-      data.res_blackboards_good, data.res_blackboards_defective,
-      data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
-      data.res_printers_working, data.res_projectors_working, valueOrNull(data.res_internet_type),
-      data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, valueOrNull(data.res_water_source),
-      data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops,
+      data.schoolId, // $1
 
-      valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space),
+      data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, // $2-4
+      valueOrNull(data.res_water_source), // $5
+
+      data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops, // $6-8
+
+      valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space), // $9-11
 
       data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
       data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
       data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-      data.seats_grade_11, data.seats_grade_12,
+      data.seats_grade_11, data.seats_grade_12, // $12-24
 
-      data.res_toilets_common, // $39
-      valueOrNull(data.sha_category), // $40
+      data.res_toilets_common, // $25
+      valueOrNull(data.sha_category), // $26
 
-      // New Inventory Values
-      data.res_ecart_func || 0, data.res_ecart_nonfunc || 0, // 41, 42
-      data.res_laptop_func || 0, data.res_laptop_nonfunc || 0, // 43, 44
-      data.res_tv_func || 0, data.res_tv_nonfunc || 0, // 45, 46
-      data.res_printer_func || 0, data.res_printer_nonfunc || 0, // 47, 48
-      data.res_desk_func || 0, data.res_desk_nonfunc || 0, // 49, 50
-      data.res_armchair_func || 0, data.res_armchair_nonfunc || 0, // 51, 52
-      data.res_toilet_func || 0, data.res_toilet_nonfunc || 0, // 53, 54
-      data.res_handwash_func || 0, data.res_handwash_nonfunc || 0 // 55, 56
+      // New Inventory Values ($27-42)
+      data.res_ecart_func || 0, data.res_ecart_nonfunc || 0,
+      data.res_laptop_func || 0, data.res_laptop_nonfunc || 0,
+      data.res_tv_func || 0, data.res_tv_nonfunc || 0,
+      data.res_printer_func || 0, data.res_printer_nonfunc || 0,
+      data.res_desk_func || 0, data.res_desk_nonfunc || 0,
+      data.res_armchair_func || 0, data.res_armchair_nonfunc || 0,
+      data.res_toilet_func || 0, data.res_toilet_nonfunc || 0,
+      data.res_handwash_func || 0, data.res_handwash_nonfunc || 0
     ]);
     if (result.rowCount === 0) {
       console.warn(`[Resources] ID ${data.schoolId} not found.`);
@@ -4286,24 +4279,22 @@ app.post('/api/save-school-resources', async (req, res) => {
         console.log("ðŸ”„ Dual-Write: Syncing School Resources...");
         await poolNew.query(query, [
           data.schoolId,
-          data.res_armchairs_good, data.res_armchairs_repair, data.res_teacher_tables_good, data.res_teacher_tables_repair,
-          data.res_blackboards_good, data.res_blackboards_defective,
-          data.res_desktops_instructional, data.res_desktops_admin, data.res_laptops_teachers, data.res_tablets_learners,
-          data.res_printers_working, data.res_projectors_working, valueOrNull(data.res_internet_type),
-          data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, data.res_faucets, valueOrNull(data.res_water_source),
-          data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops,
+          data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, // $2-4
+          valueOrNull(data.res_water_source), // $5
 
-          valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space),
+          data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops, // $6-8
+
+          valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space), // $9-11
 
           data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
           data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
           data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-          data.seats_grade_11, data.seats_grade_12,
+          data.seats_grade_11, data.seats_grade_12, // $12-24
 
           data.res_toilets_common,
           valueOrNull(data.sha_category),
 
-          // New Inventory Values
+          // New Inventory Values ($27-42)
           data.res_ecart_func || 0, data.res_ecart_nonfunc || 0,
           data.res_laptop_func || 0, data.res_laptop_nonfunc || 0,
           data.res_tv_func || 0, data.res_tv_nonfunc || 0,
