@@ -2710,11 +2710,8 @@ app.post('/api/save-school-head', async (req, res) => {
         head_item_number = $5,
         head_position_title = $6,
         head_date_hired = $7,
-        head_sex = $8,
-        head_region = $9,
-        head_division = $10,
         updated_at = CURRENT_TIMESTAMP,
-        history_logs = history_logs || $11::jsonb
+        history_logs = history_logs || $8::jsonb
       WHERE submitted_by = $1;
     `;
 
@@ -2726,9 +2723,6 @@ app.post('/api/save-school-head', async (req, res) => {
       data.itemNumber || null,
       data.positionTitle || null,
       data.dateHired || null,
-      data.sex || null,
-      data.region || null,
-      data.division || null,
       JSON.stringify(newLogEntry)
     ];
 
@@ -4036,6 +4030,11 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
                 teach_multi_1_2 = $15::INT, teach_multi_3_4 = $16::INT, teach_multi_5_6 = $17::INT,
                 teach_multi_3plus_flag = $18::BOOLEAN,
                 teach_multi_3plus_count = $19::INT,
+                
+                -- Auto-Calculated Summaries
+                teachers_es = $30::INT,
+                teachers_jhs = $31::INT,
+                teachers_shs = $32::INT,
 
                 -- Experience Fields
                 teach_exp_0_1 = $20::INT, teach_exp_2_5 = $21::INT, teach_exp_6_10 = $22::INT,
@@ -4047,6 +4046,15 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
             WHERE TRIM(submitted_by) = TRIM($1)
             RETURNING school_id;
         `;
+
+    // --- AUTO-CALCULATION LOGIC ---
+    const t_es = (parseInt(d.teach_kinder) || 0) + (parseInt(d.teach_g1) || 0) + (parseInt(d.teach_g2) || 0) +
+      (parseInt(d.teach_g3) || 0) + (parseInt(d.teach_g4) || 0) + (parseInt(d.teach_g5) || 0) + (parseInt(d.teach_g6) || 0) +
+      (parseInt(d.teach_multi_1_2) || 0) + (parseInt(d.teach_multi_3_4) || 0) + (parseInt(d.teach_multi_5_6) || 0) + (parseInt(d.teach_multi_3plus_count) || 0);
+
+    const t_jhs = (parseInt(d.teach_g7) || 0) + (parseInt(d.teach_g8) || 0) + (parseInt(d.teach_g9) || 0) + (parseInt(d.teach_g10) || 0);
+
+    const t_shs = (parseInt(d.teach_g11) || 0) + (parseInt(d.teach_g12) || 0);
 
     const values = [
       d.uid,                          // $1
@@ -4062,7 +4070,10 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       d.teach_exp_0_1 || 0, d.teach_exp_2_5 || 0, d.teach_exp_6_10 || 0, // 20-22
       d.teach_exp_11_15 || 0, d.teach_exp_16_20 || 0, d.teach_exp_21_25 || 0, // 23-25
       d.teach_exp_26_30 || 0, d.teach_exp_31_35 || 0, d.teach_exp_36_40 || 0, // 26-28
-      d.teach_exp_40_45 || 0 // 29
+      d.teach_exp_40_45 || 0, // 29
+
+      // Calculated Values (30-32)
+      t_es, t_jhs, t_shs
     ];
 
     const result = await pool.query(query, values);

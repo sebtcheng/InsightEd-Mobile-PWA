@@ -38,8 +38,7 @@ const SchoolInformation = () => {
 
     const [formData, setFormData] = useState({
         lastName: '', firstName: '', middleName: '',
-        itemNumber: '', positionTitle: '', dateHired: '',
-        region: '', division: ''
+        itemNumber: '', positionTitle: '', dateHired: ''
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -90,9 +89,7 @@ const SchoolInformation = () => {
                         lastName: match.LAST_NAME || '',
                         firstName: match.FIRST_NAME || '',
                         middleName: match.MID_NAME || '',
-                        positionTitle: match.POS_DSC || '',
-                        region: match.UACS_REG_DSC || '',
-                        division: match.UACS_DIV_DSC || ''
+                        positionTitle: match.POS_DSC || ''
                     }));
                     parser.abort(); // Stop parsing once found
                     setIsSearching(false);
@@ -157,9 +154,7 @@ const SchoolInformation = () => {
                                     middleName: draftData.middleName || '',
                                     itemNumber: draftData.itemNumber || '',
                                     positionTitle: draftData.positionTitle || '',
-                                    dateHired: draftData.dateHired || '',
-                                    region: draftData.region || '',
-                                    division: draftData.division || ''
+                                    dateHired: draftData.dateHired || ''
                                 };
                                 setFormData(merged);
                                 setIsLocked(false);
@@ -192,9 +187,7 @@ const SchoolInformation = () => {
                                     middleName: data.head_middle_name || data.middle_name || '',
                                     itemNumber: data.head_item_number || data.item_number || '',
                                     positionTitle: data.head_position_title || data.position_title || '',
-                                    dateHired: (data.date_hired || data.head_date_hired) ? (data.date_hired || data.head_date_hired).split('T')[0] : '',
-                                    region: data.head_region || '',
-                                    division: data.head_division || ''
+                                    dateHired: (data.date_hired || data.head_date_hired) ? (data.date_hired || data.head_date_hired).split('T')[0] : ''
                                 };
 
                                 setFormData(loadedData);
@@ -309,7 +302,7 @@ const SchoolInformation = () => {
         // Package all data including the new CSV fields
         const payload = {
             uid: user.uid,
-            ...formData // Includes lastName, firstName, middleName, itemNumber, positionTitle, dateHired, sex, region, division
+            ...formData // Includes lastName, firstName, middleName, itemNumber, positionTitle, dateHired
         };
 
         if (!navigator.onLine) {
