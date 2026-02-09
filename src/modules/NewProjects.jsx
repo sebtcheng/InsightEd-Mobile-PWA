@@ -37,6 +37,27 @@ const NewProjects = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
+    const [userRole, setUserRole] = useState(null);
+
+    // --- FETCH ROLE ---
+    useEffect(() => {
+        const fetchRole = async () => {
+            if (auth.currentUser) {
+                try {
+                    const res = await fetch(`/api/user-info/${auth.currentUser.uid}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setUserRole(data.role);
+                        // Auto-fill region/division if LGU? 
+                        // Maybe later.
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch user role:", err);
+                }
+            }
+        };
+        fetchRole();
+    }, []);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -67,6 +88,17 @@ const NewProjects = () => {
     // State to hold the CSV data
     const [schoolData, setSchoolData] = useState([]);
 
+    // 1.) Category Choices
+const PROJECT_CATEGORIES = [
+    "New Construction",
+    "Electrification",
+    "Health",
+    "QRF",
+    "LMS",
+    "ALS-CLC",
+    "Gabaldon",
+    "Repairs"
+];
     // --- 1. LOAD CSV DATA ---
     useEffect(() => {
         // A. Load CSV
@@ -135,7 +167,32 @@ const NewProjects = () => {
 
         // Location (New)
         latitude: '',
-        longitude: ''
+        longitude: '',
+
+        // --- NEW FIELDS ---
+        projectCategory: '',
+        scopeOfWork: '',
+        constructionStartDate: '',
+
+        // --- NEW LGU FIELDS ---
+        moa_date: '',
+        tranches_count: '',
+        tranche_amount: '',
+        fund_source: '',
+        province: '',
+        city: '',
+        municipality: '',
+        legislative_district: '',
+        scope_of_works: '',
+        contract_amount: '',
+        bid_opening_date: '',
+        resolution_award_date: '',
+        procurement_stage: '',
+        bidding_date: '',
+        awarding_date: '',
+        construction_start_date: '',
+        funds_downloaded: '',
+        funds_utilized: ''
     });
 
     // --- NEW: GEOLOCATION LOGIC ---
@@ -286,6 +343,11 @@ const NewProjects = () => {
             value = value.replace(/\D/g, '');
             if (value.length > 6) value = value.slice(0, 6);
         }
+        // Force Uppercase for Contractor Name, Project Name, and new Project Category
+        if (['contractorName', 'projectName', 'projectCategory'].includes(name)) {
+            value = value.toUpperCase();
+        }
+
         // Auto-comma for Project Allocation
         if (name === 'projectAllocation') {
             const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
@@ -346,9 +408,12 @@ const NewProjects = () => {
             return;
         }
 
-        if (internalFiles.length === 0 && externalFiles.length === 0) {
-            alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
-            return;
+        // CONDITIONAL PHOTO VALIDATION
+        if (!['Not Yet Started', 'Under Procurement'].includes(formData.status)) {
+            if (internalFiles.length === 0 && externalFiles.length === 0) {
+                alert("⚠️ PROOF REQUIRED\n\nAccording to COA requirements, you must attach at least one site photo for every project entry.");
+                return;
+            }
         }
 
         if (!formData.latitude || !formData.longitude) {
@@ -410,9 +475,11 @@ const NewProjects = () => {
             };
 
             // --- OFFLINE/ONLINE CHECK ---
-            const endpoint = '/api/save-project';
+            // Determine endpoint based on role
+            const endpointUrl = (userRole === 'Local Government Unit') ? '/api/lgu/save-project' : '/api/save-project';
+
             const payload = {
-                url: endpoint,
+                url: endpointUrl,
                 method: 'POST',
                 body: projectBody,
                 formName: `Project: ${formData.projectName}`
@@ -427,6 +494,13 @@ const NewProjects = () => {
             }
 
             // --- ONLINE SUBMISSION ---
+            let endpoint = '/api/save-project';
+            
+            // LGU SPECIFIC ENDPOINT
+            if (userRole === 'Local Government Unit') {
+                endpoint = '/api/lgu/save-project';
+            }
+
             const projectRes = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -491,12 +565,38 @@ const NewProjects = () => {
 
                         <SectionHeader title="Project Identification" icon="🏢" />
                         <div className="space-y-4">
+                            {/* 0. PROJECT CATEGORY (New - Dropdown) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Category</label>
+                                <select 
+                                    name="projectCategory" 
+                                    value={formData.projectCategory || ''} 
+                                    onChange={handleChange} 
+                                    className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="">Select Category</option>
+                                    {PROJECT_CATEGORIES.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+
                             {/* 1. PROJECT NAME */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
                                 <input name="projectName" value={formData.projectName} onChange={handleChange} required readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
 
+                            {/* 1.5 SCOPE OF WORK (New) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Work</label>
+                                <p className="text-[10px] text-slate-400 mb-1">Number of Classrooms (for New Construction) or Number of Sites</p>
+                                <textarea name="scopeOfWork" rows="2" value={formData.scopeOfWork || ''} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
+                            </div>
+                        </div>
+
+                        <SectionHeader title="School Information" icon="🏫" />
+                        <div className="space-y-4">
                             {/* 2. SCHOOL ID + VALIDATE BUTTON */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1"> School ID (6 Digits) <span className="text-red-500">*</span> </label>
@@ -606,6 +706,120 @@ const NewProjects = () => {
                             </div>
                         </div>
 
+                        {userRole === 'Local Government Unit' && (
+                            <>
+                                <SectionHeader title="LGU Project Details" icon="🏛️" />
+                                <div className="space-y-4">
+                                    {/* Location Details */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province</label>
+                                            <input name="province" value={formData.province} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality</label>
+                                            <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                         <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District</label>
+                                            <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+
+                                    {/* Funding & MOA */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source</label>
+                                            <input name="fund_source" value={formData.fund_source} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date</label>
+                                            <input type="date" name="moa_date" value={formData.moa_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+
+                                    {/* Tranches */}
+                                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                        <h4 className="font-bold text-blue-800 text-xs uppercase mb-3">Fund Tranches</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches</label>
+                                                <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche</label>
+                                                <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                            </div>
+                                             <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded</label>
+                                                <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                                                <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                     {/* Scope */}
+                                     <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works</label>
+                                        <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                    </div>
+                                </div>
+
+                                <SectionHeader title="Procurement Details" icon="⚖️" />
+                                <div className="space-y-4">
+                                     <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage</label>
+                                        <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                                            <option value="">Select Stage...</option>
+                                            <option value="Pre-Procurement">Pre-Procurement</option>
+                                            <option value="Advertisement">Advertisement</option>
+                                            <option value="Pre-Bid Conference">Pre-Bid Conference</option>
+                                            <option value="Opening of Bids">Opening of Bids</option>
+                                            <option value="Bid Evaluation">Bid Evaluation</option>
+                                            <option value="Post Qualification">Post Qualification</option>
+                                            <option value="Awarded">Awarded</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-3">
+                                         <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
+                                            <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                         <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Construction Start Date</label>
+                                            <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                        <h4 className="font-bold text-slate-700 text-xs uppercase mb-3">Key Dates</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date</label>
+                                                <input type="date" name="bidding_date" value={formData.bidding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                             <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening</label>
+                                                <input type="date" name="bid_opening_date" value={formData.bid_opening_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Awarding Date</label>
+                                                <input type="date" name="awarding_date" value={formData.awarding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resolution to Award</label>
+                                                <input type="date" name="resolution_award_date" value={formData.resolution_award_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
                         <SectionHeader title="Status and Progress" icon="📊" />
                         <div className="space-y-4">
                             <div>
@@ -638,75 +852,91 @@ const NewProjects = () => {
                             </div>
                         </div>
 
-                        {/* --- SITE PHOTOS SECTION (Moved Here) --- */}
-                        <div className="mt-4 pt-4 border-t border-slate-100">
-                            <SectionHeader title="Site Photos" icon="📸" />
-                            <div className="space-y-6">
-                                
-                                {/* INTERNAL PHOTOS */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
-                                        <span className="text-[10px] font-bold text-blue-500">{internalFiles.length} Added</span>
-                                    </div>
-                                    {!isDummy && (
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                            <button type="button" onClick={() => triggerFilePicker('camera', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
-                                            </button>
-                                            <button type="button" onClick={() => triggerFilePicker('gallery', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
-                                            </button>
+                        {/* --- SITE PHOTOS SECTION (Conditional) --- */}
+                        {!['Not Yet Started', 'Under Procurement'].includes(formData.status) && (
+                            <div className="mt-4 pt-4 border-t border-slate-100">
+                                <SectionHeader title="Site Photos" icon="📸" />
+                                <div className="space-y-6">
+                                    
+                                    {/* EXTERNAL PHOTOS (First) */}
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
+                                            <span className="text-[10px] font-bold text-blue-500">{externalFiles.length} Added</span>
                                         </div>
-                                    )}
-                                    {internalPreviews.length > 0 && (
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {internalPreviews.map((url, index) => (
-                                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
-                                                    <img src={url} alt="internal" className="w-full h-full object-cover" />
-                                                    <button type="button" onClick={() => removeFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
-                                                </div>
-                                            ))}
+                                        <div className="text-[10px] text-slate-400 mb-3 italic space-y-1">
+                                            <p>• Front, Left, Right, Rear (wide shots)</p>
+                                            <p>• Orthographic at height 20-30m (optional)</p>
                                         </div>
-                                    )}
-                                </div>
 
-                                {/* EXTERNAL PHOTOS */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
-                                        <span className="text-[10px] font-bold text-blue-500">{externalFiles.length} Added</span>
+                                        {!isDummy && (
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <button type="button" onClick={() => triggerFilePicker('camera', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
+                                                </button>
+                                                <button type="button" onClick={() => triggerFilePicker('gallery', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                        {externalPreviews.length > 0 && (
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {externalPreviews.map((url, index) => (
+                                                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
+                                                        <img src={url} alt="external" className="w-full h-full object-cover" />
+                                                        <button type="button" onClick={() => removeFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                    {!isDummy && (
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                            <button type="button" onClick={() => triggerFilePicker('camera', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
-                                            </button>
-                                            <button type="button" onClick={() => triggerFilePicker('gallery', 'External')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
-                                                <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
-                                            </button>
+
+                                    {/* INTERNAL PHOTOS (Second) */}
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
+                                            <span className="text-[10px] font-bold text-blue-500">{internalFiles.length} Added</span>
                                         </div>
-                                    )}
-                                    {externalPreviews.length > 0 && (
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {externalPreviews.map((url, index) => (
-                                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
-                                                    <img src={url} alt="external" className="w-full h-full object-cover" />
-                                                    <button type="button" onClick={() => removeFile(index, 'External')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
-                                                </div>
-                                            ))}
+                                        <div className="text-[10px] text-slate-400 mb-3 italic space-y-1">
+                                            <p>• Classrooms (2-3): Wide shot from doorway/corner, Camera at 1.4-1.6m height, Facing longest wall.</p>
+                                            <p>• Key indicators: Ceiling, Lighting, Outlets, Painted walls, Floor condition.</p>
                                         </div>
-                                    )}
+
+                                        {!isDummy && (
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <button type="button" onClick={() => triggerFilePicker('camera', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">📸</span> <span className="text-[10px] font-bold text-slate-600">Camera</span>
+                                                </button>
+                                                <button type="button" onClick={() => triggerFilePicker('gallery', 'Internal')} className="flex flex-col items-center justify-center gap-1 p-3 bg-white border border-slate-200 border-dashed rounded-lg hover:border-blue-400">
+                                                    <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                        {internalPreviews.length > 0 && (
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {internalPreviews.map((url, index) => (
+                                                    <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-slate-200">
+                                                        <img src={url} alt="internal" className="w-full h-full object-cover" />
+                                                        <button type="button" onClick={() => removeFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">✕</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                                
                             </div>
-                        </div>
+                        )}
 
                         <SectionHeader title="Timelines" icon="📅" />
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed Date</label>
                                 <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                            </div>
+                            {/* Start of Construction (New) */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start of Construction</label>
+                                <input type="date" name="constructionStartDate" value={formData.constructionStartDate || ''} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion Date</label>
