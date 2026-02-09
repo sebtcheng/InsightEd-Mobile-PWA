@@ -18,7 +18,7 @@ if (start === -1 || end === -1) {
 const jsonString = cleanContent.substring(start, end + 1);
 const allColumns = JSON.parse(jsonString);
 
-// Define Category Matchers (Exact same as before + Refinements)
+// Define Category Matchers (Exact same as before)
 const categories = {
     'form_school_profile': [
         'school_id', 'school_name', 'region', 'division', 'province', 'city', 'municipality', 'barangay',
@@ -39,7 +39,7 @@ const categories = {
         'seats_'
     ],
     'form_organized_classes': ['classes_'],
-    'form_learner_stats': ['stat_', 'learner_stats_grids'], // included learner_stats_grids
+    'form_learner_stats': ['stat_', 'learner_stats_grids'],
     'form_shifting_modalities': ['shift_', 'adm_', 'mode_'],
     'form_teaching_personnel': ['teach_', 'non_teaching_', 'teachers_'],
     'form_specialization': ['spec_'],
@@ -51,11 +51,6 @@ const zombieColumns = ['res_faucets', 'res_internet_type', 'res_ownership_type']
 
 let remainingColumns = [...allColumns].filter(c => !zombieColumns.includes(c));
 const categorized = {};
-
-// Helper to remove school_id if it exists to avoid duplication (we add it manually)
-function cleanCols(cols) {
-    return cols.filter(c => c !== 'school_id');
-}
 
 for (const [tableName, matchers] of Object.entries(categories)) {
     categorized[tableName] = [];
@@ -75,9 +70,7 @@ for (const [tableName, matchers] of Object.entries(categories)) {
     });
 }
 
-// Leftovers go to form_school_profile
 if (remainingColumns.length > 0) {
-    console.log("Leftover columns assigned to form_school_profile:", remainingColumns);
     categorized['form_school_profile'].push(...remainingColumns);
 }
 
@@ -92,40 +85,64 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-async function createPartitions() {
+async function createTriggers() {
     const client = await pool.connect();
     try {
-        console.log("🚀 Starting Partition Creation...");
+        console.log("🚀 Creating Database Triggers...");
+
+        const functionBody = \`
+CREATE OR REPLACE FUNCTION sync_school_profiles_to_forms() RETURNS TRIGGER AS $$
+BEGIN
+\`;
 `;
 
-for (const [tableName, cols] of Object.entries(categorized)) {
-    // Ensure school_id is NOT in the columns list we select, because we might want to cast it or handle it specifically? 
-    // Actually, simple Select includes it if it matches. 
-    // But 'school_id' was assigned to 'form_school_profile'. 
-    // We want 'school_id' in ALL tables.
+// Build the PL/PGSQL function body
+let sqlParts = [];
 
-    // So:
+for (const [tableName, cols] of Object.entries(categorized)) {
     // 1. Remove school_id AND iern from the specific list if present
     const columns = cols.filter(c => c !== 'school_id' && c !== 'iern');
-    // 2. Always prepend 'school_id' and 'iern' to the select list
-    const selectColumns = ['school_id', 'iern', ...columns].join(',\n    ');
+    // 2. Always include 'school_id' and 'iern'
+    const allCols = ['school_id', 'iern', ...columns];
 
-    scriptBody += `
-        // --- ${tableName} ---
-        console.log("Creating ${tableName}...");
-        await client.query('DROP TABLE IF EXISTS ${tableName}');
-        await client.query(\`
-            CREATE TABLE ${tableName} AS
-            SELECT 
-    ${selectColumns}
-            FROM school_profiles;
-        \`);
-        await client.query('ALTER TABLE ${tableName} ADD PRIMARY KEY (school_id)');
-    `;
+    const colList = allCols.join(', ');
+    const valList = allCols.map(c => `NEW.${c}`).join(', ');
+
+    // ON CONFLICT UPDATE set list (exclude school_id)
+    const updateList = allCols
+        .filter(c => c !== 'school_id')
+        .map(c => `${c} = EXCLUDED.${c}`)
+        .join(', ');
+
+    sqlParts.push(`
+    -- Sync ${tableName}
+    INSERT INTO ${tableName} (${colList})
+    VALUES (${valList})
+    ON CONFLICT (school_id) DO UPDATE SET
+    ${updateList};
+    `);
 }
 
 scriptBody += `
-        console.log("✅ All Partitions Created & Populated!");
+        const fullFunction = \`\${functionBody}
+${sqlParts.join('\n')}
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;\`;
+
+        console.log("1️⃣  Replacing Function: sync_school_profiles_to_forms...");
+        await client.query(fullFunction);
+
+        console.log("2️⃣  Creating Trigger...");
+        await client.query('DROP TRIGGER IF EXISTS trigger_sync_to_forms ON school_profiles');
+        await client.query(\`
+            CREATE TRIGGER trigger_sync_to_forms
+            AFTER INSERT OR UPDATE ON school_profiles
+            FOR EACH ROW EXECUTE FUNCTION sync_school_profiles_to_forms();
+        \`);
+
+        console.log("✅ Triggers successfully installed!");
+
     } catch (err) {
         console.error("❌ Error:", err);
     } finally {
@@ -134,8 +151,8 @@ scriptBody += `
     }
 }
 
-createPartitions();
+createTriggers();
 `;
 
-fs.writeFileSync(path.resolve(__dirname, 'create_partitions_final.cjs'), scriptBody, 'utf8');
-console.log("Derived script written to scripts/create_partitions_final.cjs");
+fs.writeFileSync(path.resolve(__dirname, 'create_triggers_final.cjs'), scriptBody, 'utf8');
+console.log("Derived script written to scripts/create_triggers_final.cjs");

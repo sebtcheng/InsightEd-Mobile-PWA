@@ -20,6 +20,7 @@ async function createPartitions() {
             CREATE TABLE form_school_profile AS
             SELECT 
     school_id,
+    iern,
     school_name,
     region,
     division,
@@ -31,7 +32,6 @@ async function createPartitions() {
     latitude,
     longitude,
     curricular_offering,
-    iern,
     mother_school_id,
     email,
     updated_at,
@@ -124,6 +124,7 @@ async function createPartitions() {
             CREATE TABLE form_school_head AS
             SELECT 
     school_id,
+    iern,
     head_last_name,
     head_first_name,
     head_middle_name,
@@ -142,6 +143,7 @@ async function createPartitions() {
             CREATE TABLE form_enrollment AS
             SELECT 
     school_id,
+    iern,
     total_enrollment,
     es_enrollment,
     jhs_enrollment,
@@ -203,6 +205,7 @@ async function createPartitions() {
             CREATE TABLE form_organized_classes AS
             SELECT 
     school_id,
+    iern,
     classes_kinder,
     classes_grade_1,
     classes_grade_2,
@@ -227,6 +230,7 @@ async function createPartitions() {
             CREATE TABLE form_learner_stats AS
             SELECT 
     school_id,
+    iern,
     stat_sned_es,
     stat_sned_jhs,
     stat_sned_shs,
@@ -385,6 +389,7 @@ async function createPartitions() {
             CREATE TABLE form_shifting_modalities AS
             SELECT 
     school_id,
+    iern,
     shift_kinder,
     shift_g1,
     shift_g2,
@@ -427,6 +432,7 @@ async function createPartitions() {
             CREATE TABLE form_teaching_personnel AS
             SELECT 
     school_id,
+    iern,
     teach_exp_0_1,
     teach_exp_2_5,
     teach_exp_6_10,
@@ -469,6 +475,7 @@ async function createPartitions() {
             CREATE TABLE form_specialization AS
             SELECT 
     school_id,
+    iern,
     spec_general_teaching,
     spec_ece_teaching,
     spec_bio_sci_major,
@@ -512,6 +519,7 @@ async function createPartitions() {
             CREATE TABLE form_school_resources AS
             SELECT 
     school_id,
+    iern,
     res_toilets_male,
     res_toilets_female,
     res_toilets_pwd,
@@ -549,6 +557,7 @@ async function createPartitions() {
             CREATE TABLE form_physical_facilities AS
             SELECT 
     school_id,
+    iern,
     build_classrooms_total,
     build_classrooms_new,
     build_classrooms_good,
