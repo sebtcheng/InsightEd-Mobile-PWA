@@ -481,16 +481,14 @@ const SchoolHeadDashboard = () => {
                                             {schoolProfile.data_quality_issues}
                                         </div>
                                     )}
-                                    <p className="text-[10px] opacity-75 mb-3 italic">
-                                        Note: Data Accuracy Assessment may take several hours to refresh. Please check back again in a few hours.
-                                    </p>
+                                    {/* Note Removed from here */}
 
                                     <div className="mt-2 p-2 bg-white/50 rounded-lg">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="text-xs font-bold uppercase tracking-wider opacity-80">Data Health Score:</span>
                                             <span className={`text-sm font-black ${schoolProfile.data_health_score <= 50 ? 'text-red-700' :
-                                                    schoolProfile.data_health_score <= 85 ? 'text-amber-700' :
-                                                        'text-green-700'
+                                                schoolProfile.data_health_score <= 85 ? 'text-amber-700' :
+                                                    'text-green-700'
                                                 }`}>
                                                 {schoolProfile.data_health_score}
                                             </span>
@@ -499,10 +497,15 @@ const SchoolHeadDashboard = () => {
                                             {schoolProfile.data_health_score <= 50
                                                 ? "Major data anomaly/inconsistency detected. Requires major data overhaul"
                                                 : schoolProfile.data_health_score <= 85
-                                                    ? "Minor data anomaly/inconsistency detected. Requires revision of some data inputs."
-                                                    : "Within the acceptable range of data variability. Possible minimal data correction needed."
-                                            }
+                                                    ? "Minor inconsistencies found. Please review flagged items."
+                                                    : "Data is accurate and consistent."}
                                         </p>
+                                        <div className="flex justify-end mt-2">
+                                            <span className="text-[10px] opacity-75 italic text-right">
+                                                Note: Data Health Score computation may take several minutes to refresh due to volume of updates. Please check back again in a few moments.
+                                            </span>
+                                        </div>
+
                                     </div>
                                 </div>
                             </div>
