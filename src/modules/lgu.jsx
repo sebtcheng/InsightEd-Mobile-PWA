@@ -352,10 +352,15 @@ const LguDashboard = () => {
 
               <SwiperSlide className="pb-8">
                 <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border-l-4 border-emerald-500 flex flex-col h-[140px]">
-                  <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm flex items-center mb-2 shrink-0">
-                    <span className="text-xl mr-2">🏗️</span>
-                    Active Projects ({projects.length})
-                  </h3>
+                  <div className="flex justify-between items-center mb-2 shrink-0">
+                    <h3 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm flex items-center">
+                      <span className="text-xl mr-2">🏗️</span>
+                      Active Projects ({projects.length})
+                    </h3>
+                    <button onClick={() => navigate('/lgu-projects')} className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 underline">
+                      View All
+                    </button>
+                  </div>
                   <div className="overflow-y-auto flex-1 pr-1 space-y-2 custom-scrollbar">
                     {projects.length > 0 ? (
                       projects.map((p) => (

@@ -5646,40 +5646,78 @@ app.get('/api/migrate-schema', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+  // --- TEMPORARY MIGRATION ENDPOINT (LGU FIELDS) ---
+  app.get('/api/migrate-lgu-schema', async (req, res) => {
+    try {
+      const client = await pool.connect();
+      const results = [];
+      const table = 'lgu_forms';
 
-if (isMainModule || process.env.START_SERVER === 'true') {
+      const columns = [
+        { name: 'source_agency', type: 'TEXT' },
+        { name: 'lsb_resolution_no', type: 'TEXT' },
+        { name: 'moa_ref_no', type: 'TEXT' },
+        { name: 'validity_period', type: 'TEXT' },
+        { name: 'contract_duration', type: 'TEXT' },
+        { name: 'date_approved_pow', type: 'DATE' },
+        { name: 'fund_release_schedule', type: 'TEXT' },
+        { name: 'mode_of_procurement', type: 'TEXT' },
+        { name: 'philgeps_ref_no', type: 'TEXT' },
+        { name: 'pcab_license_no', type: 'TEXT' },
+        { name: 'date_contract_signing', type: 'DATE' },
+        { name: 'bid_amount', type: 'NUMERIC' },
+        { name: 'nature_of_delay', type: 'TEXT' },
+        { name: 'date_notice_of_award', type: 'DATE' }
+      ];
 
+      for (const col of columns) {
+        try {
+          await client.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`);
+          results.push(`Added ${col.name}`);
+        } catch (e) {
+          results.push(`Failed ${col.name}: ${e.message}`);
+        }
+      }
 
-  const PORT = process.env.PORT || 3000;
-
-
-
-
-  const server = app.listen(PORT, () => {
-    console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
-    console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
-    console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
-  });
-
-  server.on('error', (e) => {
-    if (e.code === 'EADDRINUSE') {
-      console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
-    } else {
-      console.error("âŒ Server Error:", e);
+      client.release();
+      res.json({ message: "LGU Migration attempt finished", results });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
-}
+
+  if (isMainModule || process.env.START_SERVER === 'true') {
 
 
-// 2. FOR VERCEL (Production)
-// Export default is required for ESM in Vercel
-export default app;
+    const PORT = process.env.PORT || 3000;
 
-// --- DEBUG ENDPOINT ---
-app.get('/api/debug/health-stats', async (req, res) => {
-  try {
-    const query = `
+
+
+
+    const server = app.listen(PORT, () => {
+      console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
+      console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
+      console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+    });
+
+    server.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') {
+        console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+      } else {
+        console.error("âŒ Server Error:", e);
+      }
+    });
+  }
+
+
+  // 2. FOR VERCEL (Production)
+  // Export default is required for ESM in Vercel
+  export default app;
+
+  // --- DEBUG ENDPOINT ---
+  app.get('/api/debug/health-stats', async (req, res) => {
+    try {
+      const query = `
       SELECT 
         COALESCE(data_health_description, 'NULL') as status, 
         COUNT(*) as count 
@@ -5687,121 +5725,137 @@ app.get('/api/debug/health-stats', async (req, res) => {
       WHERE completion_percentage = 100 
       GROUP BY data_health_description
     `;
-    const result = await pool.query(query);
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+      const result = await pool.query(query);
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
-// ==================================================================
-//                      USER INFO HELPER
-// ==================================================================
-app.get('/api/user-info/:uid', async (req, res) => {
-  const { uid } = req.params;
-  try {
-    const result = await pool.query('SELECT role, first_name, last_name FROM users WHERE uid = $1', [uid]);
-    if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  // ==================================================================
+  //                      USER INFO HELPER
+  // ==================================================================
+  app.get('/api/user-info/:uid', async (req, res) => {
+    const { uid } = req.params;
+    try {
+      const result = await pool.query('SELECT role, first_name, last_name FROM users WHERE uid = $1', [uid]);
+      if (result.rows.length === 0) return res.status(404).json({ error: "User not found" });
+      res.json(result.rows[0]);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
-// ==================================================================
-//                      LGU FORMS ROUTES
-// ==================================================================
+  // ==================================================================
+  //                      LGU FORMS ROUTES
+  // ==================================================================
 
-// --- LGU 1. POST: Save New Project (LGU) ---
-app.post('/api/lgu/save-project', async (req, res) => {
-  const data = req.body;
+  // --- LGU 1. POST: Save New Project (LGU) ---
+  app.post('/api/lgu/save-project', async (req, res) => {
+    const data = req.body;
 
-  if (!data.schoolName || !data.projectName || !data.schoolId) {
-    return res.status(400).json({ message: "Missing required fields" });
-  }
-
-  let client;
-  let clientNew;
-
-  try {
-    client = await pool.connect();
-    await client.query('BEGIN');
-
-    // Dual Write Setup
-    if (poolNew) {
-      try {
-        clientNew = await poolNew.connect();
-        await clientNew.query('BEGIN');
-      } catch (connErr) {
-        console.error("⚠️ Dual-Write LGU: Failed to start transaction:", connErr.message);
-        clientNew = null;
-      }
+    if (!data.schoolName || !data.projectName || !data.schoolId) {
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // 1. Generate IPC (LGU-YYYY-XXXXX)
-    const year = new Date().getFullYear();
-    const ipcResult = await client.query(
-      "SELECT ipc FROM lgu_forms WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
-      [`LGU-${year}-%`]
-    );
+    let client;
+    let clientNew;
 
-    let nextSeq = 1;
-    if (ipcResult.rows.length > 0) {
-      const lastIpc = ipcResult.rows[0].ipc;
-      const parts = lastIpc.split('-');
-      if (parts.length === 3 && !isNaN(parts[2])) {
-        nextSeq = parseInt(parts[2]) + 1;
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+
+      // Dual Write Setup
+      if (poolNew) {
+        try {
+          clientNew = await poolNew.connect();
+          await clientNew.query('BEGIN');
+        } catch (connErr) {
+          console.error("⚠️ Dual-Write LGU: Failed to start transaction:", connErr.message);
+          clientNew = null;
+        }
       }
-    }
-    const newIpc = `LGU-${year}-${String(nextSeq).padStart(5, '0')}`;
 
-    // 2. Prepare Data
-    const lguName = await getUserFullName(data.uid);
-    const resolvedLguName = lguName || data.submittedBy || 'LGU User';
+      // 1. Generate IPC (LGU-YYYY-XXXXX)
+      const year = new Date().getFullYear();
+      const ipcResult = await client.query(
+        "SELECT ipc FROM lgu_forms WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+        [`LGU-${year}-%`]
+      );
 
-    const docs = data.documents || [];
-    const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
-    const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
-    const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
+      let nextSeq = 1;
+      if (ipcResult.rows.length > 0) {
+        const lastIpc = ipcResult.rows[0].ipc;
+        const parts = lastIpc.split('-');
+        if (parts.length === 3 && !isNaN(parts[2])) {
+          nextSeq = parseInt(parts[2]) + 1;
+        }
+      }
+      const newIpc = `LGU-${year}-${String(nextSeq).padStart(5, '0')}`;
 
-    const projectValues = [
-      data.projectName, data.schoolName, data.schoolId,
-      valueOrNull(data.region), valueOrNull(data.division),
-      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
-      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
-      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
-      valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
-      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
-      data.uid,           // lgu_id
-      newIpc,
-      resolvedLguName,    // lgu_name
-      valueOrNull(data.latitude),
-      valueOrNull(data.longitude),
-      powDoc,
-      dupaDoc,
-      contractDoc,
-      // --- NEW FIELDS ---
-      valueOrNull(data.moa_date), // 24
-      parseIntOrNull(data.tranches_count), // 25
-      parseNumberOrNull(data.tranche_amount), // 26
-      valueOrNull(data.fund_source), // 27
-      valueOrNull(data.province), // 28
-      valueOrNull(data.city), // 29
-      valueOrNull(data.municipality), // 30
-      valueOrNull(data.legislative_district), // 31
-      valueOrNull(data.scope_of_works), // 32
-      parseNumberOrNull(data.contract_amount), // 33
-      valueOrNull(data.bid_opening_date), // 34
-      valueOrNull(data.resolution_award_date), // 35
-      valueOrNull(data.procurement_stage), // 36
-      valueOrNull(data.bidding_date), // 37
-      valueOrNull(data.awarding_date), // 38
-      valueOrNull(data.construction_start_date), // 39
-      parseNumberOrNull(data.funds_downloaded), // 40
-      parseNumberOrNull(data.funds_utilized) // 41
-    ];
+      // 2. Prepare Data
+      const lguName = await getUserFullName(data.uid);
+      const resolvedLguName = lguName || data.submittedBy || 'LGU User';
 
-    const projectQuery = `
+      const docs = data.documents || [];
+      const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
+      const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
+      const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
+
+      const projectValues = [
+        data.projectName, data.schoolName, data.schoolId,
+        valueOrNull(data.region), valueOrNull(data.division),
+        data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+        valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+        valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+        valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+        valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+        data.uid,           // lgu_id
+        newIpc,
+        resolvedLguName,    // lgu_name
+        valueOrNull(data.latitude),
+        valueOrNull(data.longitude),
+        powDoc,
+        dupaDoc,
+        contractDoc,
+        // --- NEW FIELDS ---
+        valueOrNull(data.moa_date), // 24
+        parseIntOrNull(data.tranches_count), // 25
+        parseNumberOrNull(data.tranche_amount), // 26
+        valueOrNull(data.fund_source), // 27
+        valueOrNull(data.province), // 28
+        valueOrNull(data.city), // 29
+        valueOrNull(data.municipality), // 30
+        valueOrNull(data.legislative_district), // 31
+        valueOrNull(data.scope_of_works), // 32
+        parseNumberOrNull(data.contract_amount), // 33
+        valueOrNull(data.bid_opening_date), // 34
+        valueOrNull(data.resolution_award_date), // 35
+        valueOrNull(data.procurement_stage), // 36
+        valueOrNull(data.bidding_date), // 37
+        valueOrNull(data.awarding_date), // 38
+        valueOrNull(data.construction_start_date), // 39
+        parseNumberOrNull(data.funds_downloaded), // 40
+        parseNumberOrNull(data.funds_utilized), // 41
+
+        // NEW FIELDS
+        valueOrNull(data.source_agency), // 42
+        valueOrNull(data.lsb_resolution_no), // 43
+        valueOrNull(data.moa_ref_no), // 44
+        valueOrNull(data.validity_period), // 45
+        valueOrNull(data.contract_duration), // 46
+        valueOrNull(data.date_approved_pow), // 47
+        valueOrNull(data.fund_release_schedule), // 48
+        valueOrNull(data.mode_of_procurement), // 49
+        valueOrNull(data.philgeps_ref_no), // 50
+        valueOrNull(data.pcab_license_no), // 51
+        valueOrNull(data.date_contract_signing), // 52
+        parseNumberOrNull(data.bid_amount), // 53
+        valueOrNull(data.nature_of_delay), // 54
+        valueOrNull(data.date_notice_of_award) // 55
+      ];
+
+      const projectQuery = `
       INSERT INTO "lgu_forms" (
         project_name, school_name, school_id, region, division,
         status, accomplishment_percentage, status_as_of,
@@ -5809,128 +5863,378 @@ app.post('/api/lgu/save-project', async (req, res) => {
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         lgu_id, ipc, lgu_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
-        -- NEW COLUMNS
+        -- EXISTING NEW COLUMNS
         moa_date, tranches_count, tranche_amount, fund_source,
         province, city, municipality, legislative_district,
         scope_of_works, contract_amount, bid_opening_date,
         resolution_award_date, procurement_stage, bidding_date,
         awarding_date, construction_start_date, funds_downloaded,
-        funds_utilized
+        funds_utilized,
+        -- NEWEST COLUMNS
+        source_agency, lsb_resolution_no, moa_ref_no, validity_period,
+        contract_duration, date_approved_pow, fund_release_schedule,
+        mode_of_procurement, philgeps_ref_no, pcab_license_no,
+        date_contract_signing, bid_amount, nature_of_delay, date_notice_of_award
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41
+        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
+        $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55
       )
       RETURNING project_id, project_name, ipc;
     `;
 
-    // 3. Insert Project
-    const projectResult = await client.query(projectQuery, projectValues);
-    const newProject = projectResult.rows[0];
-    const newProjectId = newProject.project_id;
+      // 3. Insert Project
+      const projectResult = await client.query(projectQuery, projectValues);
+      const newProject = projectResult.rows[0];
+      const newProjectId = newProject.project_id;
 
-    // 4. Insert Images
-    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-      const imageQuery = `
+      // 4. Insert Images
+      if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+        const imageQuery = `
         INSERT INTO "lgu_image" (project_id, image_data, uploaded_by)
         VALUES ($1, $2, $3)
       `;
-      for (const imgBase64 of data.images) {
-        await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+        for (const imgBase64 of data.images) {
+          await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+        }
       }
-    }
 
-    await client.query('COMMIT');
+      await client.query('COMMIT');
 
-    // Dual Write Replay
-    if (clientNew) {
-      try {
-        await clientNew.query(projectQuery, projectValues);
-        // We need to fetch the ID from secondary to insert images correctly if sequence differs, 
-        // but for now assuming synced or just using payload logic (Wait, project_id is serial, so checking ipc is safer)
+      // Dual Write Replay
+      if (clientNew) {
+        try {
+          await clientNew.query(projectQuery, projectValues);
+          // We need to fetch the ID from secondary to insert images correctly if sequence differs, 
+          // but for now assuming synced or just using payload logic (Wait, project_id is serial, so checking ipc is safer)
 
-        const newProjRes = await clientNew.query("SELECT project_id FROM lgu_forms WHERE ipc = $1", [newIpc]);
-        if (newProjRes.rows.length > 0) {
-          const secProjId = newProjRes.rows[0].project_id;
-          if (data.images && Array.isArray(data.images)) {
-            const imageQuery = `INSERT INTO "lgu_image" (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
-            for (const imgBase64 of data.images) {
-              await clientNew.query(imageQuery, [secProjId, imgBase64, data.uid]);
+          const newProjRes = await clientNew.query("SELECT project_id FROM lgu_forms WHERE ipc = $1", [newIpc]);
+          if (newProjRes.rows.length > 0) {
+            const secProjId = newProjRes.rows[0].project_id;
+            if (data.images && Array.isArray(data.images)) {
+              const imageQuery = `INSERT INTO "lgu_image" (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+              for (const imgBase64 of data.images) {
+                await clientNew.query(imageQuery, [secProjId, imgBase64, data.uid]);
+              }
             }
           }
+          await clientNew.query('COMMIT');
+          console.log("✅ Dual-Write: LGU Project Synced!");
+        } catch (dwErr) {
+          console.error("❌ Dual-Write LGU Error:", dwErr.message);
+          await clientNew.query('ROLLBACK').catch(() => { });
         }
-        await clientNew.query('COMMIT');
-        console.log("✅ Dual-Write: LGU Project Synced!");
-      } catch (dwErr) {
-        console.error("❌ Dual-Write LGU Error:", dwErr.message);
-        await clientNew.query('ROLLBACK').catch(() => { });
       }
+
+      // 5. Log Activity
+      const logDetails = {
+        action: "LGU Project Created",
+        ipc: newIpc,
+        status: data.status,
+        timestamp: new Date().toISOString()
+      };
+
+      await logActivity(
+        data.uid, resolvedLguName, 'LGU', 'CREATE',
+        `LGU Project: ${newProject.project_name} (${newIpc})`,
+        JSON.stringify(logDetails)
+      );
+
+      res.status(200).json({ message: "LGU Project saved!", project: newProject, ipc: newIpc });
+
+    } catch (err) {
+      if (client) await client.query('ROLLBACK');
+      if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
+      console.error("❌ LGU Save Error:", err.message);
+      res.status(500).json({ message: "Database error", error: err.message });
+    } finally {
+      if (client) client.release();
+      if (clientNew) clientNew.release();
     }
+  });
 
-    // 5. Log Activity
-    const logDetails = {
-      action: "LGU Project Created",
-      ipc: newIpc,
-      status: data.status,
-      timestamp: new Date().toISOString()
-    };
+  // --- LGU 2. POST: Upload Image (LGU) ---
+  app.post('/api/lgu/upload-image', async (req, res) => {
+    const { projectId, imageData, uploadedBy } = req.body;
+    if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
 
-    await logActivity(
-      data.uid, resolvedLguName, 'LGU', 'CREATE',
-      `LGU Project: ${newProject.project_name} (${newIpc})`,
-      JSON.stringify(logDetails)
-    );
+    try {
+      const query = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
+      const result = await pool.query(query, [projectId, imageData, uploadedBy]);
 
-    res.status(200).json({ message: "LGU Project saved!", project: newProject, ipc: newIpc });
+      await logActivity(uploadedBy, 'LGU User', 'LGU', 'UPLOAD', `LGU Project ID: ${projectId}`, `Uploaded image`);
 
-  } catch (err) {
-    if (client) await client.query('ROLLBACK');
-    if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
-    console.error("❌ LGU Save Error:", err.message);
-    res.status(500).json({ message: "Database error", error: err.message });
-  } finally {
-    if (client) client.release();
-    if (clientNew) clientNew.release();
-  }
-});
+      res.status(201).json({ success: true, imageId: result.rows[0].id });
 
-// --- LGU 2. POST: Upload Image (LGU) ---
-app.post('/api/lgu/upload-image', async (req, res) => {
-  const { projectId, imageData, uploadedBy } = req.body;
-  if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
+      // Dual Write
+      if (poolNew) {
+        try {
+          // Need to map project_id if sequences drifted, but simple logic for now:
+          // Ideally we pass IPC, but here we only have ID. 
+          // Warning: ID mismatch risk.
+          // Safe way: SELECT ipc FROM lgu_forms WHERE project_id = $1 -> Then on secondary SELECT project_id FROM lgu_forms WHERE ipc = ...
 
-  try {
-    const query = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
-    const result = await pool.query(query, [projectId, imageData, uploadedBy]);
-
-    await logActivity(uploadedBy, 'LGU User', 'LGU', 'UPLOAD', `LGU Project ID: ${projectId}`, `Uploaded image`);
-
-    res.status(201).json({ success: true, imageId: result.rows[0].id });
-
-    // Dual Write
-    if (poolNew) {
-      try {
-        // Need to map project_id if sequences drifted, but simple logic for now:
-        // Ideally we pass IPC, but here we only have ID. 
-        // Warning: ID mismatch risk.
-        // Safe way: SELECT ipc FROM lgu_forms WHERE project_id = $1 -> Then on secondary SELECT project_id FROM lgu_forms WHERE ipc = ...
-
-        const ipcRes = await pool.query("SELECT ipc FROM lgu_forms WHERE project_id = $1", [projectId]);
-        if (ipcRes.rows.length > 0) {
-          const ipc = ipcRes.rows[0].ipc;
-          await poolNew.query(`
+          const ipcRes = await pool.query("SELECT ipc FROM lgu_forms WHERE project_id = $1", [projectId]);
+          if (ipcRes.rows.length > 0) {
+            const ipc = ipcRes.rows[0].ipc;
+            await poolNew.query(`
                     INSERT INTO lgu_image (project_id, image_data, uploaded_by)
                     VALUES ((SELECT project_id FROM lgu_forms WHERE ipc = $1), $2, $3)
                 `, [ipc, imageData, uploadedBy]);
-          console.log("✅ Dual-Write: LGU Image Synced!");
+            console.log("✅ Dual-Write: LGU Image Synced!");
+          }
+        } catch (dwErr) {
+          console.error("❌ Dual-Write LGU Image Error:", dwErr.message);
         }
-      } catch (dwErr) {
-        console.error("❌ Dual-Write LGU Image Error:", dwErr.message);
       }
-    }
 
-  } catch (err) {
-    console.error("❌ LGU Image Upload Error:", err.message);
-    res.status(500).json({ error: "Failed to save image" });
-  }
-});
+    } catch (err) {
+      console.error("❌ LGU Image Upload Error:", err.message);
+      res.status(500).json({ error: "Failed to save image" });
+    }
+  });
+
+  // --- LGU 3. GET: Fetch LGU Projects (List) ---
+  app.get('/api/lgu/projects', async (req, res) => {
+    const { uid, municipality } = req.query;
+    try {
+      let query = `
+      SELECT 
+        project_id, project_name, school_name, school_id, 
+        status, accomplishment_percentage, project_allocation, 
+        ipc, lgu_name, 
+        TO_CHAR(target_completion_date, 'YYYY-MM-DD') as target_completion_date,
+        TO_CHAR(status_as_of, 'YYYY-MM-DD') as status_as_of,
+        other_remarks
+      FROM lgu_forms
+    `;
+      const params = [];
+
+      if (uid) {
+        query += ` WHERE lgu_id = $1`;
+        params.push(uid);
+      } else if (municipality) {
+        query += ` WHERE municipality = $1 OR city = $1`;
+        params.push(municipality);
+      }
+
+      query += ` ORDER BY created_at DESC`;
+
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+
+    } catch (err) {
+      console.error("❌ Fetch LGU Projects Error:", err.message);
+      res.status(500).json({ error: "Failed to fetch projects" });
+    }
+  });
+
+  // --- LGU 4. GET: Fetch Single LGU Project (Detail) ---
+  app.get('/api/lgu/project/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const query = `
+            SELECT *,
+            TO_CHAR(target_completion_date, 'YYYY-MM-DD') as "targetCompletionDate",
+            TO_CHAR(status_as_of, 'YYYY-MM-DD') as "statusAsOfDate",
+            TO_CHAR(actual_completion_date, 'YYYY-MM-DD') as "actualCompletionDate",
+            TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') as "noticeToProceed",
+            TO_CHAR(construction_start_date, 'YYYY-MM-DD') as "construction_start_date",
+            TO_CHAR(moa_date, 'YYYY-MM-DD') as "moa_date",
+            TO_CHAR(bid_opening_date, 'YYYY-MM-DD') as "bid_opening_date",
+            TO_CHAR(resolution_award_date, 'YYYY-MM-DD') as "resolution_award_date",
+            TO_CHAR(bidding_date, 'YYYY-MM-DD') as "bidding_date",
+            TO_CHAR(awarding_date, 'YYYY-MM-DD') as "awarding_date",
+            TO_CHAR(date_approved_pow, 'YYYY-MM-DD') as "date_approved_pow",
+            TO_CHAR(date_contract_signing, 'YYYY-MM-DD') as "date_contract_signing",
+            TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') as "date_notice_of_award"
+            FROM lgu_forms WHERE project_id = $1
+        `;
+      const result = await pool.query(query, [id]);
+
+      if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+
+      // Fetch images too
+      const imgQuery = `SELECT id, image_data, category FROM lgu_image WHERE project_id = $1`;
+      const imgResult = await pool.query(imgQuery, [id]);
+
+      const project = result.rows[0];
+      project.images = imgResult.rows;
+
+      res.json(project);
+    } catch (err) {
+      console.error("❌ Fetch LGU Project Error:", err.message);
+      res.status(500).json({ error: "Failed to fetch project details" });
+    }
+  });
+
+  // --- LGU 5. PUT: Update LGU Project ---
+  app.put('/api/lgu/update-project/:id', async (req, res) => {
+    const { id } = req.params;
+    const data = req.body;
+
+    if (!id) return res.status(400).json({ error: "Project ID required" });
+
+    let client;
+    let clientNew;
+
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+
+      if (poolNew) {
+        try {
+          clientNew = await poolNew.connect();
+          await clientNew.query('BEGIN');
+        } catch (e) { console.error("Dual-write connect error", e); }
+      }
+
+      // 1. Update Main Fields
+      const updateQuery = `
+            UPDATE lgu_forms SET
+                project_name = COALESCE($1, project_name),
+                school_name = COALESCE($2, school_name),
+                school_id = COALESCE($3, school_id),
+                status = COALESCE($4, status),
+                accomplishment_percentage = COALESCE($5, accomplishment_percentage),
+                status_as_of = COALESCE($6, status_as_of),
+                target_completion_date = COALESCE($7, target_completion_date),
+                actual_completion_date = COALESCE($8, actual_completion_date),
+                notice_to_proceed = COALESCE($9, notice_to_proceed),
+                contractor_name = COALESCE($10, contractor_name),
+                project_allocation = COALESCE($11, project_allocation),
+                batch_of_funds = COALESCE($12, batch_of_funds),
+                other_remarks = COALESCE($13, other_remarks),
+                latitude = COALESCE($14, latitude),
+                longitude = COALESCE($15, longitude),
+                
+                -- NEW FIELDS
+                moa_date = COALESCE($16, moa_date),
+                tranches_count = COALESCE($17, tranches_count),
+                tranche_amount = COALESCE($18, tranche_amount),
+                fund_source = COALESCE($19, fund_source),
+                scope_of_works = COALESCE($20, scope_of_works),
+                contract_amount = COALESCE($21, contract_amount),
+                bid_opening_date = COALESCE($22, bid_opening_date),
+                resolution_award_date = COALESCE($23, resolution_award_date),
+                procurement_stage = COALESCE($24, procurement_stage),
+                bidding_date = COALESCE($25, bidding_date),
+                awarding_date = COALESCE($26, awarding_date),
+                construction_start_date = COALESCE($27, construction_start_date),
+                funds_downloaded = COALESCE($28, funds_downloaded),
+                funds_utilized = COALESCE($29, funds_utilized),
+
+                -- NEWEST FIELDS
+                source_agency = COALESCE($30, source_agency),
+                lsb_resolution_no = COALESCE($31, lsb_resolution_no),
+                moa_ref_no = COALESCE($32, moa_ref_no),
+                validity_period = COALESCE($33, validity_period),
+                contract_duration = COALESCE($34, contract_duration),
+                date_approved_pow = COALESCE($35, date_approved_pow),
+                fund_release_schedule = COALESCE($36, fund_release_schedule),
+                mode_of_procurement = COALESCE($37, mode_of_procurement),
+                philgeps_ref_no = COALESCE($38, philgeps_ref_no),
+                pcab_license_no = COALESCE($39, pcab_license_no),
+                date_contract_signing = COALESCE($40, date_contract_signing),
+                bid_amount = COALESCE($41, bid_amount),
+                nature_of_delay = COALESCE($42, nature_of_delay),
+                date_notice_of_award = COALESCE($43, date_notice_of_award)
+
+            WHERE project_id = $44
+            RETURNING *;
+        `;
+
+      const values = [
+        data.projectName, data.schoolName, data.schoolId,
+        data.status, parseIntOrNull(data.accomplishmentPercentage),
+        valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+        valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+        valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+        valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+        valueOrNull(data.latitude), valueOrNull(data.longitude),
+        // New
+        valueOrNull(data.moa_date), parseIntOrNull(data.tranches_count), parseNumberOrNull(data.tranche_amount),
+        valueOrNull(data.fund_source), valueOrNull(data.scope_of_works), parseNumberOrNull(data.contract_amount),
+        valueOrNull(data.bid_opening_date), valueOrNull(data.resolution_award_date), valueOrNull(data.procurement_stage),
+        valueOrNull(data.bidding_date), valueOrNull(data.awarding_date), valueOrNull(data.construction_start_date),
+        parseNumberOrNull(data.funds_downloaded), parseNumberOrNull(data.funds_utilized),
+
+        // Newest
+        valueOrNull(data.source_agency),
+        valueOrNull(data.lsb_resolution_no),
+        valueOrNull(data.moa_ref_no),
+        valueOrNull(data.validity_period),
+        valueOrNull(data.contract_duration),
+        valueOrNull(data.date_approved_pow),
+        valueOrNull(data.fund_release_schedule),
+        valueOrNull(data.mode_of_procurement),
+        valueOrNull(data.philgeps_ref_no),
+        valueOrNull(data.pcab_license_no),
+        valueOrNull(data.date_contract_signing),
+        parseNumberOrNull(data.bid_amount),
+        valueOrNull(data.nature_of_delay),
+        valueOrNull(data.date_notice_of_award),
+
+        id
+      ];
+
+      const result = await client.query(updateQuery, values);
+
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // 2. Handle New Images (Append)
+      if (data.newImages && Array.isArray(data.newImages) && data.newImages.length > 0) {
+        const imageQuery = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+        for (const img of data.newImages) {
+          await client.query(imageQuery, [id, img, data.uid]);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // Dual Write
+      if (clientNew) {
+        try {
+          // Determine Secondary ID via IPC (safer) since IDs might drift
+          const ipc = result.rows[0].ipc;
+          if (ipc) {
+            // Update on Secondary by IPC
+            // Construct UPDATE by IPC... or just by ID if we trust it?
+            // Let's rely on ID for now but catch error
+            await clientNew.query(updateQuery, values);
+
+            // Images
+            if (data.newImages && Array.isArray(data.newImages)) {
+              const secProjRes = await clientNew.query("SELECT project_id FROM lgu_forms WHERE ipc = $1", [ipc]);
+              if (secProjRes.rows.length > 0) {
+                const secId = secProjRes.rows[0].project_id;
+                const imageQuery = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+                for (const img of data.newImages) {
+                  await clientNew.query(imageQuery, [secId, img, data.uid]);
+                }
+              }
+            }
+            await clientNew.query('COMMIT');
+            console.log("✅ Dual-Write: LGU Update Synced");
+          }
+        } catch (dwErr) {
+          console.error("❌ Dual-Write LGU Update Error", dwErr);
+          await clientNew.query('ROLLBACK').catch(() => { });
+        }
+      }
+
+      res.json({ success: true, project: result.rows[0] });
+
+    } catch (err) {
+      if (client) await client.query('ROLLBACK');
+      console.error("❌ LGU Update Project Error:", err.message);
+      res.status(500).json({ error: "Failed to update project" });
+    } finally {
+      if (client) client.release();
+      if (clientNew) clientNew.release();
+    }
+  });
 

@@ -19,7 +19,7 @@ const getDashboardPath = (role) => {
     const roleMap = {
         'Division Engineer': '/engineer-dashboard',
         'Engineer': '/engineer-dashboard',
-        'Local Government Unit': '/lgu',
+        'Local Government Unit': '/lgu-form',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Regional Office': '/monitoring-dashboard',
