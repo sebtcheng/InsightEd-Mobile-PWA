@@ -1177,6 +1177,20 @@ app.post('/api/auth/master-login', async (req, res) => {
 
 const valueOrNull = (value) => (value === '' || value === undefined ? null : value);
 
+const normalizeOffering = (val) => {
+  if (!val) return '';
+  const lower = String(val).toLowerCase().trim();
+
+  if (lower === 'purely es') return 'Purely Elementary';
+  if (lower === 'es and jhs (k to 10)') return 'Elementary School and Junior High School (K-10)';
+  if (lower === 'all offering (k to 12)') return 'All Offering (K-12)';
+  if (lower === 'jhs with shs') return 'Junior and Senior High';
+  if (lower === 'purely jhs') return 'Purely Junior High School';
+  if (lower === 'purely shs') return 'Purely Senior High School';
+
+  return val; // Return original if no match
+};
+
 const parseNumberOrNull = (value) => {
   if (value === '' || value === null || value === undefined) return null;
   const parsed = parseFloat(value);
@@ -2524,7 +2538,7 @@ app.post('/api/register-school', async (req, res) => {
       uid,
       newIern,
       email,
-      schoolData.curricular_offering
+      normalizeOffering(schoolData.curricular_offering)
     ];
 
     await client.query(insertQuery, values);
@@ -2567,6 +2581,16 @@ app.post('/api/register-school', async (req, res) => {
     }
 
     console.log(`[SUCCESS] Registered School: ${schoolData.school_name} (${newIern})`);
+
+    // SNAPSHOT UPDATE (Initialize Progress)
+    try {
+      await calculateSchoolProgress(schoolData.school_id, pool);
+      if (poolNew) await calculateSchoolProgress(schoolData.school_id, poolNew);
+    } catch (calcErr) {
+      console.error("Warning: Failed to calculate initial progress:", calcErr.message);
+      // Non-fatal, registration still succeeded
+    }
+
     res.json({ success: true, iern: newIern, message: "School Registered Successfully" });
 
   } catch (err) {
@@ -2817,7 +2841,7 @@ app.post('/api/save-school', async (req, res) => {
       data.division, data.district, data.municipality, data.legDistrict,
       data.barangay, data.motherSchoolId, data.latitude, data.longitude,
       data.submittedBy,
-      data.curricularOffering, // $14
+      normalizeOffering(data.curricularOffering), // $14
       JSON.stringify(newLogEntry), // $15
       finalIern // $16
     ];
@@ -2895,6 +2919,24 @@ app.get('/api/school-profile/:uid', async (req, res) => {
     });
   } catch (err) {
     console.error("Fetch School Profile Error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// --- 4c. GET: School By User (Alias for Compatibility) ---
+app.get('/api/school-by-user/:uid', async (req, res) => {
+  const { uid } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    if (result.rows.length === 0) return res.json({ exists: false });
+    res.json({
+      exists: true,
+      data: result.rows[0],
+      school_id: result.rows[0].school_id,
+      curricular_offering: result.rows[0].curricular_offering
+    });
+  } catch (err) {
+    console.error("Fetch School By User Error:", err);
     res.status(500).json({ error: "Database error" });
   }
 });

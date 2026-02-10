@@ -9,6 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
+import { normalizeOffering } from '../utils/dataNormalization';
 
 
 // --- EXTRACTED COMPONENT ---
@@ -200,7 +201,7 @@ const TeachingPersonnel = () => {
 
                             if (json.exists || (viewOnly && schoolIdParam)) {
                                 // Update School ID / Offering
-                                const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                                const newOffering = normalizeOffering(json.curricular_offering || json.offering || storedOffering);
                                 setSchoolId(json.school_id || json.schoolId || storedSchoolId);
                                 setOffering(newOffering);
 
@@ -258,9 +259,24 @@ const TeachingPersonnel = () => {
     }, []);
 
     // --- HELPERS ---
-    const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
-    const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
-    const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
+    // --- HELPERS (Case Insensitive) ---
+    const getOfferingLower = () => offering?.toLowerCase() || '';
+    const isPermissive = () => {
+        const off = getOfferingLower();
+        return !off || off.includes('no curricular');
+    };
+    const showElem = () => {
+        const off = getOfferingLower();
+        return off.includes("elementary") || off.includes("k-12") || off.includes("k-10") || isPermissive();
+    };
+    const showJHS = () => {
+        const off = getOfferingLower();
+        return off.includes("junior") || off.includes("secondary") || off.includes("k-12") || off.includes("k-10") || isPermissive();
+    };
+    const showSHS = () => {
+        const off = getOfferingLower();
+        return off.includes("senior") || off.includes("secondary") || off.includes("k-12") || isPermissive();
+    };
 
     const getTotal = () => {
         // Calculate total teachers by excluding teaching experience fields (teach_exp_*)

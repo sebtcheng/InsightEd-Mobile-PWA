@@ -34,9 +34,10 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
     const totals = calculateTotals();
 
     const offering = formData.curricular_offering?.toLowerCase() || '';
-    const showElem = offering.includes('elementary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || !offering;
-    const showJhs = offering.includes('junior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || !offering;
-    const showShs = offering.includes('senior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || !offering;
+    const isPermissive = !offering || offering === 'no curricular offering';
+    const showElem = offering.includes('elementary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || isPermissive;
+    const showJhs = offering.includes('junior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || offering.includes('k-10') || isPermissive;
+    const showShs = offering.includes('senior') || offering.includes('secondary') || offering.includes('integrated') || offering.includes('k-12') || isPermissive;
 
     return (
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700">

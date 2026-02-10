@@ -8,6 +8,7 @@ import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, Fi
 import { TbSchool } from 'react-icons/tb';
 import SuccessModal from '../components/SuccessModal';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
+import { normalizeOffering } from '../utils/dataNormalization';
 
 // --- SUB-COMPONENT: Generic Grid Section (Adapted from LearnerStatistics) ---
 const GridSection = ({ label, icon, color, children, totalLabel, totalValue }) => (
@@ -109,10 +110,12 @@ const Enrolment = () => {
         }
     };
 
-    // --- VISIBILITY HELPERS ---
-    const showElem = () => curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10") || !curricularOffering;
-    const showJHS = () => curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10") || !curricularOffering;
-    const showSHS = () => curricularOffering.includes("Senior") || curricularOffering.includes("K-12") || !curricularOffering;
+    // --- VISIBILITY HELPERS (Case Insensitive) ---
+    const offeringLower = curricularOffering?.toLowerCase() || '';
+    const isPermissive = () => !offeringLower || offeringLower.includes('no curricular');
+    const showElem = () => offeringLower.includes("elementary") || offeringLower.includes("k-12") || offeringLower.includes("k-10") || isPermissive();
+    const showJHS = () => offeringLower.includes("junior") || offeringLower.includes("secondary") || offeringLower.includes("k-12") || offeringLower.includes("k-10") || isPermissive();
+    const showSHS = () => offeringLower.includes("senior") || offeringLower.includes("secondary") || offeringLower.includes("k-12") || isPermissive();
 
     // --- INSTANT LOAD STRATEGY ---
     useEffect(() => {
@@ -194,10 +197,11 @@ const Enrolment = () => {
 
                                 if (data) {
                                     setSchoolId(data.school_id);
-                                    setCurricularOffering(data.curricular_offering || storedOffering);
+                                    const normOffering = normalizeOffering(data.curricular_offering || storedOffering);
+                                    setCurricularOffering(normOffering);
                                     if (!viewOnly) {
                                         localStorage.setItem('schoolId', data.school_id);
-                                        if (data.curricular_offering) localStorage.setItem('schoolOffering', data.curricular_offering);
+                                        if (data.curricular_offering) localStorage.setItem('schoolOffering', normOffering);
                                     }
 
                                     const loaded = {};

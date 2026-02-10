@@ -9,6 +9,7 @@ import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 
 import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, FiBarChart2, FiHelpCircle, FiInfo } from 'react-icons/fi';
+import { normalizeOffering } from '../utils/dataNormalization';
 import { TbSchool } from 'react-icons/tb';
 
 // --- SUB-COMPONENT: Generic Grid Section (Matched from Enrolment.jsx) ---
@@ -229,7 +230,7 @@ const OrganizedClasses = () => {
 
                         if (json.exists || (viewOnly && schoolIdParam)) {
                             setSchoolId(json.school_id || json.schoolId);
-                            const newOffering = json.curricular_offering || json.offering || storedOffering || '';
+                            const newOffering = normalizeOffering(json.curricular_offering || json.offering || storedOffering);
                             setOffering(newOffering);
 
                             if (!viewOnly && json.schoolId) {
@@ -316,9 +317,24 @@ const OrganizedClasses = () => {
 
 
     // --- HELPERS ---
-    const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
-    const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
-    const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
+    // --- HELPERS (Case Insensitive) ---
+    const getOfferingLower = () => offering?.toLowerCase() || '';
+    const isPermissive = () => {
+        const off = getOfferingLower();
+        return !off || off.includes('no curricular');
+    };
+    const showElem = () => {
+        const off = getOfferingLower();
+        return off.includes("elementary") || off.includes("k-12") || off.includes("k-10") || isPermissive();
+    };
+    const showJHS = () => {
+        const off = getOfferingLower();
+        return off.includes("junior") || off.includes("secondary") || off.includes("k-12") || off.includes("k-10") || isPermissive();
+    };
+    const showSHS = () => {
+        const off = getOfferingLower();
+        return off.includes("senior") || off.includes("secondary") || off.includes("k-12") || isPermissive();
+    };
     const getTotalClasses = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0);
     const getElemTotal = () => (formData.kinder || 0) + (formData.g1 || 0) + (formData.g2 || 0) + (formData.g3 || 0) + (formData.g4 || 0) + (formData.g5 || 0) + (formData.g6 || 0);
     const getJHSTotal = () => (formData.g7 || 0) + (formData.g8 || 0) + (formData.g9 || 0) + (formData.g10 || 0);

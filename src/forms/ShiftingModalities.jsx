@@ -317,9 +317,10 @@ const ShiftingModalities = () => {
 
 
     // --- VISIBILITY HELPERS (Uses 'offering' which is now offline-available) ---
-    const showElem = () => offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
-    const showJHS = () => offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
-    const showSHS = () => offering.includes("Senior") || offering.includes("K-12");
+    const isPermissive = () => !offering || offering.toLowerCase() === 'no curricular offering';
+    const showElem = () => isPermissive() || offering.includes("Elementary") || offering.includes("K-12") || offering.includes("K-10");
+    const showJHS = () => isPermissive() || offering.includes("Junior") || offering.includes("K-12") || offering.includes("K-10");
+    const showSHS = () => isPermissive() || offering.includes("Senior") || offering.includes("K-12");
 
     // --- HANDLERS ---
     const handleShiftChange = (e, lvl) => setShifts(prev => ({ ...prev, [`shift_${lvl}`]: e.target.value }));

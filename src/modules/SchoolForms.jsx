@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import BottomNav from './BottomNav'; // ✅ UPDATED IMPORT
+import { normalizeOffering } from '../utils/dataNormalization';
 
 // Icons
 import {
@@ -159,7 +160,7 @@ const SchoolForms = () => {
 
                             // PREMIUM OPTIMIZATION: Cache critical keys globally
                             if (profileJson.data.school_id) localStorage.setItem('schoolId', profileJson.data.school_id);
-                            if (profileJson.data.curricular_offering) localStorage.setItem('schoolOffering', profileJson.data.curricular_offering);
+                            if (profileJson.data.curricular_offering) localStorage.setItem('schoolOffering', normalizeOffering(profileJson.data.curricular_offering));
                         }
                     }
 

@@ -9,6 +9,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
+import { normalizeOffering } from '../utils/dataNormalization';
 
 
 
@@ -327,7 +328,7 @@ const SchoolResources = () => {
                         if (profileRes.exists || (viewOnly && schoolIdParam)) {
                             const pData = (viewOnly && schoolIdParam) ? profileRes : profileRes.data;
                             setSchoolId(pData.school_id || pData.schoolId);
-                            setCurricularOffering(pData.curricular_offering || pData.curricularOffering || storedOffering || '');
+                            setCurricularOffering(normalizeOffering(pData.curricular_offering || pData.curricularOffering || storedOffering));
 
                             const newEnrollment = {
                                 gradeKinder: pData.grade_kinder || pData.kinder || 0,
@@ -533,9 +534,24 @@ const SchoolResources = () => {
     // --- COMPONENTS EXTRACTED ABOVE ---
 
     // VISIBILITY Helpers
-    const showElem = () => !curricularOffering || curricularOffering.includes("Elementary") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
-    const showJHS = () => !curricularOffering || curricularOffering.includes("Junior") || curricularOffering.includes("K-12") || curricularOffering.includes("K-10");
-    const showSHS = () => !curricularOffering || curricularOffering.includes("Senior") || curricularOffering.includes("K-12");
+    // VISIBILITY Helpers (Case Insensitive)
+    const getOfferingLower = () => curricularOffering?.toLowerCase() || '';
+    const isPermissive = () => {
+        const off = getOfferingLower();
+        return !off || off.includes('no curricular');
+    };
+    const showElem = () => {
+        const off = getOfferingLower();
+        return off.includes("elementary") || off.includes("k-12") || off.includes("k-10") || isPermissive();
+    };
+    const showJHS = () => {
+        const off = getOfferingLower();
+        return off.includes("junior") || off.includes("secondary") || off.includes("k-12") || off.includes("k-10") || isPermissive();
+    };
+    const showSHS = () => {
+        const off = getOfferingLower();
+        return off.includes("senior") || off.includes("secondary") || off.includes("k-12") || isPermissive();
+    };
 
     // LoadingScreen check removed
 

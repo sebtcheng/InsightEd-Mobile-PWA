@@ -11,6 +11,7 @@ import PageTransition from '../components/PageTransition';
 import LocationPickerMap from '../components/LocationPickerMap';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal'; // NEW // NEW
+import { normalizeOffering } from '../utils/dataNormalization';
 
 const SchoolProfile = () => {
     const navigate = useNavigate();
@@ -99,6 +100,8 @@ const SchoolProfile = () => {
         } catch (e) { console.error("Cache Error:", e); }
     };
 
+
+
     // 🛡️ SMART MAPPER: Prioritizes Local Storage if DB value is missing
     const mapDbToForm = (dbData) => {
         const cachedOffering = localStorage.getItem('schoolOffering');
@@ -116,8 +119,8 @@ const SchoolProfile = () => {
             motherSchoolId: dbData.mother_school_id || '',
             latitude: dbData.latitude || '',
             longitude: dbData.longitude || '',
-            // 👇 THE FIX: Use DB value, if empty use Cache, if empty use ''
-            curricularOffering: dbData.curricular_offering || cachedOffering || '',
+            // 👇 THE FIX: Normalize the value from DB/Cache
+            curricularOffering: normalizeOffering(dbData.curricular_offering || cachedOffering) || '',
             iern: dbData.iern || ''
         };
     };
@@ -260,9 +263,11 @@ const SchoolProfile = () => {
                         localData = mapDbToForm(localData);
                     }
 
-                    // Critical: Restore Offering
+                    // Critical: Restore Offering & Normalize
                     if (!localData.curricularOffering) {
-                        localData.curricularOffering = cachedOffering || '';
+                        localData.curricularOffering = normalizeOffering(cachedOffering) || '';
+                    } else {
+                        localData.curricularOffering = normalizeOffering(localData.curricularOffering);
                     }
                     loadedOffering = localData.curricularOffering;
 
@@ -466,7 +471,8 @@ const SchoolProfile = () => {
                     region: matchedRegion, province: matchedProv, municipality: matchedMun, barangay: matchedBrgy,
                     division: matchedDiv, district: getVal('district'), legDistrict: getVal('legdistrict') || getVal('legislative'),
                     motherSchoolId: getVal('motherschool') || '', latitude: getVal('latitude'), longitude: getVal('longitude'),
-                    curricularOffering: getVal('offering') || ''
+                    // 👇 THE FIX: Normalize CSV Offering Value
+                    curricularOffering: normalizeOffering(getVal('offering')) || ''
                 }));
                 // Run validation on autofilled name
                 checkSchoolName(getVal('schoolname'));
