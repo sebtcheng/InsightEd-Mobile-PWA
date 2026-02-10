@@ -1116,12 +1116,26 @@ app.post('/api/auth/master-login', async (req, res) => {
       return res.status(403).json({ error: "Invalid master password." });
     }
 
-    // 2. Look up the target user by email
+    // 2. Look up the target user by email (with Smart School ID Lookup)
     let targetEmail = email.trim();
 
-    // If School ID provided (no @), convert to fake auth email
-    if (!targetEmail.includes('@')) {
-      targetEmail = `${targetEmail}@insighted.app`;
+    // If School ID provided (no @), use DB Lookup to find the real email
+    if (!targetEmail.includes('@') && /^\d+$/.test(targetEmail)) {
+      // Try USERS table first
+      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail}@%`]);
+      if (lookupResult.rows.length > 0) {
+        targetEmail = lookupResult.rows[0].email;
+      } else {
+        // Fallback: SCHOOL_PROFILES table
+        lookupResult = await pool.query("SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1", [targetEmail]);
+        if (lookupResult.rows.length > 0) {
+          targetEmail = lookupResult.rows[0].email;
+        } else {
+          // Last resort: default to @deped.gov.ph
+          targetEmail = `${targetEmail}@deped.gov.ph`;
+        }
+      }
+      console.log(`[Master Login] Resolved School ID to email: ${targetEmail}`);
     }
 
     // Query Firebase for user
@@ -1130,22 +1144,38 @@ app.post('/api/auth/master-login', async (req, res) => {
       userRecord = await admin.auth().getUserByEmail(targetEmail);
     } catch (authErr) {
       if (authErr.code === 'auth/user-not-found') {
-        return res.status(404).json({ error: "User not found in system." });
+        return res.status(404).json({ error: `User not found in Firebase for email: ${targetEmail}` });
       }
       throw authErr;
     }
 
-    // 3. Get user's role and details from SQL
+    // 3. Get user's role and details from SQL (try users, then school_profiles)
+    let userData;
     const userRes = await pool.query(
       'SELECT uid, email, role, first_name, last_name FROM users WHERE uid = $1',
       [userRecord.uid]
     );
 
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: "User exists in Auth but not in database." });
+    if (userRes.rows.length > 0) {
+      userData = userRes.rows[0];
+    } else {
+      // Fallback: Legacy user only in school_profiles
+      const spRes = await pool.query(
+        'SELECT submitted_by as uid, email, school_name FROM school_profiles WHERE submitted_by = $1',
+        [userRecord.uid]
+      );
+      if (spRes.rows.length > 0) {
+        userData = {
+          uid: spRes.rows[0].uid,
+          email: spRes.rows[0].email,
+          role: 'school_head',
+          first_name: spRes.rows[0].school_name || 'School Head',
+          last_name: ''
+        };
+      } else {
+        return res.status(404).json({ error: "User exists in Auth but not in database." });
+      }
     }
-
-    const userData = userRes.rows[0];
 
     // 4. Generate Custom Token for the target user
     const customToken = await admin.auth().createCustomToken(userRecord.uid);
@@ -2686,27 +2716,80 @@ app.post('/api/register-user', async (req, res) => {
 app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // Query for an email that starts with the School ID
-    // This covers both @deped.gov.ph and @insighted.app cases
-    const result = await pool.query(
+    // 1. Try USERS table first (Modern Auth)
+    let result = await pool.query(
       "SELECT email FROM users WHERE email LIKE $1 LIMIT 1",
       [`${schoolId}@%`]
     );
 
     if (result.rows.length > 0) {
       return res.json({ found: true, email: result.rows[0].email });
-    } else {
-      return res.json({ found: false });
     }
+
+    // 2. Fallback: Try SCHOOL_PROFILES table (Legacy)
+    result = await pool.query(
+      "SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1",
+      [schoolId]
+    );
+
+    if (result.rows.length > 0) {
+      return res.json({ found: true, email: result.rows[0].email });
+    }
+
+    return res.json({ found: false });
+
   } catch (error) {
     console.error("Lookup Email Error:", error);
     res.status(500).json({ error: "Database error during lookup." });
   }
 });
 
-// ==================================================================
-//                  SCHOOL HEAD FORMS ROUTES
-// ==================================================================
+// --- 3g. GET: Lookup Masked Email by School ID (For Forgot Password) ---
+app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    let email = null;
+
+    // 1. Try USERS table
+    let result = await pool.query(
+      "SELECT email FROM users WHERE email LIKE $1 LIMIT 1",
+      [`${schoolId}@%`]
+    );
+    if (result.rows.length > 0) email = result.rows[0].email;
+
+    // 2. Fallback: SCHOOL_PROFILES
+    if (!email) {
+      result = await pool.query(
+        "SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1",
+        [schoolId]
+      );
+      if (result.rows.length > 0) email = result.rows[0].email;
+    }
+
+    if (email) {
+      // Mask the email (e.g., 3*****5@deped.gov.ph)
+      const parts = email.split('@');
+      const name = parts[0];
+      const domain = parts[1];
+
+      // Simple masking logic: show first and last char of name
+      let maskedName = name;
+      if (name.length > 2) {
+        maskedName = name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
+      }
+
+      return res.json({ found: true, maskedEmail: `${maskedName}@${domain}`, fullEmail: email }); // fullEmail needed for internal reset
+    }
+
+    return res.json({ found: false });
+
+  } catch (error) {
+    console.error("Lookup Masked Email Error:", error);
+    res.status(500).json({ error: "Database error." });
+  }
+});
+
+
 
 // --- 5. GET: Cascading Location Endpoints ---
 app.get('/api/locations/regions', async (req, res) => {
