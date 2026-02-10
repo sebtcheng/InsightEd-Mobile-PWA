@@ -1344,8 +1344,8 @@ const MonitoringDashboard = () => {
                                                                                     colorClass = 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400';
                                                                                     label = 'Minor Data Anomalies';
                                                                                 } else if (score <= 99) {
-                                                                                    colorClass = 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400';
-                                                                                    label = 'Acceptable Variability';
+                                                                                    colorClass = 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+                                                                                    label = 'Minimal Data Anomalies';
                                                                                 } else { // 100 or higher
                                                                                     colorClass = 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400';
                                                                                     label = 'Excellent';
@@ -1357,12 +1357,6 @@ const MonitoringDashboard = () => {
 
                                                                                 return (
                                                                                     <div className="flex flex-col items-start gap-1">
-                                                                                        {/* Show Validated Badge if applicable */}
-                                                                                        {(s.data_health_description === 'Excellent' || s.school_head_validation) && (
-                                                                                            <span className="text-[9px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1 mb-0.5">
-                                                                                                <FiCheckCircle size={10} /> Validated
-                                                                                            </span>
-                                                                                        )}
 
                                                                                         {/* Always show Data Health Score if not just generic "Validated" fallback */}
                                                                                         {/* If it's validated, we might still want to see the underlying score if it differs? 

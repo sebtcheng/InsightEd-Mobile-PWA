@@ -500,7 +500,7 @@ const SchoolHeadDashboard = () => {
                                                 ? "Major data anomaly/inconsistency detected. Requires major data overhaul"
                                                 : schoolProfile.data_health_score <= 85
                                                     ? "Minor data anomaly/inconsistency detected. Requires revision of some data inputs."
-                                                    : "Within the acceptable range of data variability. Not major changes needed."
+                                                    : "Within the acceptable range of data variability. Possible minimal data correction needed."
                                             }
                                         </p>
                                     </div>

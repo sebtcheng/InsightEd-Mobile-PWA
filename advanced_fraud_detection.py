@@ -598,7 +598,8 @@ def update_school_summary_table(df, engine):
                     flag_anomaly_furniture BOOLEAN DEFAULT FALSE,
                     flag_anomaly_organized_classes BOOLEAN DEFAULT FALSE,
                     flag_exp_mismatch BOOLEAN DEFAULT FALSE,
-                    flag_spec_exceeds BOOLEAN DEFAULT FALSE,
+                    flag_spec_mismatch BOOLEAN DEFAULT FALSE,
+                    flag_zero_specialization BOOLEAN DEFAULT FALSE,
                     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """))
@@ -633,7 +634,11 @@ def update_school_summary_table(df, engine):
                 ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_furniture BOOLEAN DEFAULT FALSE;
                 ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_anomaly_organized_classes BOOLEAN DEFAULT FALSE;
                 ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_exp_mismatch BOOLEAN DEFAULT FALSE;
-                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_spec_exceeds BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_exp_mismatch BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_spec_mismatch BOOLEAN DEFAULT FALSE;
+                ALTER TABLE school_summary ADD COLUMN IF NOT EXISTS flag_zero_specialization BOOLEAN DEFAULT FALSE;
+                
+                ALTER TABLE school_summary DROP COLUMN IF EXISTS flag_spec_exceeds;
                 
                 ALTER TABLE school_summary DROP COLUMN IF EXISTS total_als_learners;
                 ALTER TABLE school_summary DROP COLUMN IF EXISTS total_sped_learners;
@@ -900,8 +905,11 @@ def analyze_school_summary(engine):
             (np.abs(df['total_teaching_experience'] - df['total_teachers']) > 5)
         )
         
-        # Specialized teachers cannot exceed total teachers
-        df['flag_spec_exceeds'] = df['total_specialized_teachers'] > df['total_teachers']
+        # Specialized teachers mismatch (must match exactly)
+        df['flag_spec_mismatch'] = (df['total_teachers'] > 0) & (np.abs(df['total_specialized_teachers'] - df['total_teachers']) > 0)
+        
+        # Zero specialization reported (when teachers exist)
+        df['flag_zero_specialization'] = (df['total_specialized_teachers'] == 0) & (df['total_teachers'] > 0)
         
         # Calculate data health score with HEAVY penalty for zero-value flags
         print("Calculating data health scores...")
@@ -915,7 +923,25 @@ def analyze_school_summary(engine):
         df['other_flag_count'] = df[other_flags].sum(axis=1)
         
         # Heavy penalty for zero values (20 points each), lighter for anomalies (5 points each)
-        df['data_health_score'] = np.maximum(100 - (df['zero_flag_count'] * 20) - (df['other_flag_count'] * 5), 0)
+        # BASE CALCULATION
+        df['calculated_score'] = np.maximum(100 - (df['zero_flag_count'] * 20) - (df['other_flag_count'] * 5), 0)
+        
+        # === OPTIMIZATION: STRICT CAPS ===
+        # 1. No Learners = Score 0 (Critical)
+        # 2. Missing Key Resources (Teachers/Classrooms) = Max Score 75 (Fair)
+        
+        def apply_caps(row):
+            # Critical: No Enrollment
+            if row['total_learners'] == 0:
+                return 0
+            
+            # Fair Cap: Missing Teachers or Classrooms (even if learners exist)
+            if row['flag_zero_teachers'] or row['flag_zero_classrooms']:
+                return min(row['calculated_score'], 75)
+                
+            return row['calculated_score']
+
+        df['data_health_score'] = df.apply(apply_caps, axis=1)
         
         # Generate issues summary
         def generate_issues(row):
@@ -923,51 +949,53 @@ def analyze_school_summary(engine):
             
             # Zero-value issues (highest priority)
             if row['flag_zero_teachers']:
-                issues.append("Missing teachers data")
+                issues.append("No Teachers Reported")
             if row['flag_zero_classrooms']:
-                issues.append("Missing classrooms data")
+                issues.append("No Classrooms Reported")
             if row['flag_zero_seats']:
-                issues.append("Missing seats data")
+                issues.append("No Seats Reported")
             if row['flag_zero_toilets']:
-                issues.append("Missing toilets data")
+                issues.append("No Toilets Reported")
             if row['flag_zero_furniture']:
-                issues.append("Missing furniture data")
+                issues.append("No Furniture Reported")
             if row['flag_zero_resources']:
-                issues.append("Missing resources data")
+                issues.append("No Resources Reported")
             if row['flag_zero_organized_classes']:
-                issues.append("Missing organized classes data")
+                issues.append("No Organized Classes Reported")
             
             # Correlation anomalies
             if row['flag_anomaly_teachers']:
-                issues.append("Teacher count anomaly")
+                issues.append("Teacher Count Inconsistent with Enrollment")
             if row['flag_anomaly_classrooms']:
-                issues.append("Classroom count anomaly")
+                issues.append("Classroom Count Inconsistent with Enrollment")
             if row['flag_anomaly_seats']:
-                issues.append("Seat count anomaly")
+                issues.append("Seat Count Inconsistent with Enrollment")
             if row['flag_anomaly_toilets']:
-                issues.append("Toilet count anomaly")
+                issues.append("Toilet Count Inconsistent with Enrollment")
             if row['flag_anomaly_furniture']:
-                issues.append("Furniture count anomaly")
+                issues.append("Furniture Count Inconsistent with Enrollment")
             if row['flag_anomaly_organized_classes']:
-                issues.append("Organized classes anomaly")
+                issues.append("Organized Class Count Inconsistent with Enrollment")
             
             # Teacher validation issues
             if row['flag_exp_mismatch']:
-                issues.append("Teaching experience mismatch")
-            if row['flag_spec_exceeds']:
-                issues.append("Specialized teachers exceed total")
+                issues.append("Teaching Experience Breakdown Mismatched with Total Teachers")
+            if row['flag_spec_mismatch']:
+                issues.append("Specialization Count Mismatched with Total Teachers")
+            if row['flag_zero_specialization']:
+                issues.append("No Specialization Data Reported")
             
             # Ratio outliers
             if row['flag_outlier_ptr']:
-                issues.append("Pupil-teacher ratio outlier")
+                issues.append("Extreme Pupil-Teacher Ratio")
             if row['flag_outlier_pcr']:
-                issues.append("Pupil-classroom ratio outlier")
+                issues.append("Extreme Pupil-Classroom Ratio")
             if row['flag_outlier_psr']:
-                issues.append("Pupil-seat ratio outlier")
+                issues.append("Extreme Pupil-Seat Ratio")
             if row['flag_outlier_ptorr']:
-                issues.append("Pupil-toilet ratio outlier")
+                issues.append("Extreme Pupil-Toilet Ratio")
             if row['flag_outlier_pfr']:
-                issues.append("Pupil-furniture ratio outlier")
+                issues.append("Extreme Pupil-Furniture Ratio")
             
             return "; ".join(issues) if issues else "None"
         
