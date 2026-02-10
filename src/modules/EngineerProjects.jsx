@@ -21,6 +21,21 @@ const ProjectStatus = {
   Completed: "Completed",
 };
 
+const DOC_TYPES = {
+    POW: "Program of Works",
+    DUPA: "DUPA",
+    CONTRACT: "Signed Contract"
+};
+
+const convertFullFileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+    });
+};
+
 // --- HELPERS ---
 const formatAllocation = (value) => {
   const num = Number(value) || 0;
@@ -249,16 +264,58 @@ const EditProjectModal = ({
 }) => {
   const [formData, setFormData] = useState(null);
 
+  const [documents, setDocuments] = useState({
+      POW: null,
+      DUPA: null,
+      CONTRACT: null
+  });
+
   useEffect(() => {
     if (project) {
         setFormData({ 
             ...project,
             // Ensure fields exist to control inputs
             latitude: project.latitude || '',
-            longitude: project.longitude || ''
+            longitude: project.longitude || '',
+            // Populate all fields
+            projectCategory: project.projectCategory || '',
+            projectName: project.projectName || '',
+            scopeOfWork: project.scopeOfWork || '',
+            numberOfStoreys: project.numberOfStoreys || '',
+            numberOfClassrooms: project.numberOfClassrooms || '',
+            numberOfSites: project.numberOfSites || '',
+            schoolId: project.schoolId || '',
+            schoolName: project.schoolName || '',
+            region: project.region || '',
+            division: project.division || '',
+            targetCompletionDate: project.targetCompletionDate || '',
+            noticeToProceed: project.noticeToProceed || '',
+            constructionStartDate: project.constructionStartDate || '',
+            contractorName: project.contractorName || '',
+            projectAllocation: project.projectAllocation || '',
+            batchOfFunds: project.batchOfFunds || '',
+            fundsUtilized: project.fundsUtilized || ''
         });
+        // Reset docs on open
+        setDocuments({ POW: null, DUPA: null, CONTRACT: null });
     }
   }, [project]);
+
+  // --- Document Handlers ---
+  const handleDocumentSelect = (e, type) => {
+      const file = e.target.files[0];
+      if (file) {
+          if (file.type !== "application/pdf") {
+              alert("⚠️ INVALID FORMAT\n\nPlease upload a valid PDF file.");
+              return;
+          }
+          setDocuments(prev => ({ ...prev, [type]: file }));
+      }
+  };
+
+  const removeDocument = (type) => {
+      setDocuments(prev => ({ ...prev, [type]: null }));
+  };
 
   if (!isOpen || !formData) return null;
 
@@ -385,6 +442,97 @@ const EditProjectModal = ({
 
         {/* --- BODY --- */}
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+
+          {/* --- PROJECT IDENTIFICATION & DETAILS --- */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Project Details</h3>
+             
+             {/* Category & Name */}
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Category</label>
+                    <input name="projectCategory" value={formData.projectCategory} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Project Name</label>
+                    <input name="projectName" value={formData.projectName} readOnly className="w-full p-2 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs" />
+                 </div>
+             </div>
+
+             {/* Scope of Work */}
+             <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Scope of Work</label>
+                <textarea name="scopeOfWork" rows="2" value={formData.scopeOfWork} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none" />
+             </div>
+
+             {/* Stats: Classrooms, Storeys, Sites */}
+             <div className="grid grid-cols-3 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Classrooms</label>
+                    <input type="number" name="numberOfClassrooms" value={formData.numberOfClassrooms} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Storeys</label>
+                    <input type="number" name="numberOfStoreys" value={formData.numberOfStoreys} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Sites</label>
+                    <input type="number" name="numberOfSites" value={formData.numberOfSites} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+             </div>
+
+             {/* School Info (ReadOnly) */}
+            <div className="grid grid-cols-2 gap-3">
+                 <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">School ID</label>
+                    <input value={formData.schoolId} readOnly className="w-full p-2 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs" />
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">School Name</label>
+                    <input value={formData.schoolName} readOnly className="w-full p-2 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs" />
+                 </div>
+             </div>
+          </div>
+
+          {/* --- DATES & FUNDS --- */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
+             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Timeline & Funds</h3>
+             
+             <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Target Completion</label>
+                    <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Notice to Proceed</label>
+                    <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Construction Start</label>
+                    <input type="date" name="constructionStartDate" value={formData.constructionStartDate} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Contractor</label>
+                    <input name="contractorName" value={formData.contractorName} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Allocation</label>
+                    <input type="number" name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Batch</label>
+                    <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+                <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                    <input type="number" name="fundsUtilized" value={formData.fundsUtilized} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs" />
+                </div>
+             </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Current Status</label>
@@ -434,43 +582,21 @@ const EditProjectModal = ({
            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Site Photos</h3>
              <div className="space-y-4">
-                 {/* Internal */}
-                 <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-bold text-slate-600 uppercase">Internal</span>
-                        <span className="text-[9px] font-bold text-blue-500">{internalPreviews?.length || 0} Added</span>
-                    </div>
-                     <div className="flex gap-2 mb-2">
-                        <button onClick={() => onCameraClick('Internal')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
-                            📷 Camera
-                        </button>
-                        <button onClick={() => onGalleryClick('Internal')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
-                            🖼️ Gallery
-                        </button>
-                     </div>
-                     {internalPreviews?.length > 0 && (
-                        <div className="grid grid-cols-4 gap-2">
-                            {internalPreviews.map((url, index) => (
-                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
-                                    <img src={url} alt="internal" className="w-full h-full object-cover" />
-                                    <button onClick={() => onRemoveFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>
-                                </div>
-                            ))}
-                        </div>
-                     )}
-                 </div>
-
                  {/* External */}
-                 <div>
+                 <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                     <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-bold text-slate-600 uppercase">External</span>
+                        <span className="text-[10px] font-bold text-slate-600 uppercase">External Photos</span>
                          <span className="text-[9px] font-bold text-blue-500">{externalPreviews?.length || 0} Added</span>
                     </div>
+                     <div className="text-[9px] text-slate-400 mb-2 italic space-y-0.5">
+                        <p>• Front, Left, Right, Rear (wide shots)</p>
+                        <p>• Orthographic at height 20-30m (optional)</p>
+                     </div>
                      <div className="flex gap-2 mb-2">
-                        <button onClick={() => onCameraClick('External')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                        <button onClick={() => onCameraClick('External')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
                             📷 Camera
                         </button>
-                        <button onClick={() => onGalleryClick('External')} className="flex-1 py-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                        <button onClick={() => onGalleryClick('External')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
                             🖼️ Gallery
                         </button>
                      </div>
@@ -485,8 +611,94 @@ const EditProjectModal = ({
                         </div>
                      )}
                  </div>
+
+                 {/* Internal */}
+                 <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-bold text-slate-600 uppercase">Internal Photos</span>
+                        <span className="text-[9px] font-bold text-blue-500">{internalPreviews?.length || 0} Added</span>
+                    </div>
+                     <div className="text-[9px] text-slate-400 mb-2 italic space-y-0.5">
+                        <p>• Classrooms (2-3): Wide shot from doorway/corner, Camera at 1.4-1.6m height, Facing longest wall.</p>
+                        <p>• Key indicators: Ceiling, Lighting, Outlets, Painted walls, Floor condition.</p>
+                     </div>
+                     <div className="flex gap-2 mb-2">
+                        <button onClick={() => onCameraClick('Internal')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                            📷 Camera
+                        </button>
+                        <button onClick={() => onGalleryClick('Internal')} className="flex-1 py-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-500 text-[9px] font-black uppercase hover:border-blue-400 hover:text-blue-500 transition-all">
+                            🖼️ Gallery
+                        </button>
+                     </div>
+                     {internalPreviews?.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2">
+                            {internalPreviews.map((url, index) => (
+                                <div key={index} className="relative aspect-square rounded-lg overflow-hidden ring-1 ring-slate-200">
+                                    <img src={url} alt="internal" className="w-full h-full object-cover" />
+                                    <button onClick={() => onRemoveFile(index, 'Internal')} className="absolute top-0.5 right-0.5 bg-red-500 text-white rounded-full w-4 h-4 text-[8px] flex items-center justify-center">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                     )}
+                 </div>
              </div>
            </div>
+           
+           {/* --- PROJECT DOCUMENTS SECTION --- */}
+           <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">📄</span>
+                    <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Update Documents</h3>
+                </div>
+                <p className="text-xs text-slate-400 -mt-2 mb-2">Upload new PDFs to replace existing ones.</p>
+
+                <div className="space-y-2">
+                  {Object.entries(DOC_TYPES).map(([key, label]) => (
+                    <div key={key} className={`p-3 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <p className={`text-[10px] font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                    {label}
+                                </p>
+                                {documents[key] ? (
+                                    <p className="text-[9px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                        {documents[key].name}
+                                    </p>
+                                ) : (
+                                  project && project[`${key.toLowerCase()}_pdf`] ? (
+                                    <p className="text-[9px] text-blue-500 font-bold mt-0.5">Existing File Available</p>
+                                  ) : (
+                                    <p className="text-[9px] text-slate-400 mt-0.5">No file uploaded</p>
+                                  )
+                                )}
+                            </div>
+                            <div>
+                                {documents[key] ? (
+                                    <button
+                                        onClick={() => removeDocument(key)}
+                                        className="w-6 h-6 rounded-full bg-white text-red-500 shadow-sm border border-red-100 flex items-center justify-center hover:bg-red-50"
+                                    >
+                                        ✕
+                                    </button>
+                                ) : (
+                                    <label className="cursor-pointer px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-[9px] font-bold text-slate-600 uppercase tracking-wider hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all active:scale-95">
+                                        Upload
+                                        <input
+                                            type="file"
+                                            accept=".pdf"
+                                            className="hidden"
+                                            onChange={(e) => handleDocumentSelect(e, key)}
+                                        />
+                                    </label>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                  ))}
+                </div>
+           </div>
+
           
           {/* --- LOCATION SECTION --- */}
           <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 space-y-3">
@@ -597,18 +809,13 @@ const EditProjectModal = ({
             Cancel
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               // VALIDATION
               const requiredFields = [
                   { key: 'statusAsOfDate', label: 'Status Date' },
                   { key: 'accomplishmentPercentage', label: 'Accomplishment %' },
                   { key: 'otherRemarks', label: 'Remarks' }
               ];
-              // Add more if needed based on what's editable. 
-              // Looking at the form, status, pct, date, remarks, photos are main.
-              // We already validate photos and location in handleSaveProject, but doing it here prevents closing the modal prematurely if we were to move logic.
-              // However, handleSaveProject in the parent handles the actual saving and has checking logic too.
-              // Let's rely on the parent's check for Photos/Location, but check form fields here.
               
               for (const field of requiredFields) {
                    if (formData[field.key] === "" || formData[field.key] === null || formData[field.key] === undefined) {
@@ -616,7 +823,14 @@ const EditProjectModal = ({
                        return;
                    }
               }
-              onSave(formData);
+
+              // CONVERT DOCUMENTS
+              const finalData = { ...formData };
+              if (documents.POW) finalData.pow_pdf = await convertFullFileToBase64(documents.POW);
+              if (documents.DUPA) finalData.dupa_pdf = await convertFullFileToBase64(documents.DUPA);
+              if (documents.CONTRACT) finalData.contract_pdf = await convertFullFileToBase64(documents.CONTRACT);
+
+              onSave(finalData);
             }}
             disabled={isUploading}
             className="flex-[2] py-4 text-white font-black text-xs uppercase tracking-widest bg-gradient-to-r from-[#004A99] to-[#003366] rounded-2xl shadow-xl shadow-blue-900/20 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
@@ -748,8 +962,17 @@ const EngineerProjects = () => {
                     otherRemarks: item.otherRemarks,
                     contractorName: item.contractorName,
                     ipc: item.ipc,
-                    latitude: item.latitude, // Added Latitude
-                    longitude: item.longitude // Added Longitude
+                    latitude: item.latitude,
+                    longitude: item.longitude,
+                    projectCategory: item.projectCategory,
+                    scopeOfWork: item.scopeOfWork,
+                    numberOfClassrooms: item.numberOfClassrooms,
+                    numberOfStoreys: item.numberOfStoreys,
+                    numberOfSites: item.numberOfSites,
+                    fundsUtilized: item.fundsUtilized,
+                    constructionStartDate: item.constructionStartDate,
+                    noticeToProceed: item.noticeToProceed,
+                    batchOfFunds: item.batchOfFunds
                 }));
 
                 // Update Cache on success
