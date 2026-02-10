@@ -2660,13 +2660,34 @@ app.post('/api/register-user', async (req, res) => {
       }
     }
 
-    // Log Activity
     await logActivity(uid, `${firstName} ${lastName}`, role, 'REGISTER', 'User Profile', `Registered as ${role}`);
 
     res.json({ success: true, message: "User synced to Database" });
   } catch (err) {
     console.error("âŒ Register User Error:", err);
     res.status(500).json({ error: "Failed to sync user to Database" });
+  }
+});
+
+// --- 3f. GET: Lookup Email by School ID (Smart Login) ---
+app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // Query for an email that starts with the School ID
+    // This covers both @deped.gov.ph and @insighted.app cases
+    const result = await pool.query(
+      "SELECT email FROM users WHERE email LIKE $1 LIMIT 1",
+      [`${schoolId}@%`]
+    );
+
+    if (result.rows.length > 0) {
+      return res.json({ found: true, email: result.rows[0].email });
+    } else {
+      return res.json({ found: false });
+    }
+  } catch (error) {
+    console.error("Lookup Email Error:", error);
+    res.status(500).json({ error: "Database error during lookup." });
   }
 });
 

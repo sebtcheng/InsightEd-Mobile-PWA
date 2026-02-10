@@ -743,7 +743,7 @@ const SchoolResources = () => {
                             </div>
                             <div>
                                 <h2 className="text-slate-800 font-bold text-lg">Comfort Rooms</h2>
-                                <p className="text-xs text-slate-400 font-medium">Sanitation facilities</p>
+                                <p className="text-xs text-slate-400 font-medium">Count TOILET SEATS/BOWLS, not rooms/doors</p>
                             </div>
                         </div>
 
@@ -835,7 +835,7 @@ const SchoolResources = () => {
                             <FiInfo />
                         </div>
                         <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the current inventory status of school facilities, equipment, and utilities?'</b></p>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the current inventory status of school facilities, equipment, and utilities?'</b><br /><br />Please count <b>TOILET SEATS / BOWLS</b>, not the number of rooms or doors.</p>
                         <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>

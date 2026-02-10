@@ -194,33 +194,39 @@ const Login = () => {
         // --- NORMAL LOGIN (SMART SCHOOL ID STRATEGY) ---
         try {
             let loginEmail = loginId.trim();
-            let isSchoolId = false;
+            const isSchoolId = /^\d+$/.test(loginEmail); // Basic check if it's just numbers
 
-            // Check if input is a pure School ID (numbers/no @)
-            if (loginEmail.length > 0 && !loginEmail.includes('@') && /^\d+$/.test(loginEmail)) {
-                isSchoolId = true;
-            }
-
-            await setPersistence(auth, browserLocalPersistence);
-
+            // A. If it's a School ID, use the NEW LOOKUP API
             if (isSchoolId) {
-                // STRATEGY: Try @deped.gov.ph FIRST, then @insighted.app
                 try {
-                    const depedEmail = `${loginEmail}@deped.gov.ph`;
-                    await signInWithEmailAndPassword(auth, depedEmail, password);
-                } catch (firstError) {
-                    if (firstError.code === 'auth/user-not-found' || firstError.code === 'auth/invalid-credential') {
-                        console.log("Not found as @deped.gov.ph, trying @insighted.app fallback...");
-                        const insightedEmail = `${loginEmail}@insighted.app`;
-                        await signInWithEmailAndPassword(auth, insightedEmail, password);
+                    console.log(`Looking up email for School ID: ${loginEmail}...`);
+                    // Use the NEW backend endpoint to find the real email
+                    const lookupRes = await fetch(`/api/auth/lookup-email/${loginEmail}`);
+
+                    if (lookupRes.ok) {
+                        const data = await lookupRes.json();
+                        if (data.found && data.email) {
+                            console.log(`✅ Lookup found email: ${data.email}`);
+                            loginEmail = data.email; // Use the found email (e.g., 100001@insighted.app)
+                        } else {
+                            console.warn("❌ Lookup returned no email. Falling back to default.");
+                            // Fallback: Default to @deped.gov.ph if lookup fails (Legacy behavior)
+                            loginEmail = `${loginEmail}@deped.gov.ph`;
+                        }
                     } else {
-                        throw firstError; // Re-throw other errors (network, blocked, etc.)
+                        console.warn("⚠️ Lookup API Error. Falling back to default.");
+                        loginEmail = `${loginEmail}@deped.gov.ph`;
                     }
+                } catch (lookupErr) {
+                    console.error("Lookup Request Failed:", lookupErr);
+                    // Network error? Fallback to default
+                    loginEmail = `${loginEmail}@deped.gov.ph`;
                 }
-            } else {
-                // Standard Email Login
-                await signInWithEmailAndPassword(auth, loginEmail, password);
             }
+
+            // B. Proceed with Login (using either the typed email OR the looked-up email)
+            await setPersistence(auth, browserLocalPersistence);
+            await signInWithEmailAndPassword(auth, loginEmail, password);
 
             // The Listener will catch the Auth Change -> checkUserRole -> Navigate
         } catch (error) {
