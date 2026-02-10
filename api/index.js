@@ -171,6 +171,19 @@ const initDB = async () => {
     console.log("✅ DB Init: LGU Schema verified (lgu_forms + extra columns + lgu_image).");
 
 
+
+    // --- MIGRATION: ADD MISSING COLUMNS (CLASSROOMS, SITES, STOREYS, FUNDS) ---
+    await pool.query(`
+      ALTER TABLE engineer_form 
+      ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS internal_description TEXT,
+      ADD COLUMN IF NOT EXISTS external_description TEXT;
+    `);
+    console.log("✅ DB Init: Engineer Form extra columns verified.");
+
   } catch (err) {
     console.error("âŒ DB Init Error:", err);
   }
@@ -3693,22 +3706,32 @@ app.put('/api/update-project/:id', async (req, res) => {
     const newLong = valueOrNull(data.longitude) || oldData.longitude;
 
 
+
     const insertValues = [
       oldData.project_name, oldData.school_name, oldData.school_id, oldData.region, oldData.division,
       newStatus, newAccomplishment, newStatusAsOf,
-      oldData.target_completion_date, newActualDate, oldData.notice_to_proceed,
-      oldData.contractor_name, oldData.project_allocation, oldData.batch_of_funds, newRemarks,
+      valueOrNull(data.targetCompletionDate) || oldData.target_completion_date, // Allow update
+      newActualDate,
+      valueOrNull(data.noticeToProceed) || oldData.notice_to_proceed, // Allow update
+      valueOrNull(data.contractorName) || oldData.contractor_name, // Allow update
+      valueOrNull(data.projectAllocation) || oldData.project_allocation, // Allow update
+      valueOrNull(data.batchOfFunds) || oldData.batch_of_funds, // Allow update
+      newRemarks,
       oldData.engineer_id, // Preserve original engineer ID
       oldData.ipc,         // Preserve IPC to link history
       finalUserName,       // Update Name string
       newLat,              // $19
       newLong,             // $20
-      oldData.pow_pdf,      // $21: Preserve POW
-      oldData.dupa_pdf,     // $22: Preserve DUPA
-      oldData.contract_pdf,  // $23: Preserve CONTRACT
+      data.pow_pdf ? data.pow_pdf : oldData.pow_pdf,           // $21: Update or Preserve POW
+      data.dupa_pdf ? data.dupa_pdf : oldData.dupa_pdf,         // $22: Update or Preserve DUPA
+      data.contract_pdf ? data.contract_pdf : oldData.contract_pdf, // $23: Update or Preserve CONTRACT
       valueOrNull(data.constructionStartDate) || oldData.construction_start_date, // $24
       valueOrNull(data.projectCategory) || oldData.project_category, // $25
-      valueOrNull(data.scopeOfWork) || oldData.scope_of_work // $26
+      valueOrNull(data.scopeOfWork) || oldData.scope_of_work, // $26
+      valueOrNull(data.numberOfClassrooms) || oldData.number_of_classrooms, // $27
+      valueOrNull(data.numberOfStoreys) || oldData.number_of_storeys, // $28
+      valueOrNull(data.numberOfSites) || oldData.number_of_sites, // $29
+      valueOrNull(data.fundsUtilized) || oldData.funds_utilized // $30
     ];
 
     const insertQuery = `
@@ -3719,8 +3742,9 @@ app.put('/api/update-project/:id', async (req, res) => {
         contractor_name, project_allocation, batch_of_funds, other_remarks,
         engineer_id, ipc, engineer_name, latitude, longitude,
         pow_pdf, dupa_pdf, contract_pdf,
-        construction_start_date, project_category, scope_of_work
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+        construction_start_date, project_category, scope_of_work,
+        number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       RETURNING *;
     `;
 
@@ -3811,7 +3835,8 @@ app.get('/api/projects', async (req, res) => {
             project_id, school_name, project_name, school_id, division, region, status, ipc, engineer_name, engineer_id,
             accomplishment_percentage, project_allocation, batch_of_funds, contractor_name, other_remarks,
             status_as_of, target_completion_date, actual_completion_date, notice_to_proceed, latitude, longitude,
-            construction_start_date, project_category, scope_of_work
+            construction_start_date, project_category, scope_of_work,
+            number_of_classrooms, number_of_storeys, number_of_sites, funds_utilized
           FROM engineer_form
           ORDER BY ipc, project_id DESC
       )
@@ -3827,6 +3852,8 @@ app.get('/api/projects', async (req, res) => {
         TO_CHAR(p.notice_to_proceed, 'YYYY-MM-DD') AS "noticeToProceed",
         TO_CHAR(p.construction_start_date, 'YYYY-MM-DD') AS "constructionStartDate",
         p.project_category AS "projectCategory", p.scope_of_work AS "scopeOfWork",
+        p.number_of_classrooms AS "numberOfClassrooms", p.number_of_storeys AS "numberOfStoreys",
+        p.number_of_sites AS "numberOfSites", p.funds_utilized AS "fundsUtilized",
         p.latitude, p.longitude
       FROM LatestProjects p
       LEFT JOIN school_profiles sp ON p.school_id = sp.school_id
