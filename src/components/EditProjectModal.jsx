@@ -432,7 +432,9 @@ const EditProjectModal = ({
                     {mode === 'quick' && renderFundsUtilized()}
 
                     {/* COMMON: Site Photos - SHOW ONLY IN QUICK MODE PER USER REQUEST */}
-                    {mode === 'quick' && (
+                    {mode === 'quick' && 
+                     formData.status !== ProjectStatus.NotYetStarted && 
+                     formData.status !== ProjectStatus.UnderProcurement && (
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Site Photos</h3>
                             <div className="space-y-4">

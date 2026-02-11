@@ -406,7 +406,10 @@ const EngineerProjects = () => {
                 fundsUtilized: item.fundsUtilized,
                 constructionStartDate: item.constructionStartDate,
                 noticeToProceed: item.noticeToProceed,
-                batchOfFunds: item.batchOfFunds
+                batchOfFunds: item.batchOfFunds,
+                pow_pdf: item.pow_pdf,
+                dupa_pdf: item.dupa_pdf,
+                contract_pdf: item.contract_pdf
               }));
 
               // Update Cache on success

@@ -1317,7 +1317,7 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{divName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} / {totalSchools} Completed • <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
+                                                                            {completedCount} / {totalSchools} Completed
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
@@ -1326,7 +1326,7 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </div>
                                                                 {/* Stacked Progress Bar */}
-                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex">
+                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
                                                                         style={{ width: `${validatedPct}%` }}
@@ -1338,6 +1338,9 @@ const MonitoringDashboard = () => {
                                                                         title={`Critical Issues: ${forValidationCount}`}
                                                                     ></div>
                                                                 </div>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                                                    <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
+                                                                </p>
                                                             </div>
                                                         );
                                                     })}
@@ -1709,7 +1712,7 @@ const MonitoringDashboard = () => {
                                                                     <div>
                                                                         <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors">{distName}</h3>
                                                                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                                                                            {completedCount} / {totalSchools} Completed • <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
+                                                                            {completedCount} / {totalSchools} Completed
                                                                         </p>
                                                                     </div>
                                                                     <div className="text-right">
@@ -1718,7 +1721,7 @@ const MonitoringDashboard = () => {
                                                                     </div>
                                                                 </div>
                                                                 {/* Stacked Progress Bar */}
-                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex">
+                                                                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden flex mb-2">
                                                                     <div
                                                                         className={`h-full ${color} transition-all duration-1000`}
                                                                         style={{ width: `${validatedPct}%` }}
@@ -1730,6 +1733,9 @@ const MonitoringDashboard = () => {
                                                                         title={`For Validation: ${forValidationCount}`}
                                                                     ></div>
                                                                 </div>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                                                    <span className="text-emerald-500">{validatedCount} Validated</span> • <span className="text-rose-500">{forValidationCount} For Validation</span>
+                                                                </p>
                                                             </div>
                                                         );
                                                     })}
