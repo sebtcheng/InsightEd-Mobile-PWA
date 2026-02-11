@@ -221,13 +221,6 @@ const MonitoringDashboard = () => {
 
             // FIX: For SDO, we want the "Top Stats" to remain as Division Overview even when drilling down to a district.
             // Create a separate params object for the main stats that EXCLUDES district.
-            const statsParams = new URLSearchParams({
-                region: queryRegion || '',
-                // FIX: For RO, exclude division from Top Stats to keep them Regional
-                ...(queryDivision && effectiveRole !== 'Regional Office' && { division: queryDivision })
-                // explicitly OMIT district here
-            });
-
             const statsParams = new URLSearchParams();
 
             if (effectiveRole === 'Regional Office') {
@@ -328,7 +321,333 @@ const MonitoringDashboard = () => {
         }
     };
 
-    // ... (useEffect remains) ...
+    useEffect(() => {
+        fetchData();
+
+        // Load Location Data for filters
+        import('../locations.json').then(module => {
+            const data = module.default;
+            setAvailableRegions(Object.keys(data).sort());
+        }).catch(err => console.error("Failed to load locations", err));
+
+        // Load Schools Data for Division filtering
+        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if (results.data && results.data.length > 0) {
+                    setSchoolData(results.data);
+
+                    // Aggregate Totals by Region
+                    const totals = {};
+                    results.data.forEach(row => {
+                        if (row.region) {
+                            totals[row.region] = (totals[row.region] || 0) + 1;
+                        }
+                    });
+                    setCsvRegionalTotals(totals);
+                }
+            }
+        });
+    }, []);
+
+    // NEW: Handle Active Tab from Navigation State
+    useEffect(() => {
+        if (location.state?.activeTab) {
+            setActiveTab(location.state.activeTab);
+
+            if (location.state.resetFilters) {
+                setCoRegion('');
+                setCoDivision('');
+                setCoDistrict('');
+                // Fetch Data for National View (empty params)
+                fetchData('', '');
+            }
+        }
+    }, [location.state]);
+
+    // Effect for Central Office: Update divisions when Region changes
+    useEffect(() => {
+        // REMOVED: Auto-select Region NCR. Now defaults to National View.
+
+        if (userData?.role === 'Central Office' && coRegion && schoolData.length > 0) {
+            const divisions = [...new Set(schoolData
+                .filter(s => s.region === coRegion)
+                .map(s => s.division))]
+                .sort();
+            setAvailableDivisions(divisions);
+        } else {
+            setAvailableDivisions([]);
+        }
+    }, [coRegion, schoolData, userData]);
+
+    // NEW: Update Districts when Division changes
+    useEffect(() => {
+        // SUPER USER CHECK FOR EFFECTIVE ROLE
+        const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+            ? sessionStorage.getItem('impersonatedRole')
+            : userData?.role;
+
+        if (effectiveRole === 'Central Office' && coDivision && schoolData.length > 0) {
+            const districts = [...new Set(schoolData
+                .filter(s => s.region === coRegion && s.division === coDivision)
+                .map(s => s.district))]
+                .sort();
+            setAvailableDistricts(districts);
+        } else {
+            setAvailableDistricts([]);
+        }
+    }, [coDivision, coRegion, schoolData, userData]);
+
+    const handleFilterChange = (region) => {
+        setCoRegion(region); // Set empty string for National View
+        setCoDivision(''); // Reset division when region changes
+        setCoDistrict(''); // Reset district
+        fetchData(region, '');
+    };
+
+    const handleDivisionChange = async (division) => {
+        setCoDivision(division);
+        setCoDistrict(''); // Reset district
+        setSchoolSearch(''); // Reset search
+        setSchoolPage(1); // Reset pagination
+
+        // NEW: For Regional Office, fetch schools immediately (Skip District)
+        // SUPER USER CHECK
+        const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+            ? sessionStorage.getItem('impersonatedRole')
+            : userData?.role;
+
+        const effectiveRegion = (userData?.role === 'Super User' && effectiveRole === 'Regional Office')
+            ? sessionStorage.getItem('impersonatedLocation')
+            : (userData?.role === 'Regional Office' ? userData?.region : coRegion);
+
+        if (effectiveRole === 'Regional Office') {
+            setLoadingDistrict(true);
+            try {
+                // Fetch ALL schools in this division (API Data)
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(effectiveRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
+                let apiSchools = [];
+                if (res.ok) {
+                    const data = await res.json();
+                    apiSchools = Array.isArray(data) ? data : (data.data || []);
+                }
+
+                // MERGE: Combine CSV Master List with API Data
+                // Filter CSV for this region/division
+                const masterList = schoolData.filter(s =>
+                    normalizeLocationName(s.region) === normalizeLocationName(effectiveRegion) &&
+                    normalizeLocationName(s.division) === normalizeLocationName(division)
+                );
+
+                // 1. Map CSV Schools (Existing Logic)
+                const csvMapped = masterList.map(csvSchool => {
+                    // Find matching API record (by School ID preferred, or Name)
+                    const apiMatch = apiSchools.find(api =>
+                        api.school_id === csvSchool.school_id ||
+                        normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
+                    );
+
+                    if (apiMatch) {
+                        return apiMatch; // Return the full API record if validation exists
+                    } else {
+                        // Return Mock Object for Missing Schools
+                        return {
+                            school_name: csvSchool.school_name,
+                            school_id: csvSchool.school_id,
+                            district: csvSchool.district,
+                            // Set all statuses to false
+                            profile_status: false,
+                            head_status: false,
+                            enrollment_status: false,
+                            classes_status: false,
+                            shifting_status: false,
+                            personnel_status: false,
+                            specialization_status: false,
+                            resources_status: false,
+                            learner_stats_status: false,
+                            facilities_status: false,
+                            submitted_by: null
+                        };
+                    }
+                });
+
+                // 2. Add API Schools that were NOT in CSV (Fix for "27 vs 20" issue)
+                const csvIds = new Set(masterList.map(s => s.school_id));
+                const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
+
+                const extraApiSchools = apiSchools.filter(api =>
+                    !csvIds.has(api.school_id) &&
+                    !csvNames.has(normalizeLocationName(api.school_name))
+                ).map(api => ({
+                    ...api,
+                    // Ensure missing fields are handled if API returns incomplete shape (though it returns full shape usually)
+                    district: api.district || 'Unassigned District' // Fallback
+                }));
+
+                const mergedSchools = [...csvMapped, ...extraApiSchools];
+
+                // Sort by name
+                mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
+                setDistrictSchools(mergedSchools);
+
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoadingDistrict(false);
+            }
+            // We don't necessarily update global stats if fetchData ignores params for RO, 
+            // but we call it to ensure sync if logic changes.
+            if (userData?.role === 'Super User') {
+                fetchData(effectiveRegion, division);
+            } else {
+                fetchData(userData.region, division);
+            }
+        } else {
+            fetchData(coRegion, division);
+        }
+    };
+
+    const handleDistrictChange = async (district) => {
+        setCoDistrict(district);
+        setSchoolSearch(''); // Reset search
+        setSchoolPage(1); // Reset pagination
+
+        if (district) {
+            setLoadingDistrict(true);
+            try {
+                // Determine params
+                const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+                    ? sessionStorage.getItem('impersonatedRole')
+                    : userData?.role;
+
+                let region, division;
+
+                if (effectiveRole === 'Central Office') {
+                    region = coRegion;
+                    division = coDivision;
+                } else if (userData?.role === 'Super User') {
+                    // Try to find region from schoolData for this division if possible, or assume user context
+                    division = coDivision || sessionStorage.getItem('impersonatedLocation'); // if SDO
+                    // Actually handleDistrictChange is likely called within context where params are clearer
+                    // But simplified here...
+                    region = coRegion;
+                    if (!region && schoolData.length > 0) {
+                        const match = schoolData.find(s => s.division === division);
+                        if (match) region = match.region;
+                    }
+                } else {
+                    region = userData.region;
+                    division = userData.division;
+                }
+
+                const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}&limit=1000`);
+                let apiSchools = [];
+                if (res.ok) {
+                    const data = await res.json();
+                    apiSchools = Array.isArray(data) ? data : (data.data || []);
+                }
+
+                // MERGE: Combine CSV Master List with API Data
+                const masterList = schoolData.filter(s =>
+                    normalizeLocationName(s.region) === normalizeLocationName(region) &&
+                    normalizeLocationName(s.division) === normalizeLocationName(division) &&
+                    normalizeLocationName(s.district) === normalizeLocationName(district)
+                );
+
+                // 1. Map CSV Schools (Existing Logic)
+                const csvMapped = masterList.map(csvSchool => {
+                    const apiMatch = apiSchools.find(api =>
+                        api.school_id === csvSchool.school_id ||
+                        normalizeLocationName(api.school_name) === normalizeLocationName(csvSchool.school_name)
+                    );
+
+                    if (apiMatch) {
+                        return apiMatch;
+                    } else {
+                        return {
+                            school_name: csvSchool.school_name,
+                            school_id: csvSchool.school_id,
+                            district: csvSchool.district,
+                            profile_status: false,
+                            head_status: false,
+                            enrollment_status: false,
+                            classes_status: false,
+                            shifting_status: false,
+                            personnel_status: false,
+                            specialization_status: false,
+                            resources_status: false,
+                            learner_stats_status: false,
+                            facilities_status: false,
+                            submitted_by: null
+                        };
+                    }
+                });
+
+                // 2. Add API Schools that were NOT in CSV (Fix for SDO View consistency)
+                const csvIds = new Set(masterList.map(s => s.school_id));
+                const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
+
+                const extraApiSchools = apiSchools.filter(api =>
+                    !csvIds.has(api.school_id) &&
+                    !csvNames.has(normalizeLocationName(api.school_name))
+                ).map(api => ({
+                    ...api,
+                    district: api.district || district
+                }));
+
+                const mergedSchools = [...csvMapped, ...extraApiSchools];
+                mergedSchools.sort((a, b) => a.school_name.localeCompare(b.school_name));
+                setDistrictSchools(mergedSchools);
+
+            } catch (error) {
+                console.error("Failed to fetch district schools:", error);
+            } finally {
+                setLoadingDistrict(false);
+            }
+        } else {
+            setDistrictSchools([]);
+        }
+
+        // Trigger global stats fetch (pass explicit district to avoid stale state)
+        setTimeout(() => fetchData(undefined, undefined, district), 0);
+    };
+
+    // Better: Add useEffect for Filters
+    useEffect(() => {
+        const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+            ? sessionStorage.getItem('impersonatedRole')
+            : userData?.role;
+
+        if (effectiveRole === 'Central Office' && (coDistrict || coDivision || coRegion)) {
+            fetchData(coRegion, coDivision);
+        }
+    }, [coDistrict, coDivision, coRegion, userData]);
+
+    const StatCard = ({ title, value, total, color, icon: Icon }) => {
+        const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+        return (
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-xl ${color} bg-opacity-10 dark:bg-opacity-20`}>
+                        <Icon className={color.replace('bg-', 'text-')} size={24} />
+                    </div>
+                    <div className="text-right">
+                        <span className="text-2xl font-black text-slate-800 dark:text-slate-100">{percentage}%</span>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{value} / {total}</p>
+                    </div>
+                </div>
+                <h3 className="text-sm font-bold text-slate-600 dark:text-slate-300">{title}</h3>
+                <div className="mt-3 w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full ${color} transition-all duration-1000`}
+                        style={{ width: `${percentage}%` }}
+                    ></div>
+                </div>
+            </div>
+        );
+    };
 
     // NEW: Calculate Jurisdiction Total (Memoized for reuse)
     // FIX: Freezing the total logic
@@ -363,7 +682,7 @@ const MonitoringDashboard = () => {
             const targetDistrict = effectiveRole === 'Central Office' ? coDistrict : null; // Ignore district for RO/SDO
 
             csvTotal = schoolData.filter(s => {
-                const matchRegion = !targetRegion || normalizLocationName(s.region) === normalizeLocationName(targetRegion);
+                const matchRegion = !targetRegion || normalizeLocationName(s.region) === normalizeLocationName(targetRegion);
                 const matchDivision = !targetDivision || normalizeLocationName(s.division) === normalizeLocationName(targetDivision);
                 // Use normalizeLocationName for safety if imported
                 const matchDistrict = !targetDistrict || s.district === targetDistrict;
