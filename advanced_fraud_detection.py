@@ -1002,7 +1002,43 @@ def analyze_school_summary(engine):
         df['issues'] = df.apply(generate_issues, axis=1)
         
         # Description based on score (only 100 is Excellent)
-        def get_health_description(score):
+        # UPDATED: Enforce stricter zero-value checks. If any key total is missing (zero)
+        # while learners exist, prevent "Excellent" rating even if score is high.
+        
+        def get_health_description(row):
+            score = row['data_health_score']
+            
+            # --- ROBUSTNESS CHECK ---
+            # Define critical totals that must be > 0 if there are students
+            critical_totals = [
+                'total_teachers', 
+                'total_classrooms', 
+                'total_seats', 
+                'total_toilets', 
+                'total_furniture',
+                'total_school_resources',
+                'total_organized_classes',
+                'total_teaching_experience',
+                'total_specialized_teachers'
+            ]
+            
+            has_zero_totals = False
+            
+            if row['total_learners'] > 0:
+                for col in critical_totals:
+                    # Note: We use strict 0 check. If column is missing/NaN, it might not trigger, 
+                    # but our schema defaults to 0 and read_sql handles it.
+                    if col in row.index and row[col] == 0:
+                        has_zero_totals = True
+                        break
+
+            # If any zero totals found, CAP the rating
+            if has_zero_totals:
+                # Force max rating to "Good" or "Fair".
+                if score >= 100:
+                    return "Good" # Downgrade from Excellent
+            
+            # Standard Logic
             if score == 100:
                 return "Excellent"
             elif score >= 80:
@@ -1012,7 +1048,12 @@ def analyze_school_summary(engine):
             else:
                 return "Critical"
         
-        df['data_health_description'] = df['data_health_score'].apply(get_health_description)
+        df['data_health_description'] = df.apply(get_health_description, axis=1)
+        
+        # Sync Score with Description (Optional but cleaner)
+        # If description is Good but Score is 100, set score to 99 to match
+        mask_downgrade = (df['data_health_score'] == 100) & (df['data_health_description'] != "Excellent")
+        df.loc[mask_downgrade, 'data_health_score'] = 99
         
         # Update database with health scores and flags
         print("Updating school_summary with health scores...")
@@ -1024,30 +1065,41 @@ def analyze_school_summary(engine):
         update_cols = ['school_id', 'data_health_score', 'data_health_description', 'issues'] + flag_columns
         update_df = df[update_cols]
         
-        with engine.connect() as conn:
-            for _, row in update_df.iterrows():
-                # Build dynamic UPDATE statement
-                set_clauses = ['data_health_score = :score', 'data_health_description = :description', 'issues = :issues']
-                params = {
-                    'school_id': row['school_id'],
-                    'score': float(row['data_health_score']),
-                    'description': row['data_health_description'],
-                    'issues': row['issues']
-                }
-                
-                for flag_col in flag_columns:
-                    set_clauses.append(f"{flag_col} = :{flag_col}")
-                    params[flag_col] = bool(row[flag_col]) if pd.notnull(row[flag_col]) else False
-                
-                update_stmt = text(f"""
-                    UPDATE school_summary 
-                    SET {', '.join(set_clauses)}
-                    WHERE school_id = :school_id
-                """)
-                
-                conn.execute(update_stmt, params)
+        # Convert to list of dicts for bulk update
+        params_list = []
+        for _, row in update_df.iterrows():
+            params = {
+                'school_id': row['school_id'],
+                'score': float(row['data_health_score']),
+                'description': row['data_health_description'],
+                'issues': row['issues']
+            }
+            # Add flag columns
+            for flag_col in flag_columns:
+                params[flag_col] = bool(row[flag_col]) if pd.notnull(row[flag_col]) else False
             
-            conn.commit()
+            params_list.append(params)
+
+        print(f"Executing bulk update for {len(params_list)} schools...")
+        
+        with engine.begin() as conn: # Use explicit join transaction
+            # Dynamic set clause
+            set_clauses = [
+                'data_health_score = :score', 
+                'data_health_description = :description', 
+                'issues = :issues'
+            ]
+            for flag_col in flag_columns:
+                set_clauses.append(f"{flag_col} = :{flag_col}")
+            
+            update_stmt = text(f"""
+                UPDATE school_summary 
+                SET {', '.join(set_clauses)}
+                WHERE school_id = :school_id
+            """)
+            
+            conn.execute(update_stmt, params_list)
+            # Transaction is committed automatically via 'engine.begin()' context
         
         print(f"Successfully updated health scores for {len(df)} schools.")
         print(f"Average health score: {df['data_health_score'].mean():.1f}")
