@@ -73,8 +73,8 @@ const StatsOverview = ({ projects }) => {
       </div>
       <div
         className={`p-3 rounded-xl shadow-sm border flex flex-col justify-center items-center text-center ${stats.delayed > 0
-            ? "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800"
-            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+          ? "bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-800"
+          : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
           }`}
       >
         <p
@@ -310,14 +310,7 @@ const LguDashboard = () => {
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {userRole === 'Super User' && (
-                <button
-                  onClick={() => navigate('/super-admin')}
-                  className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white mb-2 transition"
-                >
-                  ← Back to Hub
-                </button>
-              )}
+
               <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
                 🏛️
               </div>

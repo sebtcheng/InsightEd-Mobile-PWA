@@ -258,9 +258,21 @@ const SchoolHeadDashboard = () => {
 
                         let targetUid = user.uid;
                         // Impersonation Logic
+                        const isSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
+                        // If Generic Mode (no specific UID selected, just role)
+                        if (isSuperUser && !impersonatedUid) {
+                            // Set Dummy Data for Generic Preview
+                            setSchoolName("Generic High School");
+                            setSchoolId("000000");
+                            setUserName("Super User (Preview)");
+                            setSchoolProfile({ start_date: new Date().toISOString() }); // Dummy profile
+                            setLoading(false);
+                            return; // Stop fetching real data
+                        }
+
                         if (userData.role === 'Super User' && impersonatedUid) {
                             targetUid = impersonatedUid;
-                            setUserName(`Super User (Viewing: ${targetUid.slice(0, 5)}...)`); // Optional: indicate view mode
+                            setUserName(`Super User (Viewing: ${targetUid.slice(0, 5)}...)`);
                         }
 
                         const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
@@ -274,6 +286,7 @@ const SchoolHeadDashboard = () => {
                         const headJson = await headRes.json();
                         if (headJson.exists) setHeadProfile(headJson.data);
 
+                        // --- FCM TOKEN REGISTRATION (ROBUST) ---
                         // --- FCM TOKEN REGISTRATION (ROBUST) ---
                         try {
                             const messaging = getMessaging(app);
@@ -299,28 +312,19 @@ const SchoolHeadDashboard = () => {
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ uid: user.uid, token: currentToken })
                                     });
-                                    console.log("✅ FCM Token Sent to Server");
-                                    // Debug removed for production clarity
-                                } else {
-                                    console.warn("⚠️ No registration token available. Request permission to generate one.");
                                 }
-                            } else {
-                                // Permission not granted, do nothing or log
                             }
+
+                            // --- FOREGROUND LISTENER ---
+                            onMessage(messaging, (payload) => {
+                                console.log('🔔 Foreground Message:', payload);
+                                const { title, body } = payload.notification;
+                                new Notification(title, { body, icon: '/pwa-192x192.png' });
+                            });
+
                         } catch (msgErr) {
                             console.log("ℹ️ FCM Token Logic Error:", msgErr);
                         }
-
-                        // --- FOREGROUND LISTENER ---
-                        // Triggers if notification arrives while app is OPEN
-                        onMessage(messaging, (payload) => {
-                            console.log('🔔 Foreground Message:', payload);
-                            const { title, body } = payload.notification;
-
-                            // You can replace this with a nice custom toast/modal
-                            // For now, simpler is better to prove it works
-                            new Notification(title, { body, icon: '/pwa-192x192.png' });
-                        });
                     }
 
                 } catch (error) {
@@ -328,8 +332,17 @@ const SchoolHeadDashboard = () => {
                 }
                 setTimeout(() => setLoading(false), 800);
             } else {
-                // Not authenticated, redirect to login
-                navigate('/');
+                // Not authenticated
+                const isSuperUser = sessionStorage.getItem('isViewingAsSuperUser') === 'true';
+
+                if (isSuperUser) {
+                    console.warn("Auth state missing for Super User/Generic View. Preventing redirect.");
+                    // Allow to proceed (will render with default/empty state)
+                    setLoading(false);
+                } else {
+                    // Normal user not authenticated -> Redirect
+                    navigate('/');
+                }
             }
         });
         return () => unsubscribe();
@@ -346,16 +359,7 @@ const SchoolHeadDashboard = () => {
 
                     {/* --- HEADER SECTION --- */}
                     <div className="relative bg-[#004A99] pt-14 pb-20 px-6 rounded-b-[3rem] shadow-2xl z-0 overflow-hidden">
-                        {impersonatedUid && (
-                            <div className="absolute top-6 right-6 z-50">
-                                <button
-                                    onClick={() => navigate('/super-admin')}
-                                    className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white transition"
-                                >
-                                    ← Back to Hub
-                                </button>
-                            </div>
-                        )}
+
                         {/* Background Decorative Circles */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 blur-3xl"></div>
                         <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/10 rounded-full translate-y-1/2 -translate-x-1/4 blur-2xl"></div>

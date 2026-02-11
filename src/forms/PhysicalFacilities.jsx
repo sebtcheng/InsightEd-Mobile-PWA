@@ -8,6 +8,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { FiBox, FiArrowLeft, FiCheckCircle, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
+import useReadOnly from '../hooks/useReadOnly'; // Import Hook
 
 // --- EXTRACTED COMPONENT ---
 const InputCard = ({ label, name, icon, color, value, onChange, disabled }) => (
@@ -45,7 +46,13 @@ const PhysicalFacilities = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+    const isSuperUserReadOnly = useReadOnly(); // Use Hook
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly);
+
+    // Sync state if hook changes
+    useEffect(() => {
+        if (isSuperUserReadOnly) setIsReadOnly(true);
+    }, [isSuperUserReadOnly]);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -363,8 +370,10 @@ const PhysicalFacilities = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                    {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
+                        <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
+                            <FiInfo /> View-Only Mode
+                        </div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data

@@ -1,0 +1,4 @@
+--- DEBUG OUTPUT ---
+Sample Schools: [{"school_id":"102724","school_name":"Bagumbayan Central School"},{"school_id":"102648","school_name":"BATUG-PALAGAO ELEMENTARY SCHOOL"},{"school_id":"102373","school_name":"PIGGATAN ELEMENTARY SCHOOL"}]
+❌ School 112092 NOT FOUND in DB.
+Firebase User (112092@insighted.app): vPw4dY7T66fax12C0BxtOGe8VuA3

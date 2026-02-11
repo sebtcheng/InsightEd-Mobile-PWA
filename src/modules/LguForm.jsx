@@ -6,6 +6,7 @@ import { compressImage } from '../utils/imageCompression';
 import LocationPickerMap from '../components/LocationPickerMap';
 import Papa from 'papaparse';
 import Tooltip from '../components/Tooltip';
+import useReadOnly from '../hooks/useReadOnly'; // Import Hook
 
 // Helper component for Section Headers
 const SectionHeader = ({ title, icon }) => (
@@ -19,20 +20,21 @@ const LguForm = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const projectId = searchParams.get('id');
+    const isReadOnly = useReadOnly(); // Use Hook
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    
+
     // File States
     const fileInputRef = useRef(null);
-    const [activeCategory, setActiveCategory] = useState('External'); 
+    const [activeCategory, setActiveCategory] = useState('External');
 
     // Split Photos
     const [externalFiles, setExternalFiles] = useState([]);
     const [externalPreviews, setExternalPreviews] = useState([]);
     const [internalFiles, setInternalFiles] = useState([]);
     const [internalPreviews, setInternalPreviews] = useState([]);
-    
+
     // Existing Photos (from DB)
     const [existingExternal, setExistingExternal] = useState([]);
     const [existingInternal, setExistingInternal] = useState([]);
@@ -59,7 +61,7 @@ const LguForm = () => {
         projectName: '',
         region: '',
         division: '',
-        
+
         // Status & Progress
         status: 'Not Yet Started',
         accomplishmentPercentage: 0,
@@ -67,8 +69,8 @@ const LguForm = () => {
 
         // LGU Specifics (snake_case match to DB)
         province: '',
-        municipality: '', 
-        city: '', 
+        municipality: '',
+        city: '',
         legislative_district: '',
         fund_source: '',
         moa_date: '',
@@ -76,7 +78,7 @@ const LguForm = () => {
         lsb_resolution_no: '',
         moa_ref_no: '',
         validity_period: '',
-        
+
         // Financials (Tranches)
         tranches_count: '',
         tranche_amount: '',
@@ -92,7 +94,7 @@ const LguForm = () => {
         philgeps_ref_no: '',
         pcab_license_no: '',
         bid_amount: '',
-        
+
         // Key Dates
         bidding_date: '',
         bid_opening_date: '',
@@ -108,7 +110,7 @@ const LguForm = () => {
         noticeToProceed: '',
         contract_duration: '',
         nature_of_delay: '',
-        
+
         // Funds & Contractor
         projectAllocation: '',
         batchOfFunds: '',
@@ -144,7 +146,7 @@ const LguForm = () => {
                 const res = await fetch(`/api/lgu/project/${projectId}`);
                 if (!res.ok) throw new Error("Project not found");
                 const data = await res.json();
-                
+
                 // Populate Form
                 setFormData(prev => ({
                     ...prev,
@@ -167,7 +169,7 @@ const LguForm = () => {
                     moa_ref_no: data.moa_ref_no || '',
                     validity_period: data.validity_period || '',
                     contract_duration: data.contract_duration || '',
-                    
+
                     tranches_count: data.tranches_count || '',
                     tranche_amount: data.tranche_amount || '',
                     funds_downloaded: data.funds_downloaded || '',
@@ -203,14 +205,14 @@ const LguForm = () => {
                     latitude: data.latitude || '',
                     longitude: data.longitude || ''
                 }));
-                
+
                 // Populate Images
                 if (data.images && Array.isArray(data.images)) {
                     // Filter based on category if available, else assume External or rely on 'category' column
                     // The API returns category column now
-                    const ext = data.images.filter(img => img.category === 'External' || !img.category); 
+                    const ext = data.images.filter(img => img.category === 'External' || !img.category);
                     const int = data.images.filter(img => img.category === 'Internal');
-                    
+
                     setExistingExternal(ext);
                     setExistingInternal(int);
                 }
@@ -256,18 +258,18 @@ const LguForm = () => {
     // --- FORM HANDLERS ---
     const handleChange = (e) => {
         let { name, value } = e.target;
-        
+
         // Number Formatting
         if (['projectAllocation', 'contract_amount', 'tranche_amount', 'funds_downloaded', 'funds_utilized', 'tranches_count', 'bid_amount'].includes(name)) {
-             const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
-             if (!raw) value = '';
-             else {
-                 const parts = raw.split('.');
-                 parts[0] = Number(parts[0]).toLocaleString('en-US');
-                 value = parts.join('.');
-             }
+            const raw = value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+            if (!raw) value = '';
+            else {
+                const parts = raw.split('.');
+                parts[0] = Number(parts[0]).toLocaleString('en-US');
+                value = parts.join('.');
+            }
         }
-        
+
         // School ID Limit
         if (name === 'schoolId' && value.length > 6) return;
 
@@ -278,7 +280,7 @@ const LguForm = () => {
     const handleValidateSchoolId = () => {
         if (!formData.schoolId) return alert("Please enter School ID");
         if (formData.schoolId.length !== 6) return alert("School ID must be exactly 6 digits.");
-        
+
         const found = schoolData.find(s => String(s.school_id) === String(formData.schoolId));
         if (found) {
             setFormData(prev => ({
@@ -288,7 +290,7 @@ const LguForm = () => {
                 division: found.division,
                 latitude: found.latitude || prev.latitude,
                 longitude: found.longitude || prev.longitude,
-                province: found.province || prev.province, 
+                province: found.province || prev.province,
                 municipality: found.municipality || prev.city || prev.municipality,
                 legislative_district: found.leg_district || prev.legislative_district // Autofill using leg_district
             }));
@@ -359,7 +361,12 @@ const LguForm = () => {
     // --- SUBMIT ---
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
+        if (isReadOnly) {
+            alert("Read-Only Mode: Function not available.");
+            return;
+        }
+
         if (!formData.projectName || !formData.schoolName) return alert("Project Name and School Name are required.");
         if (!formData.latitude || !formData.longitude) return alert("Location coordinates are required.");
         if (formData.schoolId.length !== 6) return alert("School ID must be exactly 6 digits.");
@@ -379,7 +386,7 @@ const LguForm = () => {
                 const base64 = await compressImage(file);
                 compressedImages.push({ image_data: base64, category: 'External' });
             }
-            
+
             const finalImages = compressedImages.map(img => img.image_data); // Simplified for now as per previous logic
 
             // 2. Process Docs
@@ -398,7 +405,7 @@ const LguForm = () => {
                 funds_utilized: cleanNumber(formData.funds_utilized),
                 tranches_count: cleanNumber(formData.tranches_count),
                 bid_amount: cleanNumber(formData.bid_amount),
-                
+
                 uid: auth.currentUser?.uid,
                 submittedBy: auth.currentUser?.displayName,
                 city: formData.municipality || formData.city
@@ -423,7 +430,7 @@ const LguForm = () => {
                 // CREATE MODE
                 payload.images = finalImages;
                 payload.documents = processedDocs;
-                
+
                 res = await fetch('/api/lgu/save-project', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -456,7 +463,7 @@ const LguForm = () => {
                 {/* HEADER */}
                 <div className="bg-[#004A99] pt-8 pb-16 px-6 rounded-b-[2rem] shadow-xl">
                     <div className="flex items-center gap-3 text-white mb-4">
-                         <button onClick={() => auth.signOut().then(() => navigate('/login'))} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition">
+                        <button onClick={() => auth.signOut().then(() => navigate('/login'))} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
                             </svg>
@@ -478,7 +485,7 @@ const LguForm = () => {
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span> <Tooltip text="Official name of the LGU project." /></label>
                                 <input name="projectName" value={formData.projectName} onChange={handleChange} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
-                            
+
                             <div className="flex gap-2">
                                 <div className="flex-1">
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School ID (6 Digits) <Tooltip text="6-digit unique School ID." /></label>
@@ -540,7 +547,7 @@ const LguForm = () => {
                                     <input name="lsb_resolution_no" value={formData.lsb_resolution_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Ref. Number <Tooltip text="Memorandum of Agreement Reference Number." /></label>
@@ -562,7 +569,7 @@ const LguForm = () => {
                                     <input name="validity_period" value={formData.validity_period} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-3 mb-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Duration <Tooltip text="Duration of the contract in calendar days." /></label>
@@ -577,7 +584,7 @@ const LguForm = () => {
                             {/* CATEGORY: FUNDING TRANCHES */}
                             <div className="p-5 bg-blue-50/50 rounded-xl border border-blue-100 mt-2">
                                 <h4 className="font-bold text-blue-800 text-xs uppercase mb-3 flex items-center gap-2">
-                                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Fund Release
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Fund Release
                                 </h4>
                                 <div className="mb-3">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Schedule of Fund Release <Tooltip text="Select 'Tranches' to specify breakdown, or 'Lumpsum' for one-time release." /></label>
@@ -586,7 +593,7 @@ const LguForm = () => {
                                         <option value="Tranches">Tranches</option>
                                     </select>
                                 </div>
-                                
+
                                 {formData.fund_release_schedule === 'Tranches' && (
                                     <div className="grid grid-cols-2 gap-3 mb-3">
                                         <div>
@@ -616,7 +623,7 @@ const LguForm = () => {
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works <Tooltip text="Brief description of the project scope." /></label>
                                 <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
-                         </div>
+                        </div>
 
                         {/* 3. PROCUREMENT DETAILS */}
                         <SectionHeader title="Procurement Details" icon="⚖️" />
@@ -658,7 +665,7 @@ const LguForm = () => {
                                     <input name="pcab_license_no" value={formData.pcab_license_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bid Amount <Tooltip text="Amount of the winning bid." /></label>
@@ -680,7 +687,7 @@ const LguForm = () => {
                                     <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
-                            
+
                             {/* Key Dates Box */}
                             <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 mt-2">
                                 <h4 className="font-bold text-slate-700 text-xs uppercase mb-3 flex items-center gap-2">
@@ -703,7 +710,7 @@ const LguForm = () => {
                             </div>
                         </div>
 
-                         {/* 4. STATUS & PROGRESS */}
+                        {/* 4. STATUS & PROGRESS */}
                         <SectionHeader title="Status & Progress" icon="📊" />
                         <div className="space-y-4">
                             <div>
@@ -716,7 +723,7 @@ const LguForm = () => {
                                     <option value="Completed">Completed</option>
                                 </select>
                             </div>
-                            
+
                             {/* Conditional Accomplishment */}
                             {showProgressAndPhotos && (
                                 <div>
@@ -725,12 +732,12 @@ const LguForm = () => {
                                          <div className="flex gap-1">
                                             <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
                                             <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
-                                         </div>
+                                        </div>
                                     </div>
                                     <input type="number" name="accomplishmentPercentage" value={formData.accomplishmentPercentage} onChange={handleChange} max="100" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             )}
-                            
+
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date <Tooltip text="Date when this status was observed." /></label>
                                 <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
@@ -740,10 +747,10 @@ const LguForm = () => {
                         {/* 5. SITE PHOTOS (Conditional) */}
                         {showProgressAndPhotos && (
                             <div className="mt-8 pt-6 border-t border-slate-100">
-                                 <SectionHeader title="Site Photos" icon="📸" />
-                                 
-                                 {/* External */}
-                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
+                                <SectionHeader title="Site Photos" icon="📸" />
+
+                                {/* External */}
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
                                     <div className="flex justify-between items-center mb-2">
                                         <h3 className="font-bold text-slate-700 text-xs uppercase">External Photos</h3>
                                         <span className="text-[10px] font-bold text-blue-500">{externalFiles.length + existingExternal.length} Photos</span>
@@ -760,7 +767,7 @@ const LguForm = () => {
                                             <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
                                         </button>
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-4 gap-2">
                                         {/* EXISTING */}
                                         {existingExternal.map((img, index) => (
@@ -777,10 +784,10 @@ const LguForm = () => {
                                             </div>
                                         ))}
                                     </div>
-                                 </div>
+                                </div>
 
-                                 {/* Internal */}
-                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                {/* Internal */}
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                                     <div className="flex justify-between items-center mb-2">
                                         <h3 className="font-bold text-slate-700 text-xs uppercase">Internal Photos</h3>
                                         <span className="text-[10px] font-bold text-blue-500">{internalFiles.length + existingInternal.length} Photos</span>
@@ -797,8 +804,8 @@ const LguForm = () => {
                                             <span className="text-lg">🖼️</span> <span className="text-[10px] font-bold text-slate-600">Gallery</span>
                                         </button>
                                     </div>
-                                    
-                                     <div className="grid grid-cols-4 gap-2">
+
+                                    <div className="grid grid-cols-4 gap-2">
                                         {/* EXISTING */}
                                         {existingInternal.map((img, index) => (
                                             <div key={`exist-int-${index}`} className="relative aspect-square rounded-lg overflow-hidden bg-white shadow-sm ring-1 ring-emerald-200 cursor-help" title="Existing Photo">
@@ -814,7 +821,7 @@ const LguForm = () => {
                                             </div>
                                         ))}
                                     </div>
-                                 </div>
+                                </div>
                             </div>
                         )}
 
@@ -861,9 +868,9 @@ const LguForm = () => {
                         {/* 9. LOCATION */}
                         <SectionHeader title="Location" icon="📍" />
                         <div className="space-y-4">
-                             <LocationPickerMap latitude={formData.latitude} longitude={formData.longitude} onLocationSelect={handleLocationSelect} />
-                             
-                             <div className="flex gap-3 mb-1">
+                            <LocationPickerMap latitude={formData.latitude} longitude={formData.longitude} onLocationSelect={handleLocationSelect} />
+
+                            <div className="flex gap-3 mb-1">
                                 <div className="flex-1">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude <Tooltip text="GPS Latitude coordinate." /></label>
                                     <input
@@ -884,18 +891,18 @@ const LguForm = () => {
                                         className="w-full p-2 bg-white text-slate-700 font-mono text-xs border border-blue-200 rounded-lg focus:outline-none"
                                     />
                                 </div>
-                             </div>
+                            </div>
 
-                             <button type="button" onClick={handleGetLocation} className="w-full py-3 bg-blue-600 text-white font-bold text-xs uppercase rounded-lg shadow-md active:scale-95 transition flex items-center justify-center gap-2">
+                            <button type="button" onClick={handleGetLocation} className="w-full py-3 bg-blue-600 text-white font-bold text-xs uppercase rounded-lg shadow-md active:scale-95 transition flex items-center justify-center gap-2">
                                 <span>📡</span> {formData.latitude ? 'Refine with GPS' : 'Get Current Location'}
-                             </button>
+                            </button>
                         </div>
-                        
-                         {/* 10. DOCS */}
-                         <div className="mt-8 pt-6 border-t border-slate-100">
-                             <SectionHeader title="Project Documents" icon="📄" />
-                             <p className="text-xs text-slate-400 -mt-3 mb-4">Required PDF attachments</p>
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+                        {/* 10. DOCS */}
+                        <div className="mt-8 pt-6 border-t border-slate-100">
+                            <SectionHeader title="Project Documents" icon="📄" />
+                            <p className="text-xs text-slate-400 -mt-3 mb-4">Required PDF attachments</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {Object.entries(DOC_TYPES).map(([key, label]) => (
                                     <div key={key} className={`p-4 rounded-xl border transition-all ${documents[key] ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200 border-dashed'}`}>
                                         <div className="flex justify-between items-center">
@@ -912,8 +919,8 @@ const LguForm = () => {
                                         {documents[key] && <p className="text-[10px] text-emerald-600 mt-1 truncate">{documents[key].name}</p>}
                                     </div>
                                 ))}
-                             </div>
-                         </div>
+                            </div>
+                        </div>
 
 
                         {/* SUBMIT */}

@@ -1154,6 +1154,16 @@ app.post('/api/auth/master-login', async (req, res) => {
           targetEmail = `${targetEmail}@deped.gov.ph`;
         }
       }
+
+      // Check Firebase for @insighted.app (Priority Override)
+      try {
+        const originalId = email.trim();
+        const fbUser = await admin.auth().getUserByEmail(`${originalId}@insighted.app`);
+        targetEmail = fbUser.email;
+      } catch (fbErr) {
+        // Ignore
+      }
+
       console.log(`[Master Login] Resolved School ID to email: ${targetEmail}`);
     }
 
@@ -1287,13 +1297,18 @@ const getUserFullName = async (uid) => {
 };
 
 /** Log Activity Helper */
-const logActivity = async (userUid, userName, role, actionType, targetEntity, details) => {
+const logActivity = async (userUid, userName, role, actionType, targetEntity, details, superUserContext = null) => {
   const query = `
         INSERT INTO activity_logs (user_uid, user_name, role, action_type, target_entity, details)
         VALUES ($1, $2, $3, $4, $5, $6)
     `;
   try {
-    await pool.query(query, [userUid, userName, role, actionType, targetEntity, details]);
+    let dbDetails = details;
+    if (superUserContext) {
+      dbDetails = `[SUPER USER VIEW] ${details} (Context: ${superUserContext})`;
+    }
+
+    await pool.query(query, [userUid, userName, role, actionType, targetEntity, dbDetails]);
     console.log(`ðŸ“ Audit Logged: ${actionType} - ${targetEntity}`);
 
     // --- DUAL WRITE: LOG ACTIVITY ---
@@ -2213,6 +2228,7 @@ app.get('/api/auth/validate/:uid', async (req, res) => {
     }
 
     // User exists and is active
+    if (user.role === 'Super User') console.log(`ðŸ¦¸ Super User Validated: ${uid}`);
     res.json({ valid: true, role: user.role });
 
   } catch (err) {
@@ -2433,9 +2449,55 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
       LEFT JOIN school_summary ss ON sp.school_id = ss.school_id
       WHERE sp.submitted_by = $1
     `, [uid]);
+
     if (result.rows.length > 0) {
       res.json({ exists: true, data: result.rows[0] });
     } else {
+      // --- JIT MIGRATION FOR @insighted.app USERS ---
+      // If not found by UID, check if this is a new @insighted.app user
+      // regarding an existing school.
+      try {
+        const userRecord = await admin.auth().getUser(uid);
+        const email = userRecord.email;
+
+        if (email && email.endsWith('@insighted.app')) {
+          const schoolId = email.split('@')[0];
+
+          // Check if school exists by ID
+          const schoolRes = await pool.query('SELECT * FROM school_profiles WHERE school_id = $1', [schoolId]);
+
+          if (schoolRes.rows.length > 0) {
+            console.log(`[JIT Migration] Linking ${schoolId} to new UID: ${uid}`);
+
+            // Update ownership
+            await pool.query(
+              'UPDATE school_profiles SET submitted_by = $1, email = $2 WHERE school_id = $3',
+              [uid, email, schoolId]
+            );
+
+            // Return the school data (merged with summary query logic if needed)
+            // For simplicity, just return the data we found (or re-query for full data)
+            // Let's re-query to get the JOINed data
+            const migratedResult = await pool.query(`
+                SELECT 
+                  sp.*,
+                  ss.issues as data_quality_issues,
+                  ss.data_health_score,
+                  ss.data_health_description
+                FROM school_profiles sp
+                LEFT JOIN school_summary ss ON sp.school_id = ss.school_id
+                WHERE sp.school_id = $1
+              `, [schoolId]);
+
+            if (migratedResult.rows.length > 0) {
+              return res.json({ exists: true, data: migratedResult.rows[0] });
+            }
+          }
+        }
+      } catch (migrationErr) {
+        console.warn("Migration check failed:", migrationErr);
+      }
+
       res.json({ exists: false });
     }
   } catch (err) {
@@ -2735,9 +2797,9 @@ app.post('/api/register-user', async (req, res) => {
 app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    // 1. Try USERS table first (Modern Auth)
+    // 1. Try USERS table first (Modern Auth) - Prioritize @insighted.app
     let result = await pool.query(
-      "SELECT email FROM users WHERE email LIKE $1 LIMIT 1",
+      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
       [`${schoolId}@%`]
     );
 
@@ -2750,6 +2812,15 @@ app.get('/api/auth/lookup-email/:schoolId', async (req, res) => {
       "SELECT email FROM school_profiles WHERE school_id = $1 AND email IS NOT NULL LIMIT 1",
       [schoolId]
     );
+
+    // 3. Check Firebase Auth for @insighted.app specific account
+    // This handles cases where the user is registered in Firebase but not yet synced to the USERS table
+    try {
+      const fbUser = await admin.auth().getUserByEmail(`${schoolId}@insighted.app`);
+      return res.json({ found: true, email: fbUser.email });
+    } catch (fbErr) {
+      // Ignore user-not-found, proceed with DB result if any
+    }
 
     if (result.rows.length > 0) {
       return res.json({ found: true, email: result.rows[0].email });
@@ -2769,9 +2840,9 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
   try {
     let email = null;
 
-    // 1. Try USERS table
+    // 1. Try USERS table - Prioritize @insighted.app
     let result = await pool.query(
-      "SELECT email FROM users WHERE email LIKE $1 LIMIT 1",
+      "SELECT email FROM users WHERE email ILIKE $1 ORDER BY (CASE WHEN email ILIKE '%@insighted.app' THEN 0 ELSE 1 END), email LIMIT 1",
       [`${schoolId}@%`]
     );
     if (result.rows.length > 0) email = result.rows[0].email;
@@ -2783,6 +2854,14 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
         [schoolId]
       );
       if (result.rows.length > 0) email = result.rows[0].email;
+    }
+
+    // 3. Check Firebase Auth for @insighted.app specific account (Priority)
+    try {
+      const fbUser = await admin.auth().getUserByEmail(`${schoolId}@insighted.app`);
+      email = fbUser.email;
+    } catch (fbErr) {
+      // Ignore user-not-found
     }
 
     if (email) {
@@ -3062,6 +3141,23 @@ app.get('/api/school-profile/:uid', async (req, res) => {
 // --- 4c. GET: School By User (Alias for Compatibility) ---
 app.get('/api/school-by-user/:uid', async (req, res) => {
   const { uid } = req.params;
+
+  // GENERIC MODE HANDLE
+  if (uid === '000000') {
+    return res.json({
+      exists: true,
+      data: {
+        school_id: "000000",
+        school_name: "Generic High School (Preview)",
+        division: "Preview Division",
+        region: "Preview Region",
+        total_enrollment: 0,
+        forms_completed_count: 0,
+        curricular_offering: "K-12"
+      }
+    });
+  }
+
   try {
     const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
@@ -3170,6 +3266,20 @@ app.post('/api/save-school-head', async (req, res) => {
 // --- 6. GET: Get School Head Info ---
 app.get('/api/school-head/:uid', async (req, res) => {
   const { uid } = req.params;
+
+  if (uid === '000000') {
+    return res.json({
+      exists: true,
+      data: {
+        user_uid: "000000",
+        name: "Super User (Preview)",
+        position: "Principal I",
+        contact_number: "09000000000",
+        email: "superuser@deped.gov.ph"
+      }
+    });
+  }
+
   try {
     const query = `
       SELECT 
@@ -5708,9 +5818,11 @@ app.get('/api/migrate-lgu-schema', async (req, res) => {
 
 if (isMainModule || process.env.START_SERVER === 'true') {
 
+if (isMainModule || process.env.START_SERVER === 'true') {
 
   const PORT = process.env.PORT || 3000;
 
+  const PORT = process.env.PORT || 3000;
 
 
 
@@ -6256,5 +6368,11 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
     if (client) client.release();
     if (clientNew) clientNew.release();
   }
+});
+
+// --- SERVER LISTEN ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 

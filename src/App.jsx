@@ -5,6 +5,7 @@ import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-d
 
 import { AnimatePresence } from 'framer-motion'; // <--- IMPORT THIS
 import MaintenanceScreen from './components/MaintenanceScreen'; // <--- IMPORT MAINTENANCE SCREEN
+import SuperUserFloatingSwitch from './components/SuperUserFloatingSwitch'; // Super User Switch
 import { useState, useEffect } from 'react'; // Ensure React hooks are imported
 
 // Auth
@@ -30,6 +31,9 @@ import ProjectGallery from './modules/ProjectGallery';
 import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
 import SuperAdminDashboard from './modules/SuperAdminDashboard';
+import SuperUserSelector from './modules/SuperUserSelector';
+// Import Banner
+import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
 
 
 // Forms
@@ -107,6 +111,16 @@ const AnimatedRoutes = () => {
         <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/super-admin" element={<SuperAdminDashboard />} />
 
+        {/* Super User Selector (Protected) */}
+        <Route
+          path="/super-user-selector"
+          element={
+            <ProtectedRoute allowedRoles={['Super User']}>
+              <SuperUserSelector />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="/schoolhead-dashboard" element={<SchoolHeadDashboard />} />
         <Route path="/hr-dashboard" element={<HRDashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
@@ -173,6 +187,7 @@ function App() {
     <GlobalErrorBoundary>
       <Router>
         <ScrollToTop />
+        <SuperUserFloatingSwitch />
         <AnimatedRoutes />
       </Router>
     </GlobalErrorBoundary>

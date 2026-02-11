@@ -33,6 +33,7 @@ const AUTHORIZATION_CODES = {
     'School Division Office': 'Q9D2-R4J6',
     'Division Engineer': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
+    'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
     'Admin': 'A3M6-Y1K8'
 };
@@ -348,8 +349,8 @@ const Register = () => {
             return;
         }
 
-        // --- AUTHORIZATION CODE CHECK (For Non-School Heads) ---
-        if (formData.role !== 'School Head') {
+        // --- AUTHORIZATION CODE CHECK (For Non-School Heads and Non-Super Users) ---
+        if (formData.role !== 'School Head' && formData.role !== 'Super User') {
             const requiredCode = AUTHORIZATION_CODES[formData.role];
             if (requiredCode && formData.authCode !== requiredCode) {
                 alert(`Invalid Authorization Code for ${formData.role}. Please send an email to support.stride@deped.gov.ph to obtain the secure code.`);
@@ -643,6 +644,7 @@ const Register = () => {
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
+                                        <option value="Super User">Super User</option>
                                         {/* {<option value="Admin">Admin</option>} */}
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">
@@ -651,8 +653,8 @@ const Register = () => {
                                 </div>
                             </div>
 
-                            {/* AUTHORIZATION CODE INPUT (For Non-School Heads) */}
-                            {formData.role !== 'School Head' && (
+                            {/* AUTHORIZATION CODE INPUT (For Non-School Heads and Non-Super Users) */}
+                            {formData.role !== 'School Head' && formData.role !== 'Super User' && (
                                 <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 animate-fade-in">
                                     <label className="block text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">

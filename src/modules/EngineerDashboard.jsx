@@ -304,14 +304,7 @@ const EngineerDashboard = () => {
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {userRole === 'Super User' && (
-                <button
-                  onClick={() => navigate('/super-admin')}
-                  className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white mb-2 transition"
-                >
-                  ← Back to Hub
-                </button>
-              )}
+
               <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 text-white shadow-inner">
                 👷‍♂️
               </div>
