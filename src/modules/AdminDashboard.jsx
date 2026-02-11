@@ -667,6 +667,17 @@ const AdminDashboard = () => {
                                                 {school.school_id}
                                             </span>
                                             <h3 className="text-xl font-bold text-slate-800">{school.school_name}</h3>
+                                            {school.special_order && (
+                                                <a
+                                                    href={school.special_order}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="ml-2 text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded font-bold hover:bg-indigo-100 flex items-center gap-1"
+                                                    title="View Special Order PDF"
+                                                >
+                                                    📎 Special Order
+                                                </a>
+                                            )}
                                         </div>
                                         <p className="text-sm text-slate-500 mb-4 flex items-center gap-2">
                                             <FiMapPin /> {school.municipality}, {school.province}
@@ -717,6 +728,18 @@ const AdminDashboard = () => {
                                             }`}>
                                             {school.status}
                                         </span>
+                                        {school.special_order && (
+                                            <a
+                                                href={school.special_order}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="ml-2 text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded font-bold hover:bg-indigo-100 flex items-center gap-1"
+                                                title="View Special Order PDF"
+                                                onClick={(e) => e.stopPropagation()} // Prevent card click if any
+                                            >
+                                                📎 Special Order
+                                            </a>
+                                        )}
                                     </div>
                                     <div className="text-xs text-slate-500 mt-1 flex gap-4">
                                         <span>ID: {school.school_id}</span>

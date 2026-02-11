@@ -70,7 +70,7 @@ const BottomNav = ({ userRole }) => {
         ]
     };
 
-    const currentNavItems = navConfigs[userRole];
+    const currentNavItems = navConfigs[effectiveRole];
 
     // --- SUPER USER INJECTION ---
     // REMOVED: Moved to Floating Button

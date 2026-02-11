@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -1874,7 +1874,8 @@ app.post('/api/sdo/submit-school', async (req, res) => {
     latitude,
     longitude,
     submitted_by,
-    submitted_by_name
+    submitted_by_name,
+    special_order
   } = req.body;
 
   // Validate required fields
@@ -1887,14 +1888,14 @@ app.post('/api/sdo/submit-school', async (req, res) => {
       INSERT INTO pending_schools (
         school_id, school_name, region, division, district, province, municipality, leg_district,
         barangay, street_address, mother_school_id, curricular_offering,
-        latitude, longitude, submitted_by, submitted_by_name
+        latitude, longitude, submitted_by, submitted_by_name, special_order
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING pending_id
     `, [
       school_id, school_name, region, division, district, province, municipality, leg_district,
       barangay, street_address, mother_school_id, curricular_offering,
-      latitude, longitude, submitted_by, submitted_by_name
+      latitude, longitude, submitted_by, submitted_by_name, special_order
     ]);
 
     console.log(`âœ… School submitted for approval: ${school_name} (${school_id})`);
@@ -2075,15 +2076,15 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
     await pool.query(`
       INSERT INTO schools (
         school_id, school_name, region, division, district, province, municipality, leg_district,
-        barangay, street_address, mother_school_id, curricular_offering, latitude, longitude
+        barangay, street_address, mother_school_id, curricular_offering, latitude, longitude, special_order
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       ON CONFLICT (school_id) DO NOTHING
     `, [
       school.school_id, school.school_name, school.region, school.division, school.district,
       school.province, school.municipality, school.leg_district, school.barangay,
       school.street_address, school.mother_school_id, school.curricular_offering,
-      school.latitude, school.longitude
+      school.latitude, school.longitude, school.special_order
     ]);
 
     // 3. Update pending_schools status
@@ -6018,6 +6019,31 @@ app.get('/api/migrate-lgu-image-schema', async (req, res) => {
 
     client.release();
     res.json({ message: "LGU Image Migration attempt finished", results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- TEMPORARY MIGRATION ENDPOINT (SPECIAL ORDER) ---
+app.get('/api/migrate-special-order-schema', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const results = [];
+
+    // 1. Add special_order to pending_schools
+    try {
+      await client.query('ALTER TABLE "pending_schools" ADD COLUMN IF NOT EXISTS special_order TEXT');
+      results.push("Added special_order to pending_schools");
+    } catch (e) { results.push(`Failed pending_schools: ${e.message}`); }
+
+    // 2. Add special_order to schools
+    try {
+      await client.query('ALTER TABLE "schools" ADD COLUMN IF NOT EXISTS special_order TEXT');
+      results.push("Added special_order to schools");
+    } catch (e) { results.push(`Failed schools: ${e.message}`); }
+
+    client.release();
+    res.json({ message: "Special Order Migration attempt finished", results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

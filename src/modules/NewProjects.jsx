@@ -43,13 +43,24 @@ const NewProjects = () => {
     useEffect(() => {
         const fetchRole = async () => {
             if (auth.currentUser) {
+                // IMMEDIATE CHECK: If Super User in localStorage, block access
+                const localRole = localStorage.getItem('userRole');
+                if (localRole === 'Super User') {
+                    alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access to Engineer concepts.");
+                    navigate('/engineer-dashboard');
+                    return;
+                }
+
                 try {
                     const res = await fetch(`/api/user-info/${auth.currentUser.uid}`);
                     if (res.ok) {
                         const data = await res.json();
                         setUserRole(data.role);
-                        // Auto-fill region/division if LGU? 
-                        // Maybe later.
+                        // Double check API role too
+                        if (data.role === 'Super User') {
+                            alert("⚠️ ACCESS DENIED\n\nSuper Users have Read-Only access.");
+                            navigate('/engineer-dashboard');
+                        }
                     }
                 } catch (err) {
                     console.error("Failed to fetch user role:", err);
@@ -368,23 +379,23 @@ const NewProjects = () => {
                 // If status is "Not Yet Started" or "Under Procurement", percentage must be 0
                 if (['Not Yet Started', 'Under Procurement'].includes(value)) {
                     newData.accomplishmentPercentage = 0;
-                } 
+                }
                 // If status is "Completed", percentage must be 100
                 else if (['Completed', 'For Final Inspection'].includes(value)) {
                     newData.accomplishmentPercentage = 100;
                 }
             }
-            
+
             // Validate Accomplishment Percentage
             if (name === 'accomplishmentPercentage') {
                 // Remove leading zeros (e.g. "02" -> "2")
                 if (value.length > 1 && value.startsWith('0')) {
-                     value = value.replace(/^0+/, ''); 
-                     newData.accomplishmentPercentage = value;
+                    value = value.replace(/^0+/, '');
+                    newData.accomplishmentPercentage = value;
                 }
-                
+
                 let percent = Number(value);
-                
+
                 // Limit 0 to 100
                 if (percent < 0) {
                     percent = 0;

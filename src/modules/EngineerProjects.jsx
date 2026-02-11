@@ -54,7 +54,7 @@ const formatDateShort = (dateString) => {
 
 // --- SUB-COMPONENTS ---
 
-const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQuery }) => {
+const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQuery, readOnly }) => {
   const navigate = useNavigate();
 
   const getStatusColor = (status) => {
@@ -215,8 +215,8 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
 
                   <td className="sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-l border-slate-50 dark:border-slate-700 text-center">
                     <div className="flex flex-col gap-2">
-                      {/* CONDITIONAL ACTION: Upload Docs */}
-                      {(!p.pow_pdf || !p.dupa_pdf || !p.contract_pdf) && (
+                      {/* CONDITIONAL ACTION: Upload Docs / View Docs */}
+                      {(!readOnly && (!p.pow_pdf || !p.dupa_pdf || !p.contract_pdf)) && (
                         <button
                           onClick={() => onEdit(p, 'docs_only')}
                           className="w-full py-1.5 bg-red-500 text-white text-[10px] font-bold rounded-lg shadow-md shadow-red-500/30 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center gap-1 animate-pulse"
@@ -224,6 +224,8 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                           ⚠️ UPLOAD DOCS
                         </button>
                       )}
+
+
 
                       <button
                         onClick={() => onView(p)}
@@ -237,16 +239,18 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       >
                         <FiImage size={12} /> GALLERY
                       </button>
-                      <button
-                        onClick={() => onEdit(p, 'quick')}
-                        disabled={isLocked}
-                        className={`w-full py-2 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${isLocked
-                          ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
-                          : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
-                          }`}
-                      >
-                        {isLocked ? "LOCKED" : "UPDATE"}
-                      </button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => onEdit(p, 'quick')}
+                          disabled={isLocked}
+                          className={`w-full py-2 text-[10px] font-bold rounded-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1 ${isLocked
+                            ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-600"
+                            : "bg-[#004A99] dark:bg-blue-600 text-white hover:bg-blue-800 dark:hover:bg-blue-700 shadow-blue-500/20"
+                            }`}
+                        >
+                          {isLocked ? "LOCKED" : "UPDATE"}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -360,7 +364,22 @@ const EngineerProjects = () => {
 
             // 2. Network Request (Background Sync)
             try {
-              const response = await fetch(`${API_BASE}/api/projects?engineer_id=${user.uid}`);
+              let url = `${API_BASE}/api/projects?engineer_id=${user.uid}`;
+
+              const userRole = localStorage.getItem('userRole');
+              if (userRole === 'Super User') {
+                const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
+                if (impersonatedDivision) {
+                  url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
+                } else {
+                  // If no specific division (unlikely via selector), maybe fetch all? 
+                  // Or rely on backend restriction? 
+                  // EngineerDashboard defaults to ALL.
+                  url = `${API_BASE}/api/projects`;
+                }
+              }
+
+              const response = await fetch(url);
               if (!response.ok) throw new Error("Failed to fetch projects");
               const data = await response.json();
 
@@ -579,13 +598,15 @@ const EngineerProjects = () => {
                   Projects <span className="text-blue-400/60 font-medium">/</span> {projects.length}
                 </h1>
               </div>
-              <button
-                onClick={() => navigate("/new-project")}
-                className="group bg-white text-[#004A99] px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-              >
-                <FiPlus size={16} className="group-hover:rotate-90 transition-transform" />
-                New Project
-              </button>
+              {userRole !== 'Super User' && (
+                <button
+                  onClick={() => navigate("/new-project")}
+                  className="group bg-white text-[#004A99] px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                >
+                  <FiPlus size={16} className="group-hover:rotate-90 transition-transform" />
+                  New Project
+                </button>
+              )}
             </div>
 
             {/* --- GLASSMORPHISM SEARCH BAR --- */}
@@ -616,6 +637,7 @@ const EngineerProjects = () => {
             onView={handleViewProject}
             isLoading={isLoading}
             searchQuery={searchQuery}
+            readOnly={userRole === 'Super User'}
           />
 
           <div className="flex items-center justify-center gap-4 mt-4">
@@ -639,6 +661,7 @@ const EngineerProjects = () => {
           project={selectedProject}
           isOpen={editModalOpen}
           mode={modalMode}
+          readOnly={userRole === 'Super User'}
           onClose={() => setEditModalOpen(false)}
           onSave={handleSaveProject}
           onCameraClick={(category) => {
@@ -657,7 +680,7 @@ const EngineerProjects = () => {
 
         <BottomNav userRole={userRole} />
       </div>
-    </PageTransition>
+    </PageTransition >
   );
 };
 

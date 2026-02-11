@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiMapPin, FiCheck, FiX, FiClock, FiSave, FiList } from 'react-icons/fi';
@@ -64,6 +66,7 @@ const SchoolManagement = () => {
         street_address: '',
         mother_school_id: 'NA',
         curricular_offering: '',
+        special_order: '', // PDF URL
     });
 
     const [mapPosition, setMapPosition] = useState([14.5995, 120.9842]); // Default: Manila
@@ -71,6 +74,7 @@ const SchoolManagement = () => {
     const [mapStatus, setMapStatus] = useState(''); // Idle, Searching..., Found
     const [submitting, setSubmitting] = useState(false);
     const [pendingSchools, setPendingSchools] = useState([]);
+    const [uploading, setUploading] = useState(false);
 
     // Confirmation Modal State
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -313,6 +317,39 @@ const SchoolManagement = () => {
         }
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            alert('Please upload a PDF file.');
+            e.target.value = '';
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            alert('File size exceeds 5MB limit.');
+            e.target.value = '';
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const fileRef = ref(storage, `special_orders/${Date.now()}_${file.name}`);
+            const snapshot = await uploadBytes(fileRef, file);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            setFormData(prev => ({ ...prev, special_order: downloadURL }));
+            console.log("File uploaded:", downloadURL);
+        } catch (error) {
+            console.error("Upload failed:", error);
+            alert("Failed to upload file. Please try again.");
+            e.target.value = '';
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleInitialSubmit = (e) => {
         e.preventDefault();
 
@@ -379,6 +416,7 @@ const SchoolManagement = () => {
                     street_address: '',
                     mother_school_id: 'NA',
                     curricular_offering: '',
+                    special_order: '',
                 });
                 setMapPosition([14.5995, 120.9842]);
                 fetchPendingSchools(); // Refresh list
@@ -614,6 +652,31 @@ const SchoolManagement = () => {
                                             <option key={option} value={option}>{option}</option>
                                         ))}
                                     </select>
+                                </div>
+                            </div>
+
+                            {/* Special Order Upload */}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                                    Special Order (PDF) <span className="text-xs text-slate-500">(Max 5MB)</span>
+                                </label>
+                                <div className="flex items-center gap-4">
+                                    <input
+                                        type="file"
+                                        accept="application/pdf"
+                                        onChange={handleFileUpload}
+                                        disabled={uploading}
+                                        className="block w-full text-sm text-slate-500
+                                            file:mr-4 file:py-2.5 file:px-4
+                                            file:rounded-xl file:border-0
+                                            file:text-sm file:font-bold
+                                            file:bg-blue-50 file:text-blue-700
+                                            hover:file:bg-blue-100
+                                            dark:file:bg-slate-700 dark:file:text-slate-300
+                                        "
+                                    />
+                                    {uploading && <div className="animate-spin h-5 w-5 border-2 border-blue-500 rounded-full border-t-transparent"></div>}
+                                    {formData.special_order && !uploading && <span className="text-emerald-600 font-bold text-sm">✓ Uploaded</span>}
                                 </div>
                             </div>
 
