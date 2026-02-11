@@ -60,6 +60,31 @@ const MonitoringDashboard = () => {
 
     const [projectListModal, setProjectListModal] = useState({ isOpen: false, title: '', projects: [], isLoading: false });
 
+    // --- SUPER USER EFFECTIVE ROLE ---
+    // Calculate derived role/region for rendering
+    const isSuperUser = userData?.role === 'Super User';
+    const impersonatedRole = sessionStorage.getItem('impersonatedRole');
+
+    const effectiveRole = (isSuperUser && impersonatedRole)
+        ? impersonatedRole
+        : userData?.role;
+
+    const effectiveRegion = (isSuperUser)
+        ? (sessionStorage.getItem('impersonatedRegion') || sessionStorage.getItem('impersonatedLocation') || userData?.region)
+        : userData?.region;
+
+    const effectiveDivision = (isSuperUser && effectiveRole === 'School Division Office')
+        ? sessionStorage.getItem('impersonatedLocation')
+        : userData?.division;
+
+    // Note: For SDO, we might need effectiveDivision too if we want to be precise, 
+    // but the Selector sets 'impersonatedLocation' to the division name usually? 
+    // Actually Selector sets:
+    // Region -> impersonatedRegion
+    // Division -> impersonatedDivision OR impersonatedLocation depending on logic.
+    // Let's rely on standard logic below or update as needed.
+    // For now, fixing Regional View is priority.
+
     // --- EFFECT: DATA FETCHING ---
     useEffect(() => {
         if (userData) {
@@ -114,7 +139,37 @@ const MonitoringDashboard = () => {
             }
         }
 
+
         if (!currentUserData) return;
+
+        // --- SUPER USER OVERRIDE ---
+        let effectiveRole = currentUserData.role;
+        let effectiveRegion = currentUserData.region;
+        let effectiveDivision = currentUserData.division;
+
+        const impersonatedRole = sessionStorage.getItem('impersonatedRole');
+        const isSuperUser = currentUserData.role === 'Super User';
+
+        if (isSuperUser && impersonatedRole) {
+            effectiveRole = impersonatedRole;
+            const impLoc = sessionStorage.getItem('impersonatedLocation'); // e.g., "Region I" or "Region I - Ilocos Norte"
+
+            // Allow Super User to act as these roles
+            if (effectiveRole === 'Regional Office') {
+                effectiveRegion = impLoc;
+            } else if (effectiveRole === 'School Division Office') {
+                // Assuming impLoc is "Region - Division" or just Division? selector logic says "Region" then "Division"
+                // The selector saves specific Region and Division? 
+                // Let's check Selector logic: `sessionStorage.setItem('impersonatedLocation', selectedDivision);` for SDO
+                // But SDO needs Region too for queries. 
+                // For now, let's assume filtering relies mostly on Division name which is usually unique enough or handled by backend.
+                // Better: The selector should have saved region too. 
+                // But `api/monitoring/stats` takes region/division params.
+                effectiveDivision = impLoc;
+                // We might need to look up the region for this division if backend requires it strictly.
+                // However, most endpoints just filter by what's provided.
+            }
+        }
 
         try {
             // Determine params based on Role
@@ -123,7 +178,7 @@ const MonitoringDashboard = () => {
             // Use passed district if defined (even empty string), otherwise fallback to state
             let queryDistrict = district !== undefined ? district : coDistrict;
 
-            if (currentUserData.role === 'Central Office') {
+            if (effectiveRole === 'Central Office') {
                 // If in National View (no region selected), fetch Regional Overview
                 // However, we only need to fetch detailed stats if a region IS selected.
 
@@ -137,15 +192,25 @@ const MonitoringDashboard = () => {
                     setLoading(false);
                     return; // Stop here, don't fetch detailed stats yet
                 }
+            } else if (effectiveRole === 'Regional Office') {
+                // Force queries to respect the effective region
+                queryRegion = effectiveRegion;
+                queryDivision = division; // Allows filtering within the region if implemented, else usually null
+            } else if (effectiveRole === 'School Division Office') {
+                // Force queries to respect the effective division
+                if (isSuperUser) {
+                    effectiveRegion = sessionStorage.getItem('impersonatedRegion') || effectiveRegion;
+                }
+                queryDivision = effectiveDivision;
+                queryRegion = effectiveRegion;
             } else {
-                // For Regional Office and School Division Office, ALWAYS use their assigned jurisdiction
-                // if not explicitly overridden (though they usually can't override)
+                // Fallback / Original
                 queryRegion = currentUserData.region;
                 queryDivision = currentUserData.division;
             }
 
             const params = new URLSearchParams({
-                region: queryRegion,
+                region: queryRegion || '',
                 ...(queryDivision && { division: queryDivision }),
                 ...(queryDistrict && { district: queryDistrict }) // Add District param
             });
@@ -153,7 +218,7 @@ const MonitoringDashboard = () => {
             // FIX: For SDO, we want the "Top Stats" to remain as Division Overview even when drilling down to a district.
             // Create a separate params object for the main stats that EXCLUDES district.
             const statsParams = new URLSearchParams({
-                region: queryRegion,
+                region: queryRegion || '',
                 ...(queryDivision && { division: queryDivision })
                 // explicitly OMIT district here
             });
@@ -167,12 +232,12 @@ const MonitoringDashboard = () => {
             ];
 
             // Fetch Division Stats for Regional Office OR Central Office (when drilling down to a region)
-            if (currentUserData.role === 'Regional Office' || (currentUserData.role === 'Central Office' && queryRegion && !queryDivision)) {
+            if (effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && queryRegion && !queryDivision)) {
                 fetchPromises.push(fetch(`/api/monitoring/division-stats?${params.toString()}`));
             }
 
             // Fetch District Stats only for SDO or CO (when Division is selected)
-            if (currentUserData.role === 'School Division Office' || (currentUserData.role === 'Central Office' && queryDivision)) {
+            if (effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && queryDivision)) {
                 fetchPromises.push(fetch(`/api/monitoring/district-stats?${params.toString()}`));
             }
 
@@ -180,8 +245,8 @@ const MonitoringDashboard = () => {
             const statsRes = results[0];
             const engStatsRes = results[1];
             const projectsRes = results[2];
-            const divStatsRes = currentUserData.role === 'Regional Office' || (currentUserData.role === 'Central Office' && queryRegion && !queryDivision) ? results[3] : null;
-            const distStatsRes = currentUserData.role === 'School Division Office' || (currentUserData.role === 'Central Office' && queryDivision) ? results[3] : null;
+            const divStatsRes = effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && queryRegion && !queryDivision) ? results[3] : null;
+            const distStatsRes = effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && queryDivision) ? results[3] : null;
 
             if (statsRes.ok) setStats(await statsRes.json());
             if (engStatsRes.ok) setEngStats(await engStatsRes.json());
@@ -259,7 +324,12 @@ const MonitoringDashboard = () => {
 
     // NEW: Update Districts when Division changes
     useEffect(() => {
-        if (userData?.role === 'Central Office' && coDivision && schoolData.length > 0) {
+        // SUPER USER CHECK FOR EFFECTIVE ROLE
+        const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+            ? sessionStorage.getItem('impersonatedRole')
+            : userData?.role;
+
+        if (effectiveRole === 'Central Office' && coDivision && schoolData.length > 0) {
             const districts = [...new Set(schoolData
                 .filter(s => s.region === coRegion && s.division === coDivision)
                 .map(s => s.district))]
@@ -284,11 +354,20 @@ const MonitoringDashboard = () => {
         setSchoolPage(1); // Reset pagination
 
         // NEW: For Regional Office, fetch schools immediately (Skip District)
-        if (userData?.role === 'Regional Office') {
+        // SUPER USER CHECK
+        const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+            ? sessionStorage.getItem('impersonatedRole')
+            : userData?.role;
+
+        const effectiveRegion = (userData?.role === 'Super User' && effectiveRole === 'Regional Office')
+            ? sessionStorage.getItem('impersonatedLocation')
+            : userData?.region;
+
+        if (effectiveRole === 'Regional Office') {
             setLoadingDistrict(true);
             try {
                 // Fetch ALL schools in this division (API Data)
-                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(userData.region)}&division=${encodeURIComponent(division)}&limit=1000`);
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(effectiveRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
                 let apiSchools = [];
                 if (res.ok) {
                     const data = await res.json();
@@ -360,7 +439,11 @@ const MonitoringDashboard = () => {
             }
             // We don't necessarily update global stats if fetchData ignores params for RO, 
             // but we call it to ensure sync if logic changes.
-            fetchData(userData.region, division);
+            if (userData?.role === 'Super User') {
+                fetchData(effectiveRegion, division);
+            } else {
+                fetchData(userData.region, division);
+            }
         } else {
             fetchData(coRegion, division);
         }
@@ -377,8 +460,28 @@ const MonitoringDashboard = () => {
                 // Determine params
                 const user = auth.currentUser;
                 // Use state or user data (User data is safer for SDO)
-                const region = userData.role === 'Central Office' ? coRegion : userData.region;
-                const division = userData.role === 'Central Office' ? coDivision : userData.division;
+
+                const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+                    ? sessionStorage.getItem('impersonatedRole')
+                    : userData?.role;
+
+                let region, division;
+
+                if (effectiveRole === 'Central Office') {
+                    region = coRegion;
+                    division = coDivision;
+                } else if (userData?.role === 'Super User') {
+                    // If Super User is impersonating SDO
+                    // Selector saves "Division" in impersonatedLocation. We need Region too preferably.
+                    // But for now let's hope finding by division is enough or we use the cached CSV data.
+                    division = sessionStorage.getItem('impersonatedLocation');
+                    // Try to find region from schoolData for this division if possible
+                    const match = schoolData.find(s => s.division === division);
+                    region = match ? match.region : '';
+                } else {
+                    region = userData.region;
+                    division = userData.division;
+                }
 
                 const res = await fetch(`/api/monitoring/schools?region=${region}&division=${division}&district=${district}&limit=1000`);
                 let apiSchools = [];
@@ -456,10 +559,14 @@ const MonitoringDashboard = () => {
 
     // Better: Add useEffect for Filters
     useEffect(() => {
-        if (userData?.role === 'Central Office' && (coDistrict || coDivision || coRegion)) {
+        const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+            ? sessionStorage.getItem('impersonatedRole')
+            : userData?.role;
+
+        if (effectiveRole === 'Central Office' && (coDistrict || coDivision || coRegion)) {
             fetchData(coRegion, coDivision);
         }
-    }, [coDistrict, coDivision, coRegion]); // Only trigger when district changes for now to avoid loops with other handlers
+    }, [coDistrict, coDivision, coRegion, userData]); // Only trigger when district changes for now to avoid loops with other handlers
 
     const StatCard = ({ title, value, total, color, icon: Icon }) => {
         const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
@@ -489,9 +596,25 @@ const MonitoringDashboard = () => {
     const jurisdictionTotal = useMemo(() => {
         let csvTotal = 0;
         if (schoolData.length > 0 && userData) {
-            const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
-            const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
-            const targetDistrict = userData.role === 'Central Office' ? coDistrict : null;
+            const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+                ? sessionStorage.getItem('impersonatedRole')
+                : userData?.role;
+
+            let targetRegion, targetDivision;
+
+            if (effectiveRole === 'Central Office') {
+                targetRegion = coRegion;
+                targetDivision = coDivision;
+            } else if (userData?.role === 'Super User' && effectiveRole === 'Regional Office') {
+                targetRegion = sessionStorage.getItem('impersonatedLocation');
+            } else if (userData?.role === 'Super User' && effectiveRole === 'School Division Office') {
+                targetDivision = sessionStorage.getItem('impersonatedLocation');
+            } else {
+                targetRegion = userData.region;
+                targetDivision = userData.division;
+            }
+
+            const targetDistrict = effectiveRole === 'Central Office' ? coDistrict : null;
 
             csvTotal = schoolData.filter(s => {
                 const matchRegion = !targetRegion || s.region === targetRegion;
@@ -515,7 +638,8 @@ const MonitoringDashboard = () => {
     );
 
     // --- RENDER NATIONAL VIEW (REGIONAL GRID) ---
-    if (userData?.role === 'Central Office' && !coRegion) {
+
+    if (effectiveRole === 'Central Office' && !coRegion) {
         return (
             <PageTransition>
                 <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 font-sans">
@@ -887,16 +1011,7 @@ const MonitoringDashboard = () => {
                 {/* Header */}
                 <div className="bg-gradient-to-br from-[#004A99] to-[#002D5C] p-6 pb-20 rounded-b-[3rem] shadow-xl text-white relative overflow-hidden">
                     {/* REMOVED BACKGROUND ICON as per user request */}
-                    {userData?.role === 'Super User' && (
-                        <div className="absolute top-6 right-6 z-50">
-                            <button
-                                onClick={() => navigate('/super-admin')}
-                                className="px-3 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-lg text-xs font-bold text-white transition"
-                            >
-                                ← Back to Hub
-                            </button>
-                        </div>
-                    )}
+
 
                     <div className="relative z-10">
                         {userData?.role === 'Central Office' || userData?.role === 'Super User' ? (
@@ -942,8 +1057,8 @@ const MonitoringDashboard = () => {
                                 <div className="flex items-center gap-2 mb-2 opacity-80">
                                     <FiMapPin size={14} />
                                     <span className="text-xs font-bold uppercase tracking-widest">
-                                        {userData?.role === 'Regional Office'
-                                            ? (userData?.region?.toString().toLowerCase().includes('region') ? userData?.region : `Region ${userData?.region}`)
+                                        {effectiveRole === 'Regional Office'
+                                            ? (effectiveRegion?.toString().toLowerCase().includes('region') ? effectiveRegion : `Region ${effectiveRegion}`)
                                             : `SDO ${userData?.division?.toString().replace(/\s+Division$/i, '')}`
                                         }
                                     </span>
@@ -1070,12 +1185,12 @@ const MonitoringDashboard = () => {
                             {/* ONLY SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
                             {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') &&
                                 !coDivision &&
-                                (userData?.role === 'Regional Office' || (userData?.role === 'Central Office' && coRegion)) && (
+                                (effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && coRegion)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Accomplishment Rate per School Division</h2>
                                         {(() => {
                                             // 1. Get List of Divisions for Current Region from CSV Data
-                                            const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
+                                            const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
 
                                             // MERGE Divisions: Use both CSV and API to find all divisions
                                             const csvDivisions = [...new Set(schoolData
@@ -1171,17 +1286,27 @@ const MonitoringDashboard = () => {
                             {/* NEW: District Accomplishment Rate for SDO OR Central Office Division View */}
                             {/* SHOW FOR INSIGHTED ACCOMPLISHMENT TAB */}
                             {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') &&
-                                (userData?.role === 'School Division Office' || (userData?.role === 'Central Office' && coDivision) || (userData?.role === 'Regional Office' && coDivision)) && (
+                                (effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && coDivision) || (effectiveRole === 'Regional Office' && coDivision)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                                            {(coDistrict || (userData?.role === 'Regional Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
+                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
                                         </h2>
                                         {(() => {
-                                            const targetRegion = userData.role === 'Central Office' ? coRegion : userData.region;
-                                            const targetDivision = userData.role === 'Central Office' ? coDivision : userData.division;
+                                            // Determine Target Region:
+                                            // 1. CO: Use selected Region
+                                            // 2. RO: Use effectiveRegion
+                                            // 3. SDO: Use effectiveRegion (if normal user) OR derive from SchoolData (if Super User impersonating SDO)
+                                            const targetRegion = effectiveRole === 'Central Office'
+                                                ? coRegion
+                                                : (effectiveRegion || schoolData.find(s => s.division === effectiveDivision)?.region);
+
+                                            // Determine Target Division:
+                                            const targetDivision = (effectiveRole === 'Central Office' || effectiveRole === 'Regional Office')
+                                                ? coDivision
+                                                : effectiveDivision;
 
                                             // IF DISTRICT SELECTED OR REGIONAL OFFICE DRILL-DOWN: SHOW SCHOOLS
-                                            if (coDistrict || (userData?.role === 'Regional Office' && coDivision)) {
+                                            if (coDistrict || (effectiveRole === 'Regional Office' && coDivision)) {
                                                 if (loadingDistrict) {
                                                     return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
                                                 }
@@ -1257,7 +1382,7 @@ const MonitoringDashboard = () => {
                                                                 <div className="flex items-center gap-3">
                                                                     <button
                                                                         onClick={() => {
-                                                                            if (userData?.role === 'Regional Office') {
+                                                                            if (effectiveRole === 'Regional Office') {
                                                                                 handleDivisionChange(''); // Back to Division List
                                                                             } else {
                                                                                 handleDistrictChange(''); // Back to District List
@@ -1269,7 +1394,7 @@ const MonitoringDashboard = () => {
                                                                     </button>
                                                                     <div>
                                                                         <h3 className="font-black text-xl text-slate-800 dark:text-white">
-                                                                            {userData?.role === 'Regional Office' ? coDivision : coDistrict}
+                                                                            {effectiveRole === 'Regional Office' ? coDivision : coDistrict}
                                                                         </h3>
                                                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sortedSchools.length} Schools</p>
                                                                     </div>

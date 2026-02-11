@@ -8,7 +8,9 @@ import { FiArrowLeft, FiSave, FiGrid, FiLayers, FiAlertCircle, FiCheckCircle, Fi
 import { TbSchool } from 'react-icons/tb';
 import SuccessModal from '../components/SuccessModal';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
+
 import { normalizeOffering } from '../utils/dataNormalization';
+import useReadOnly from '../hooks/useReadOnly'; // Import Hook
 
 // --- SUB-COMPONENT: Generic Grid Section (Adapted from LearnerStatistics) ---
 const GridSection = ({ label, icon, color, children, totalLabel, totalValue }) => (
@@ -42,7 +44,13 @@ const Enrolment = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+    const isSuperUserReadOnly = useReadOnly(); // Use Hook
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly);
+
+    // Sync state if hook changes
+    useEffect(() => {
+        if (isSuperUserReadOnly) setIsReadOnly(true);
+    }, [isSuperUserReadOnly]);
 
     // State
     const [loading, setLoading] = useState(true);
@@ -544,8 +552,10 @@ const Enrolment = () => {
             {/* Footer Actions */}
             <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
                 <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                    {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
+                        <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
+                            <FiAlertCircle /> View-Only Mode
+                        </div>
                     ) : isLocked ? (
                         <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
                             🔓 Unlock to Edit Data

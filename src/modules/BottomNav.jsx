@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Icons 
-import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool } from "react-icons/tb";
+import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare } from "react-icons/fi"; // Changed to Gear icon
 
@@ -13,6 +13,13 @@ const BottomNav = ({ userRole }) => {
 
     // If no role is provided yet (loading), don't show the nav bar
     if (!userRole) return null;
+
+    // --- SUPER USER OVERRIDE ---
+    let effectiveRole = userRole;
+    if (localStorage.getItem('userRole') === 'Super User') {
+        const impRole = sessionStorage.getItem('impersonatedRole');
+        if (impRole) effectiveRole = impRole;
+    }
 
     // --- CONFIGURATION BY ROLE ---
     const navConfigs = {
@@ -67,13 +74,17 @@ const BottomNav = ({ userRole }) => {
 
     const currentNavItems = navConfigs[userRole];
 
+    // --- SUPER USER INJECTION ---
+    // REMOVED: Moved to Floating Button
+    const finalNavItems = currentNavItems;
+
     // If role exists but not in config (unexpected), don't show anything or show safe fallback
-    if (!currentNavItems) return null;
+    if (!finalNavItems) return null;
 
     return createPortal(
         <div style={styles.wrapper}>
             <div style={styles.navContainer}>
-                {currentNavItems.map((item) => {
+                {finalNavItems.map((item) => {
                     const isActive = location.pathname === item.path &&
                         (!item.state || location.state?.activeTab === item.state.activeTab || (!location.state?.activeTab && item.state.activeTab === 'all'));
 

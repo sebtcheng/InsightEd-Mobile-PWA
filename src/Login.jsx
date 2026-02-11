@@ -27,6 +27,7 @@ const getDashboardPath = (role) => {
         'Admin': '/admin-dashboard',
         'Super Admin': '/super-admin',
         'Central Office': '/monitoring-dashboard',
+        'Super User': '/super-user-selector',
     };
     return roleMap[role] || '/';
 };
@@ -442,6 +443,13 @@ const Login = () => {
                 // --- KEY FIX: SAVE ROLE TO LOCAL STORAGE ---
                 console.log("Saving role to storage:", role);
                 localStorage.setItem('userRole', role);
+
+                // --- SUPER USER SESSION CLEARING ---
+                if (role === 'Super User') {
+                    sessionStorage.removeItem('impersonatedRole');
+                    sessionStorage.removeItem('impersonatedLocation');
+                    sessionStorage.removeItem('isViewingAsSuperUser');
+                }
 
                 // --- AUDIT LOG (Best Effort) ---
                 try {
