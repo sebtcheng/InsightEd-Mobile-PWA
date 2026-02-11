@@ -50,7 +50,7 @@ const getDashboardPath = (role) => {
         'Central Office': '/monitoring-dashboard',
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',
-        'Super User': '/super-admin',
+        'Super User': '/super-user-selector',
     };
     return roleMap[role] || '/';
 };
@@ -644,7 +644,7 @@ const Register = () => {
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
-                                        <option value="Super User">Super User</option>
+                                        {/* Super User hidden from registration - managed internally */}
                                         {/* {<option value="Admin">Admin</option>} */}
                                     </select>
                                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-blue-500">

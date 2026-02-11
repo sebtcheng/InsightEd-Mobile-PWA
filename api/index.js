@@ -5818,10 +5818,6 @@ app.get('/api/migrate-lgu-schema', async (req, res) => {
 
 if (isMainModule || process.env.START_SERVER === 'true') {
 
-if (isMainModule || process.env.START_SERVER === 'true') {
-
-  const PORT = process.env.PORT || 3000;
-
   const PORT = process.env.PORT || 3000;
 
 
