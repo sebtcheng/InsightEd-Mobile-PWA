@@ -219,7 +219,8 @@ const MonitoringDashboard = () => {
             // Create a separate params object for the main stats that EXCLUDES district.
             const statsParams = new URLSearchParams({
                 region: queryRegion || '',
-                ...(queryDivision && { division: queryDivision })
+                // FIX: For RO, exclude division from Top Stats to keep them Regional
+                ...(queryDivision && effectiveRole !== 'Regional Office' && { division: queryDivision })
                 // explicitly OMIT district here
             });
 

@@ -5048,6 +5048,128 @@ app.post('/api/save-teacher-specialization', async (req, res) => {
 //                    MONITORING & JURISDICTION ROUTES
 // ==================================================================
 
+// --- SUPER USER: Export Summary Endpoint ---
+app.get('/api/super-user/export-summary', async (req, res) => {
+  const { role, region, division, district } = req.query;
+  try {
+    const result = { context: { role: role || 'Central Office', location: '' }, generated_at: new Date().toISOString() };
+
+    // Build location string for context
+    if (district) result.context.location = `${district}, ${division}`;
+    else if (division) result.context.location = `${division} Division`;
+    else if (region) result.context.location = region;
+    else result.context.location = 'National';
+
+    // --- 1. School KPIs ---
+    let schoolSql = `
+      SELECT 
+        COUNT(s.school_id) as total_schools,
+        COALESCE(SUM(CASE WHEN sp.f1_profile > 0 THEN 1 ELSE 0 END), 0) as profile,
+        COALESCE(SUM(CASE WHEN sp.f2_head > 0 THEN 1 ELSE 0 END), 0) as head,
+        COALESCE(SUM(CASE WHEN sp.f3_enrollment > 0 THEN 1 ELSE 0 END), 0) as enrollment,
+        COALESCE(SUM(CASE WHEN sp.f4_classes > 0 THEN 1 ELSE 0 END), 0) as organizedclasses,
+        COALESCE(SUM(CASE WHEN sp.f5_teachers > 0 THEN 1 ELSE 0 END), 0) as personnel,
+        COALESCE(SUM(CASE WHEN sp.f6_specialization > 0 THEN 1 ELSE 0 END), 0) as specialization,
+        COALESCE(SUM(CASE WHEN sp.f7_resources > 0 THEN 1 ELSE 0 END), 0) as resources,
+        COALESCE(SUM(CASE WHEN sp.f8_facilities > 0 THEN 1 ELSE 0 END), 0) as facilities,
+        COALESCE(SUM(CASE WHEN sp.f9_shifting > 0 THEN 1 ELSE 0 END), 0) as shifting,
+        COALESCE(SUM(CASE WHEN sp.f10_stats > 0 THEN 1 ELSE 0 END), 0) as learner_stats,
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END), 0) as completed_schools,
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools
+      FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
+    `;
+    let schoolParams = [];
+    let schoolWhere = [];
+
+    if (region) {
+      schoolParams.push(region);
+      schoolWhere.push(`TRIM(s.region) = TRIM($${schoolParams.length})`);
+    }
+    if (division) {
+      schoolParams.push(division);
+      schoolWhere.push(`TRIM(s.division) = TRIM($${schoolParams.length})`);
+    }
+    if (district) {
+      schoolParams.push(district);
+      schoolWhere.push(`TRIM(s.district) = TRIM($${schoolParams.length})`);
+    }
+
+    if (schoolWhere.length > 0) schoolSql += ' WHERE ' + schoolWhere.join(' AND ');
+
+    const schoolRes = await pool.query(schoolSql, schoolParams);
+    const sr = schoolRes.rows[0];
+    const totalSchools = parseInt(sr.total_schools) || 0;
+
+    result.school_kpis = {
+      total_schools: totalSchools,
+      completed: parseInt(sr.completed_schools) || 0,
+      validated: parseInt(sr.validated_schools) || 0,
+      completion_pct: totalSchools > 0 ? parseFloat(((parseInt(sr.completed_schools) / totalSchools) * 100).toFixed(1)) : 0,
+      form_breakdown: {
+        profile: parseInt(sr.profile) || 0,
+        head: parseInt(sr.head) || 0,
+        enrollment: parseInt(sr.enrollment) || 0,
+        organizedclasses: parseInt(sr.organizedclasses) || 0,
+        personnel: parseInt(sr.personnel) || 0,
+        specialization: parseInt(sr.specialization) || 0,
+        resources: parseInt(sr.resources) || 0,
+        facilities: parseInt(sr.facilities) || 0,
+        shifting: parseInt(sr.shifting) || 0,
+        learner_stats: parseInt(sr.learner_stats) || 0,
+      }
+    };
+
+    // --- 2. Engineer KPIs ---
+    let engSql = `
+      SELECT
+        COUNT(*) as total_projects,
+        COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed,
+        COUNT(CASE WHEN status = 'Ongoing' THEN 1 END) as ongoing,
+        COUNT(CASE WHEN status = 'Not Yet Started' THEN 1 END) as not_yet_started,
+        COUNT(CASE WHEN status = 'Under Procurement' THEN 1 END) as under_procurement,
+        COUNT(CASE WHEN status = 'For Final Inspection' THEN 1 END) as for_final_inspection
+      FROM (
+        SELECT DISTINCT ON (ipc) project_id, status, region, division
+        FROM engineer_form
+        ORDER BY ipc, project_id DESC
+      ) latest
+    `;
+    let engParams = [];
+    let engWhere = [];
+
+    if (region) {
+      engParams.push(region);
+      engWhere.push(`TRIM(latest.region) = TRIM($${engParams.length})`);
+    }
+    if (division) {
+      engParams.push(division);
+      engWhere.push(`TRIM(latest.division) = TRIM($${engParams.length})`);
+    }
+
+    if (engWhere.length > 0) engSql += ' WHERE ' + engWhere.join(' AND ');
+
+    const engRes = await pool.query(engSql, engParams);
+    const er = engRes.rows[0];
+
+    result.engineer_kpis = {
+      total_projects: parseInt(er.total_projects) || 0,
+      completed: parseInt(er.completed) || 0,
+      ongoing: parseInt(er.ongoing) || 0,
+      not_yet_started: parseInt(er.not_yet_started) || 0,
+      under_procurement: parseInt(er.under_procurement) || 0,
+      for_final_inspection: parseInt(er.for_final_inspection) || 0,
+    };
+
+    res.json(result);
+
+  } catch (err) {
+    console.error("Export Summary Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 25. GET: Monitoring Stats (RO / SDO) ---
 app.get('/api/monitoring/stats', async (req, res) => {
   const { region, division } = req.query;
