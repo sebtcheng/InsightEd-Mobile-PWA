@@ -5,6 +5,7 @@ import { auth } from '../firebase';
 import { compressImage } from '../utils/imageCompression';
 import LocationPickerMap from '../components/LocationPickerMap';
 import Papa from 'papaparse';
+import Tooltip from '../components/Tooltip';
 import useReadOnly from '../hooks/useReadOnly'; // Import Hook
 
 // Helper component for Section Headers
@@ -437,7 +438,10 @@ const LguForm = () => {
                 });
             }
 
-            if (!res.ok) throw new Error("Failed to save project");
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.message || errData.error || "Failed to save project");
+            }
 
             const data = await res.json();
             alert(projectId ? "✅ Project Updated Successfully!" : `✅ Project Created! IPC: ${data.ipc}`);
@@ -477,14 +481,14 @@ const LguForm = () => {
                         {/* 1. PROJECT IDENTIFICATION */}
                         <SectionHeader title="Project Identification" icon="🏢" />
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span></label>
+                             <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span> <Tooltip text="Official name of the LGU project." /></label>
                                 <input name="projectName" value={formData.projectName} onChange={handleChange} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
 
                             <div className="flex gap-2">
                                 <div className="flex-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School ID (6 Digits)</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School ID (6 Digits) <Tooltip text="6-digit unique School ID." /></label>
                                     <input name="schoolId" value={formData.schoolId} onChange={handleChange} placeholder="XXXXXX" maxLength={6} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm tracking-widest font-mono" />
                                 </div>
                                 <button type="button" onClick={handleValidateSchoolId} className="mt-6 px-4 bg-blue-100 text-blue-700 font-bold rounded-lg text-xs uppercase hover:bg-blue-200 transition">
@@ -492,41 +496,44 @@ const LguForm = () => {
                                 </button>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School Name</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School Name <Tooltip text="Name of the school (Auto-filled based on ID)." /></label>
                                 <input name="schoolName" value={formData.schoolName} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region <Tooltip text="Region where the school is located (Auto-filled)." /></label>
                                     <input name="region" value={formData.region} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division <Tooltip text="Division Office coverage (Auto-filled)." /></label>
                                     <input name="division" value={formData.division} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* 2. LGU DETAILS */}
-                        <SectionHeader title="LGU Project Details" icon="🏛️" />
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
+                             </div>
+                             
+                             {/* MOVED LOCATION FIELDS */}
+                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province</label>
-                                    <input name="province" value={formData.province} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province <Tooltip text="Province where the project is located (Auto-filled)." /></label>
+                                    <input name="province" value={formData.province} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality</label>
-                                    <input name="municipality" value={formData.municipality} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality <Tooltip text="City or Municipality of the project site (Auto-filled)." /></label>
+                                    <input name="municipality" value={formData.municipality} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District</label>
-                                <input name="legislative_district" value={formData.legislative_district} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District <Tooltip text="Legislative District covering the project area (Auto-filled)." /></label>
+                                <input name="legislative_district" value={formData.legislative_district} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                             </div>
+                        </div>
+
+                         {/* 2. LGU DETAILS */}
+                         <SectionHeader title="LGU Project Details" icon="🏛️" />
+                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
+
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Source Agency</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Source Agency <Tooltip text="Agency providing the funds (e.g. National, Provincial)." /></label>
                                     <select name="source_agency" value={formData.source_agency} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
                                         <option value="">Select Agency...</option>
                                         <option value="Province">Province</option>
@@ -536,40 +543,40 @@ const LguForm = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">LSB Resolution #</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">LSB Resolution # <Tooltip text="Local School Board Resolution Number." /></label>
                                     <input name="lsb_resolution_no" value={formData.lsb_resolution_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Ref. Number</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Ref. Number <Tooltip text="Memorandum of Agreement Reference Number." /></label>
                                     <input name="moa_ref_no" value={formData.moa_ref_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date <Tooltip text="Date of MOA signing." /></label>
                                     <input type="date" name="moa_date" value={formData.moa_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source <Tooltip text="Specific source of the fund (e.g. SEF, General Fund)." /></label>
                                     <input name="fund_source" value={formData.fund_source} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Validity Period</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Validity Period <Tooltip text="Validity period of the fund or agreement." /></label>
                                     <input name="validity_period" value={formData.validity_period} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-3 mb-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Duration</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Duration <Tooltip text="Duration of the contract in calendar days." /></label>
                                     <input name="contract_duration" value={formData.contract_duration} onChange={handleChange} placeholder="e.g. 120 Days" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date Approved POW</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date Approved POW <Tooltip text="Date when the Program of Works was approved." /></label>
                                     <input type="date" name="date_approved_pow" value={formData.date_approved_pow} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
@@ -580,7 +587,7 @@ const LguForm = () => {
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Fund Release
                                 </h4>
                                 <div className="mb-3">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Schedule of Fund Release</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Schedule of Fund Release <Tooltip text="Select 'Tranches' to specify breakdown, or 'Lumpsum' for one-time release." /></label>
                                     <select name="fund_release_schedule" value={formData.fund_release_schedule} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm">
                                         <option value="Lumpsum">Lumpsum</option>
                                         <option value="Tranches">Tranches</option>
@@ -590,33 +597,30 @@ const LguForm = () => {
                                 {formData.fund_release_schedule === 'Tranches' && (
                                     <div className="grid grid-cols-2 gap-3 mb-3">
                                         <div>
-                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches</label>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches <Tooltip text="Number of funding tranches." /></label>
                                             <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche</label>
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche <Tooltip text="Amount released per tranche." /></label>
                                             <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
                                         </div>
                                     </div>
                                 )}
-                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                    {/* Removed Duplicate Amount per Tranche */}
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche</label>
-                                        <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded <Tooltip text="Total amount of funds downloaded/received so far." /></label>
                                         <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized <Tooltip text="Total amount of funds already utilized/spent." /></label>
                                         <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
                                     </div>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works <Tooltip text="Brief description of the project scope." /></label>
                                 <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                         </div>
@@ -626,7 +630,7 @@ const LguForm = () => {
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mode of Procurement</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mode of Procurement <Tooltip text="Method used for procurement (e.g. Bidding, Shopping)." /></label>
                                     <select name="mode_of_procurement" value={formData.mode_of_procurement} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
                                         <option value="">Select Mode...</option>
                                         <option value="Public Bidding">Public Bidding</option>
@@ -636,7 +640,7 @@ const LguForm = () => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage <Tooltip text="Current stage in the procurement process." /></label>
                                     <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
                                         <option value="">Select Stage...</option>
                                         <option value="Pre-Procurement">Pre-Procurement</option>
@@ -653,33 +657,33 @@ const LguForm = () => {
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PhilGEPS Ref #</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PhilGEPS Ref # <Tooltip text="Reference number from PhilGEPS posting." /></label>
                                     <input name="philgeps_ref_no" value={formData.philgeps_ref_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PCAB License #</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PCAB License # <Tooltip text="Contractor's PCAB License Number." /></label>
                                     <input name="pcab_license_no" value={formData.pcab_license_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bid Amount</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bid Amount <Tooltip text="Amount of the winning bid." /></label>
                                     <input name="bid_amount" value={formData.bid_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount <Tooltip text="Final contract amount signed." /></label>
                                     <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date of Contract Signing</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date of Contract Signing <Tooltip text="Date when the contract was signed." /></label>
                                     <input type="date" name="date_contract_signing" value={formData.date_contract_signing} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Const. Start Date</label>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Const. Start Date <Tooltip text="Date when construction actually started." /></label>
                                     <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                             </div>
@@ -691,15 +695,15 @@ const LguForm = () => {
                                 </h4>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date <Tooltip text="Date of bidding." /></label>
                                         <input type="date" name="bidding_date" value={formData.bidding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening <Tooltip text="Date of bid opening." /></label>
                                         <input type="date" name="bid_opening_date" value={formData.bid_opening_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resolution to Award</label>
+                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resolution to Award <Tooltip text="Date of Resolution to Award." /></label>
                                         <input type="date" name="resolution_award_date" value={formData.resolution_award_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
                                     </div>
                                 </div>
@@ -710,7 +714,7 @@ const LguForm = () => {
                         <SectionHeader title="Status & Progress" icon="📊" />
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Current Status</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Current Status <Tooltip text="Current implementation status of the project." /></label>
                                 <select name="status" value={formData.status} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
                                     <option value="Not Yet Started">Not Yet Started</option>
                                     <option value="Under Procurement">Under Procurement</option>
@@ -724,8 +728,8 @@ const LguForm = () => {
                             {showProgressAndPhotos && (
                                 <div>
                                     <div className="flex justify-between items-center mb-1">
-                                        <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%)</label>
-                                        <div className="flex gap-1">
+                                         <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%) <Tooltip text="Physical accomplishment in percent." /></label>
+                                         <div className="flex gap-1">
                                             <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
                                             <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
                                         </div>
@@ -735,7 +739,7 @@ const LguForm = () => {
                             )}
 
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date <Tooltip text="Date when this status was observed." /></label>
                                 <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                         </div>
@@ -825,15 +829,15 @@ const LguForm = () => {
                         <SectionHeader title="Timelines" icon="📅" />
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Notice to Proceed <Tooltip text="Date of Notice to Proceed." /></label>
                                 <input type="date" name="noticeToProceed" value={formData.noticeToProceed} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Completion <Tooltip text="Target date of project completion." /></label>
                                 <input type="date" name="targetCompletionDate" value={formData.targetCompletionDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Actual Completion <Tooltip text="Actual date of project completion (if applicable)." /></label>
                                 <input type="date" name="actualCompletionDate" value={formData.actualCompletionDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                         </div>
@@ -842,15 +846,15 @@ const LguForm = () => {
                         <SectionHeader title="Funds and Contractor" icon="💰" />
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Allocation (PHP)</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Allocation (PHP) <Tooltip text="Total budget allocated for the project." /></label>
                                 <input name="projectAllocation" value={formData.projectAllocation} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contractor Name</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contractor Name <Tooltip text="Name of the contractor awarded the project." /></label>
                                 <input name="contractorName" value={formData.contractorName} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch</label>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch <Tooltip text="Batch or funding year." /></label>
                                 <input name="batchOfFunds" value={formData.batchOfFunds} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
                         </div>
@@ -868,7 +872,7 @@ const LguForm = () => {
 
                             <div className="flex gap-3 mb-1">
                                 <div className="flex-1">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Latitude <Tooltip text="GPS Latitude coordinate." /></label>
                                     <input
                                         name="latitude"
                                         value={formData.latitude}
@@ -878,7 +882,7 @@ const LguForm = () => {
                                     />
                                 </div>
                                 <div className="flex-1">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Longitude <Tooltip text="GPS Longitude coordinate." /></label>
                                     <input
                                         name="longitude"
                                         value={formData.longitude}

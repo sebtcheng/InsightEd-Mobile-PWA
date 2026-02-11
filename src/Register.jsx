@@ -43,7 +43,7 @@ import locationData from './locations.json';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Division Engineer': '/engineer-dashboard',
-        'Local Government Unit': '/lgu',
+        'Local Government Unit': '/lgu-form',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
@@ -1080,14 +1080,24 @@ const Register = () => {
                                                     ))}
                                                 </select>
 
-                                                <input
+                                                <select
                                                     name="position"
                                                     value={formData.position}
-                                                    placeholder="Position (e.g. Engineer III)"
                                                     onChange={handleChange}
-                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+                                                    className="w-full bg-white border border-teal-200 rounded-xl px-4 py-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-500"
                                                     required
-                                                />
+                                                >
+                                                    <option value="">Select Position</option>
+                                                    <option value="Engineer II">Engineer II</option>
+                                                    <option value="Engineer III">Engineer III</option>
+                                                    <option value="Engineer IV">Engineer IV</option>
+                                                    <option value="Engineer V">Engineer V</option>
+                                                    <option value="Technical Assistant I (COS)">Technical Assistant I (COS)</option>
+                                                    <option value="Technical Assistant II (COS)">Technical Assistant II (COS)</option>
+                                                    <option value="Technical Assistant III (COS)">Technical Assistant III (COS)</option>
+                                                    <option value="Technical Assistant IV (COS)">Technical Assistant IV (COS)</option>
+                                                    <option value="Technical Assistant V (COS)">Technical Assistant V (COS)</option>
+                                                </select>
                                             </div>
 
                                             {/* CONTACT INFO */}

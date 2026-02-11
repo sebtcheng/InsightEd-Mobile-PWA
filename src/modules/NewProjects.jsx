@@ -343,8 +343,8 @@ const NewProjects = () => {
             value = value.replace(/\D/g, '');
             if (value.length > 6) value = value.slice(0, 6);
         }
-        // Force Uppercase for Contractor Name, Project Name, and new Project Category
-        if (['contractorName', 'projectName', 'projectCategory'].includes(name)) {
+        // Force Uppercase for Contractor Name, Project Name, Project Category, Scope of Work, Batch of Funds
+        if (['contractorName', 'projectName', 'projectCategory', 'scopeOfWork', 'batchOfFunds'].includes(name)) {
             value = value.toUpperCase();
         }
 
@@ -365,15 +365,36 @@ const NewProjects = () => {
 
             // Auto-update percentage based on status
             if (name === 'status') {
+                // If status is "Not Yet Started" or "Under Procurement", percentage must be 0
                 if (['Not Yet Started', 'Under Procurement'].includes(value)) {
                     newData.accomplishmentPercentage = 0;
-                } else if (['Completed', 'For Final Inspection'].includes(value)) {
+                } 
+                // If status is "Completed", percentage must be 100
+                else if (['Completed', 'For Final Inspection'].includes(value)) {
                     newData.accomplishmentPercentage = 100;
                 }
             }
-            // Auto-update status based on percentage
+            
+            // Validate Accomplishment Percentage
             if (name === 'accomplishmentPercentage') {
-                const percent = Number(value);
+                // Remove leading zeros (e.g. "02" -> "2")
+                if (value.length > 1 && value.startsWith('0')) {
+                     value = value.replace(/^0+/, ''); 
+                     newData.accomplishmentPercentage = value;
+                }
+                
+                let percent = Number(value);
+                
+                // Limit 0 to 100
+                if (percent < 0) {
+                    percent = 0;
+                    newData.accomplishmentPercentage = 0;
+                } else if (percent > 100) {
+                    percent = 100;
+                    newData.accomplishmentPercentage = 100;
+                }
+
+                // Auto-update status based on percentage
                 if (percent === 100 && prev.status !== 'Completed') {
                     newData.status = 'For Final Inspection';
                 } else if (percent > 0 && percent < 100 && ['Not Yet Started', 'Under Procurement', 'Completed'].includes(prev.status)) {
@@ -428,8 +449,8 @@ const NewProjects = () => {
             { key: 'targetCompletionDate', label: 'Target Completion Date' },
             { key: 'contractorName', label: 'Contractor Name' },
             { key: 'projectAllocation', label: 'Project Allocation' },
-            { key: 'batchOfFunds', label: 'Batch of Funds' },
-            { key: 'otherRemarks', label: 'Remarks' }
+            { key: 'batchOfFunds', label: 'Batch of Funds' }
+            // { key: 'otherRemarks', label: 'Remarks' } // REMOVED: Now Optional
         ];
 
         for (const field of requiredFields) {
@@ -905,7 +926,7 @@ const NewProjects = () => {
                             )}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date</label>
-                                <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
+                                <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} readOnly={isDummy} max={new Date().toISOString().split('T')[0]} className={`w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 ${isDummy ? 'opacity-75 cursor-not-allowed' : ''}`} />
                             </div>
                         </div>
 

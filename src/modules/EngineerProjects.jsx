@@ -323,8 +323,24 @@ const EditProjectModal = ({
     const { name, value } = e.target;
     setFormData((prev) => {
       let newData = { ...prev, [name]: value };
+      
+      // Force Uppercase for Scope of Work & Batch of Funds
+      if (['scopeOfWork', 'batchOfFunds', 'projectCategory'].includes(name)) {
+          newData[name] = value.toUpperCase();
+      }
+
       if (name === "accomplishmentPercentage") {
-        const percent = parseFloat(value);
+        // Remove leading zeros
+        if (value.length > 1 && value.startsWith('0')) {
+             value = value.replace(/^0+/, ''); 
+             newData.accomplishmentPercentage = value;
+        }
+        
+        // Limit 0-100
+        let percent = parseFloat(value);
+        if (percent < 0) { percent = 0; newData.accomplishmentPercentage = 0; }
+        if (percent > 100) { percent = 100; newData.accomplishmentPercentage = 100; }
+        
         if (percent === 100) {
           if (prev.status !== ProjectStatus.Completed)
             newData.status = ProjectStatus.ForFinalInspection;
@@ -755,6 +771,7 @@ const EditProjectModal = ({
               value={formData.statusAsOfDate}
               onChange={handleChange}
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none"
+              max={new Date().toISOString().split('T')[0]}
             />
           </div>
 
@@ -813,8 +830,8 @@ const EditProjectModal = ({
               // VALIDATION
               const requiredFields = [
                   { key: 'statusAsOfDate', label: 'Status Date' },
-                  { key: 'accomplishmentPercentage', label: 'Accomplishment %' },
-                  { key: 'otherRemarks', label: 'Remarks' }
+                  { key: 'accomplishmentPercentage', label: 'Accomplishment %' }
+                  // { key: 'otherRemarks', label: 'Remarks' } // REMOVED: Optional
               ];
               
               for (const field of requiredFields) {

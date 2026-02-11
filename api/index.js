@@ -159,6 +159,25 @@ const initDB = async () => {
         ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC;
     `);
 
+    // --- MIGRATION: ADD MISSING LGU FIELDS (Batch 3) ---
+    await pool.query(`
+        ALTER TABLE lgu_forms
+        ADD COLUMN IF NOT EXISTS source_agency TEXT,
+        ADD COLUMN IF NOT EXISTS lsb_resolution_no TEXT,
+        ADD COLUMN IF NOT EXISTS moa_ref_no TEXT,
+        ADD COLUMN IF NOT EXISTS validity_period TEXT,
+        ADD COLUMN IF NOT EXISTS contract_duration TEXT,
+        ADD COLUMN IF NOT EXISTS date_approved_pow DATE,
+        ADD COLUMN IF NOT EXISTS fund_release_schedule TEXT,
+        ADD COLUMN IF NOT EXISTS mode_of_procurement TEXT,
+        ADD COLUMN IF NOT EXISTS philgeps_ref_no TEXT,
+        ADD COLUMN IF NOT EXISTS pcab_license_no TEXT,
+        ADD COLUMN IF NOT EXISTS date_contract_signing DATE,
+        ADD COLUMN IF NOT EXISTS bid_amount NUMERIC,
+        ADD COLUMN IF NOT EXISTS nature_of_delay TEXT,
+        ADD COLUMN IF NOT EXISTS date_notice_of_award DATE;
+    `);
+
     await pool.query(`
         CREATE TABLE IF NOT EXISTS lgu_image (
             id SERIAL PRIMARY KEY,
@@ -5799,9 +5818,11 @@ app.get('/api/migrate-lgu-schema', async (req, res) => {
 
 if (isMainModule || process.env.START_SERVER === 'true') {
 
+if (isMainModule || process.env.START_SERVER === 'true') {
 
   const PORT = process.env.PORT || 3000;
 
+  const PORT = process.env.PORT || 3000;
 
 
 
