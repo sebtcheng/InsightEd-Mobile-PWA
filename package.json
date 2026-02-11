@@ -21,6 +21,8 @@
     "firebase-admin": "^13.6.0",
     "framer-motion": "^12.24.12",
     "idb": "^8.0.3",
+    "jspdf": "^4.1.0",
+    "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",

@@ -209,7 +209,12 @@ const EngineerDashboard = () => {
           let currentProjects = [];
 
           if (currentRole === 'Super User') {
-            url = `${API_BASE}/api/projects`; // Fetch all
+            const impersonatedDivision = sessionStorage.getItem('impersonatedDivision');
+            if (impersonatedDivision) {
+              url = `${API_BASE}/api/projects?division=${encodeURIComponent(impersonatedDivision)}`;
+            } else {
+              url = `${API_BASE}/api/projects`; // Fetch all only if no division selected
+            }
           }
 
           // ENGINEER: Stale-While-Revalidate Strategy
@@ -300,7 +305,10 @@ const EngineerDashboard = () => {
                 {userRole === 'Local Government Unit' ? 'LGU Partner' : 'Engr.'} {userName}
               </h1>
               <p className="text-blue-100 mt-1 text-sm">
-                Dashboard • Overview of {projects.length} active projects.
+                {userRole === 'Super User' && sessionStorage.getItem('impersonatedDivision')
+                  ? `${sessionStorage.getItem('impersonatedDivision')} • ${projects.length} projects`
+                  : `Dashboard • Overview of ${projects.length} active projects.`
+                }
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">

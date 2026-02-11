@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { auth } from '../firebase'; // Import auth
 import { FiLogOut } from 'react-icons/fi'; // Import Icon
-import locations from '../locations.json'; // Import locations
 
 const SuperUserSelector = () => {
     const navigate = useNavigate();
@@ -24,17 +23,69 @@ const SuperUserSelector = () => {
     const [lguProvince, setLguProvince] = useState('');
     const [lguMunicipality, setLguMunicipality] = useState('');
 
-    // --- LISTS ---
-    const regions = [
-        "Region I", "Region II", "Region III", "Region IV-A", "Region IV-B",
-        "Region V", "Region VI", "Region VII", "Region VIII", "Region IX",
-        "Region X", "Region XI", "Region XII", "CAR", "NCR", "BARMM"
-    ];
+    // --- API-DRIVEN LIST STATE ---
+    const [regions, setRegions] = useState([]);
+    const [sdoDivisions, setSdoDivisions] = useState([]);
+    const [engDivisions, setEngDivisions] = useState([]);
+    const [lguProvinces, setLguProvinces] = useState([]);
+    const [lguMunicipalities, setLguMunicipalities] = useState([]);
 
-    const divisions = {
-        "Region II": ["Batanes", "Cagayan", "Isabela", "Nueva Vizcaya", "Quirino", "Santiago City", "Tuguegarao City"],
-        // Add more mappings as needed or fetch dynamically
-    };
+    // --- FETCH REGIONS ON MOUNT (from schools table) ---
+    useEffect(() => {
+        fetch('/api/locations/regions')
+            .then(res => res.json())
+            .then(data => setRegions(data || []))
+            .catch(err => console.error("Failed to load regions:", err));
+    }, []);
+
+    // --- FETCH SDO DIVISIONS when selectedRegion changes ---
+    useEffect(() => {
+        setSdoDivisions([]);
+        setSelectedDivision('');
+        if (selectedRegion) {
+            fetch(`/api/locations/divisions?region=${encodeURIComponent(selectedRegion)}`)
+                .then(res => res.json())
+                .then(data => setSdoDivisions(data || []))
+                .catch(console.error);
+        }
+    }, [selectedRegion]);
+
+    // --- FETCH ENGINEER DIVISIONS when engRegion changes ---
+    useEffect(() => {
+        setEngDivisions([]);
+        setEngDivision('');
+        if (engRegion) {
+            fetch(`/api/locations/divisions?region=${encodeURIComponent(engRegion)}`)
+                .then(res => res.json())
+                .then(data => setEngDivisions(data || []))
+                .catch(console.error);
+        }
+    }, [engRegion]);
+
+    // --- FETCH LGU PROVINCES when lguRegion changes ---
+    useEffect(() => {
+        setLguProvinces([]);
+        setLguProvince('');
+        setLguMunicipality('');
+        if (lguRegion) {
+            fetch(`/api/locations/provinces?region=${encodeURIComponent(lguRegion)}`)
+                .then(res => res.json())
+                .then(data => setLguProvinces(data || []))
+                .catch(console.error);
+        }
+    }, [lguRegion]);
+
+    // --- FETCH LGU MUNICIPALITIES when lguProvince changes ---
+    useEffect(() => {
+        setLguMunicipalities([]);
+        setLguMunicipality('');
+        if (lguRegion && lguProvince) {
+            fetch(`/api/locations/municipalities-by-province?region=${encodeURIComponent(lguRegion)}&province=${encodeURIComponent(lguProvince)}`)
+                .then(res => res.json())
+                .then(data => setLguMunicipalities(data || []))
+                .catch(console.error);
+        }
+    }, [lguRegion, lguProvince]);
 
     const handleSelection = async (role, specificLocation = null, extraData = {}) => {
         setLoading(true);
@@ -154,7 +205,7 @@ const SuperUserSelector = () => {
                         <select
                             className="w-full p-2 mb-4 border rounded-lg bg-slate-50 text-sm"
                             value={selectedRegion}
-                            onChange={(e) => setSelectedRegion(e.target.value)}
+                            onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
                         >
                             <option value="">Select Region</option>
                             {regions.map(r => <option key={r} value={r}>{r}</option>)}
@@ -178,7 +229,7 @@ const SuperUserSelector = () => {
 
                         <select
                             className="w-full p-2 mb-2 border rounded-lg bg-slate-50 text-sm"
-                            value={selectedRegion} // Reuse region state for SDO filter
+                            value={selectedRegion}
                             onChange={(e) => { setSelectedRegion(e.target.value); setSelectedDivision(''); }}
                         >
                             <option value="">Select Region First</option>
@@ -189,13 +240,10 @@ const SuperUserSelector = () => {
                             className="w-full p-2 mb-4 border rounded-lg bg-slate-50 text-sm"
                             value={selectedDivision}
                             onChange={(e) => setSelectedDivision(e.target.value)}
-                            disabled={!selectedRegion}
+                            disabled={!selectedRegion || sdoDivisions.length === 0}
                         >
                             <option value="">Select Division</option>
-                            {selectedRegion && divisions[selectedRegion] ?
-                                divisions[selectedRegion].map(d => <option key={d} value={d}>{d}</option>)
-                                : <option value="Generic Division">Generic Division</option>
-                            }
+                            {sdoDivisions.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
 
                         <button
@@ -241,13 +289,10 @@ const SuperUserSelector = () => {
                             className="w-full p-2 mb-6 border rounded-lg bg-slate-50 text-sm"
                             value={engDivision}
                             onChange={(e) => setEngDivision(e.target.value)}
-                            disabled={!engRegion}
+                            disabled={!engRegion || engDivisions.length === 0}
                         >
                             <option value="">Select Division</option>
-                            {engRegion && divisions[engRegion] ?
-                                divisions[engRegion].map(d => <option key={d} value={d}>{d}</option>)
-                                : <option value="Generic Division">Generic Division</option>
-                            }
+                            {engDivisions.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
 
                         <div className="mt-auto w-full">
@@ -281,7 +326,7 @@ const SuperUserSelector = () => {
                                 }}
                             >
                                 <option value="">Select Region</option>
-                                {locations && Object.keys(locations).sort().map(r => (
+                                {regions.map(r => (
                                     <option key={r} value={r}>{r}</option>
                                 ))}
                             </select>
@@ -294,10 +339,10 @@ const SuperUserSelector = () => {
                                     setLguProvince(e.target.value);
                                     setLguMunicipality('');
                                 }}
-                                disabled={!lguRegion}
+                                disabled={!lguRegion || lguProvinces.length === 0}
                             >
                                 <option value="">Select Province</option>
-                                {lguRegion && locations[lguRegion] && Object.keys(locations[lguRegion]).sort().map(p => (
+                                {lguProvinces.map(p => (
                                     <option key={p} value={p}>{p}</option>
                                 ))}
                             </select>
@@ -307,10 +352,10 @@ const SuperUserSelector = () => {
                                 className="w-full p-2 border rounded-lg bg-slate-50 text-sm"
                                 value={lguMunicipality}
                                 onChange={(e) => setLguMunicipality(e.target.value)}
-                                disabled={!lguProvince}
+                                disabled={!lguProvince || lguMunicipalities.length === 0}
                             >
                                 <option value="">Select Municipality</option>
-                                {lguProvince && locations[lguRegion][lguProvince] && Object.keys(locations[lguRegion][lguProvince]).sort().map(m => (
+                                {lguMunicipalities.map(m => (
                                     <option key={m} value={m}>{m}</option>
                                 ))}
                             </select>

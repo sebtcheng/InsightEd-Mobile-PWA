@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TbTrophy, TbArrowLeft, TbMap2, TbMedal, TbSearch } from "react-icons/tb";
+import { TbTrophy, TbArrowLeft, TbMap2, TbMedal, TbSearch, TbFileExport, TbDownload } from "react-icons/tb";
 import { auth } from '../firebase';
 import PageTransition from '../components/PageTransition';
 import MyRankFooter from './MyRankFooter';
+import { generateLeaderboardReport, downloadCSV } from '../utils/ReportGenerator';
 
 const Leaderboard = () => {
     const navigate = useNavigate();
@@ -21,6 +22,7 @@ const Leaderboard = () => {
 
     // 2. CHANGED: Search now filters divisions/regions
     const [search, setSearch] = useState('');
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
 
     useEffect(() => {
         const init = async () => {
@@ -206,6 +208,32 @@ const Leaderboard = () => {
                             </div>
                             <div className="w-8"></div>
                         </div>
+
+                        {/* Super User Export Buttons */}
+                        {isSuperUser && (
+                            <div className="flex justify-center gap-2 mt-3 mb-1">
+                                <button
+                                    onClick={() => {
+                                        const list = getFilteredList();
+                                        generateLeaderboardReport(list, userScope, activeTab);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-md transition-colors"
+                                >
+                                    <TbFileExport size={14} />
+                                    Export PDF
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const list = getFilteredList();
+                                        downloadCSV(list, `InsightEd_Rankings_${(userScope || 'Export').replace(/\s+/g, '_')}`);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-md transition-colors"
+                                >
+                                    <TbDownload size={14} />
+                                    Export CSV
+                                </button>
+                            </div>
+                        )}
                         <h1 className="text-2xl font-bold text-white text-center mt-2">Top Performers</h1>
                         <p className="text-blue-200 text-center text-xs opacity-80 mb-6">{userScope || 'Loading...'}</p>
 
