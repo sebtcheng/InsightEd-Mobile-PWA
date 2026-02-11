@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition from '../components/PageTransition'; // Assuming you have this
 import { getCachedProjects, cacheGallery, getCachedGallery } from '../db';
 import LocationPickerMap from '../components/LocationPickerMap';
@@ -8,6 +8,8 @@ import { TbPhoto } from "react-icons/tb";
 const DetailedProjInfo = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const type = searchParams.get('type'); // 'LGU' or null
     const [project, setProject] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     
@@ -42,6 +44,93 @@ const DetailedProjInfo = () => {
                 // For a robust app, we might want to update the single item in the `projects_cache` array here.
 
             } catch (err) {
+                 if (type === 'LGU') {
+                    // LGU Fetch
+                    try {
+                        const response = await fetch(`/api/lgu/project/${id}`);
+                        if (!response.ok) throw new Error("LGU Project not found");
+                        const data = await response.json();
+                        
+                        // MAP LGU Data to Component State Format
+                        const mappedProject = {
+                            id: data.project_id,
+                            schoolId: data.school_id,
+                            schoolName: data.school_name,
+                            projectName: data.project_name,
+                            projectCategory: 'LGU Project', // Or derive
+                            ipc: data.ipc,
+                            status: data.status,
+                            accomplishmentPercentage: data.accomplishment_percentage,
+                            
+                            // Dates (API already formatted these in the specific endpoint)
+                            noticeToProceed: data.noticeToProceed, 
+                            constructionStartDate: data.construction_start_date,
+                            targetCompletionDate: data.targetCompletionDate,
+                            actualCompletionDate: data.actualCompletionDate,
+                            statusAsOfDate: data.statusAsOfDate,
+                            
+                            // Financial
+                            contractorName: data.contractor_name,
+                            scopeOfWork: data.scope_of_works || data.scope_of_work, // LGU uses plural in some places?
+                            projectAllocation: data.project_allocation, // or contract_amount?
+                            batchOfFunds: data.batch_of_funds || data.fund_source, // Map fund source here or separate?
+                            fundsUtilized: data.funds_utilized,
+                            
+                            // Specs
+                            numberOfClassrooms: null, // LGU might not have this
+                            numberOfStoreys: null,
+                            numberOfSites: null,
+                            
+                            region: data.region,
+                            division: data.division,
+                            
+                            // Docs
+                            pow_pdf: data.pow_pdf,
+                            dupa_pdf: data.dupa_pdf,
+                            contract_pdf: data.contract_pdf,
+                            
+                            // Loc
+                            latitude: data.latitude,
+                            longitude: data.longitude,
+                            
+                            otherRemarks: data.other_remarks,
+
+                            // Extra LGU Fields
+                            lguData: {
+                                sourceAgency: data.source_agency,
+                                lsbResolutionNo: data.lsb_resolution_no,
+                                moaRefNo: data.moa_ref_no,
+                                validityPeriod: data.validity_period,
+                                contractDuration: data.contract_duration,
+                                modeOfProcurement: data.mode_of_procurement,
+                                philgepsRefNo: data.philgeps_ref_no,
+                                pcabLicenseNo: data.pcab_license_no,
+                                dateContractSigning: data.date_contract_signing,
+                                bidAmount: data.bid_amount,
+                                natureOfDelay: data.nature_of_delay
+                            },
+                             // IMAGES (LGU endpoint returns them included)
+                             images: data.images || []
+                        };
+
+                        setProject(mappedProject);
+                        
+                        // Perform direct image set since LGU endpoint returns them
+                        if(data.images){
+                             setProjectImages(data.images);
+                             setImageLoading(false);
+                        }
+
+                    } catch (lguErr) {
+                         console.error("LGU Fetch Failed:", lguErr);
+                         // Logic: If NO project in state (cache failed/empty) AND network failed -> Show Error
+                         // ... (existing error logic)
+                         alert("Could not load LGU project details.");
+                         navigate('/lgu-projects');
+                    }
+                    return; // Exit main try/catch flow
+                 }
+
                 console.warn("Network fetch failed:", err);
                 // If we have cached data, we are fine.
                 // If we didn't have cache, we might want to show error or navigate away
@@ -61,6 +150,8 @@ const DetailedProjInfo = () => {
         };
 
         const fetchImages = async () => {
+            if (type === 'LGU') return; // LGU images handled in main fetch
+            
             setImageLoading(true);
             try {
                 // Network First
@@ -218,6 +309,41 @@ const DetailedProjInfo = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* LGU SPECIFIC DETAILS SECTION */}
+                    {project.lguData && (
+                        <div>
+                            <h3 className="text-slate-700 font-bold text-sm mb-2 ml-1">LGU Procurement & Agreement</h3>
+                            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm space-y-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <DetailItem label="Source Agency" value={project.lguData.sourceAgency} />
+                                    <DetailItem label="Mode of Procurement" value={project.lguData.modeOfProcurement} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                     <DetailItem label="LSB Res. No." value={project.lguData.lsbResolutionNo} />
+                                     <DetailItem label="MOA Ref No." value={project.lguData.moaRefNo} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <DetailItem label="Validity Period" value={project.lguData.validityPeriod} />
+                                    <DetailItem label="Contract Duration" value={project.lguData.contractDuration} />
+                                </div>
+                                 <div className="grid grid-cols-2 gap-3">
+                                    <DetailItem label="PhilGEPS Ref" value={project.lguData.philgepsRefNo} />
+                                    <DetailItem label="PCAB License" value={project.lguData.pcabLicenseNo} />
+                                </div>
+                                 <div className="grid grid-cols-2 gap-3">
+                                    <DetailItem label="Bid Amount" value={project.lguData.bidAmount} isMoney/>
+                                    <DetailItem label="Contract Signing" value={project.lguData.dateContractSigning} />
+                                </div>
+                                {project.lguData.natureOfDelay && (
+                                     <div className="text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+                                        <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Nature of Delay</p>
+                                        <p className="text-sm font-semibold">{project.lguData.natureOfDelay}</p>
+                                     </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
 
 

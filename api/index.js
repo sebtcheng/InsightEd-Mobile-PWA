@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
@@ -5816,35 +5816,24 @@ app.get('/api/migrate-lgu-schema', async (req, res) => {
   }
 });
 
-if (isMainModule || process.env.START_SERVER === 'true') {
+// --- TEMPORARY MIGRATION ENDPOINT (LGU IMAGES) ---
+app.get('/api/migrate-lgu-image-schema', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const results = [];
 
-if (isMainModule || process.env.START_SERVER === 'true') {
+    // Add category column to lgu_image
+    try {
+      await client.query('ALTER TABLE "lgu_image" ADD COLUMN IF NOT EXISTS category TEXT');
+      results.push("Added category to lgu_image");
+    } catch (e) { results.push(`Failed category: ${e.message}`); }
 
-  const PORT = process.env.PORT || 3000;
-
-  const PORT = process.env.PORT || 3000;
-
-
-
-  const server = app.listen(PORT, () => {
-    console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
-    console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
-    console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
-  });
-
-  server.on('error', (e) => {
-    if (e.code === 'EADDRINUSE') {
-      console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
-    } else {
-      console.error("âŒ Server Error:", e);
-    }
-  });
-}
-
-
-// 2. FOR VERCEL (Production)
-// Export default is required for ESM in Vercel
-export default app;
+    client.release();
+    res.json({ message: "LGU Image Migration attempt finished", results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- DEBUG ENDPOINT ---
 app.get('/api/debug/health-stats', async (req, res) => {
@@ -6164,6 +6153,7 @@ app.get('/api/lgu/projects', async (req, res) => {
 // --- LGU 4. GET: Fetch Single LGU Project (Detail) ---
 app.get('/api/lgu/project/:id', async (req, res) => {
   const { id } = req.params;
+  console.log(`[DEBUG] Fetching LGU Project with ID: ${id}`); // DEBUG LOG
   try {
     const query = `
             SELECT *,
@@ -6184,7 +6174,12 @@ app.get('/api/lgu/project/:id', async (req, res) => {
         `;
     const result = await pool.query(query, [id]);
 
-    if (result.rows.length === 0) return res.status(404).json({ error: "Project not found" });
+    console.log(`[DEBUG] Query Result Row Count: ${result.rows.length}`); // DEBUG LOG
+
+    if (result.rows.length === 0) {
+      console.log(`[DEBUG] Project ${id} NOT FOUND in lgu_forms table.`); // DEBUG LOG
+      return res.status(404).json({ error: "Project not found" });
+    }
 
     // Fetch images too
     const imgQuery = `SELECT id, image_data, category FROM lgu_image WHERE project_id = $1`;
@@ -6370,9 +6365,24 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
   }
 });
 
+
 // --- SERVER LISTEN ---
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (isMainModule || process.env.START_SERVER === 'true') {
+  const PORT = process.env.PORT || 3000;
+  const server = app.listen(PORT, () => {
+    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
+    console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
+    console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+  });
+
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+    } else {
+      console.error("❌ Server Error:", e);
+    }
+  });
+}
+
+export default app;
 

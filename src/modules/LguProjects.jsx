@@ -253,7 +253,7 @@ const LguProjects = () => {
                           <td className="p-4 text-center">
                             <div className="flex flex-col gap-2">
                               <button
-                                onClick={() => navigate(`/detailed-project-info?projectId=${p.project_id}&isLgu=true`)} // Assuming reusable component
+                                onClick={() => navigate(`/project-details/${p.project_id}?type=LGU`)}
                                 className="w-full py-1.5 bg-slate-50 text-slate-500 text-[10px] font-bold rounded-lg border border-slate-100 hover:bg-white hover:shadow-md transition-all flex items-center justify-center gap-1"
                               >
                                 VIEW <FiChevronRight size={12} />

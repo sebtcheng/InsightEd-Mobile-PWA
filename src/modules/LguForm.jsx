@@ -140,11 +140,16 @@ const LguForm = () => {
     useEffect(() => {
         if (!projectId) return;
 
+        console.log("Frontend fetching project with ID:", projectId); // DEBUG LOG
+
         const fetchProject = async () => {
             setIsLoading(true);
             try {
                 const res = await fetch(`/api/lgu/project/${projectId}`);
-                if (!res.ok) throw new Error("Project not found");
+                if (!res.ok) {
+                    console.error("Fetch failed with status:", res.status); // DEBUG LOG
+                    throw new Error("Project not found");
+                }
                 const data = await res.json();
 
                 // Populate Form
@@ -478,240 +483,245 @@ const LguForm = () => {
                 <form onSubmit={handleSubmit} className="px-6 -mt-10">
                     <div className="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
 
-                        {/* 1. PROJECT IDENTIFICATION */}
-                        <SectionHeader title="Project Identification" icon="🏢" />
-                        <div className="space-y-4">
-                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span> <Tooltip text="Official name of the LGU project." /></label>
-                                <input name="projectName" value={formData.projectName} onChange={handleChange} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                            </div>
-
-                            <div className="flex gap-2">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School ID (6 Digits) <Tooltip text="6-digit unique School ID." /></label>
-                                    <input name="schoolId" value={formData.schoolId} onChange={handleChange} placeholder="XXXXXX" maxLength={6} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm tracking-widest font-mono" />
-                                </div>
-                                <button type="button" onClick={handleValidateSchoolId} className="mt-6 px-4 bg-blue-100 text-blue-700 font-bold rounded-lg text-xs uppercase hover:bg-blue-200 transition">
-                                    Validate
-                                </button>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School Name <Tooltip text="Name of the school (Auto-filled based on ID)." /></label>
-                                <input name="schoolName" value={formData.schoolName} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region <Tooltip text="Region where the school is located (Auto-filled)." /></label>
-                                    <input name="region" value={formData.region} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division <Tooltip text="Division Office coverage (Auto-filled)." /></label>
-                                    <input name="division" value={formData.division} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
-                                </div>
-                             </div>
-                             
-                             {/* MOVED LOCATION FIELDS */}
-                             <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province <Tooltip text="Province where the project is located (Auto-filled)." /></label>
-                                    <input name="province" value={formData.province} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality <Tooltip text="City or Municipality of the project site (Auto-filled)." /></label>
-                                    <input name="municipality" value={formData.municipality} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District <Tooltip text="Legislative District covering the project area (Auto-filled)." /></label>
-                                <input name="legislative_district" value={formData.legislative_district} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
-                            </div>
-                        </div>
-
-                         {/* 2. LGU DETAILS */}
-                         <SectionHeader title="LGU Project Details" icon="🏛️" />
-                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Source Agency <Tooltip text="Agency providing the funds (e.g. National, Provincial)." /></label>
-                                    <select name="source_agency" value={formData.source_agency} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
-                                        <option value="">Select Agency...</option>
-                                        <option value="Province">Province</option>
-                                        <option value="Municipality">Municipality</option>
-                                        <option value="City">City</option>
-                                        <option value="National">National</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">LSB Resolution # <Tooltip text="Local School Board Resolution Number." /></label>
-                                    <input name="lsb_resolution_no" value={formData.lsb_resolution_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Ref. Number <Tooltip text="Memorandum of Agreement Reference Number." /></label>
-                                    <input name="moa_ref_no" value={formData.moa_ref_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date <Tooltip text="Date of MOA signing." /></label>
-                                    <input type="date" name="moa_date" value={formData.moa_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source <Tooltip text="Specific source of the fund (e.g. SEF, General Fund)." /></label>
-                                    <input name="fund_source" value={formData.fund_source} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Validity Period <Tooltip text="Validity period of the fund or agreement." /></label>
-                                    <input name="validity_period" value={formData.validity_period} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Duration <Tooltip text="Duration of the contract in calendar days." /></label>
-                                    <input name="contract_duration" value={formData.contract_duration} onChange={handleChange} placeholder="e.g. 120 Days" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date Approved POW <Tooltip text="Date when the Program of Works was approved." /></label>
-                                    <input type="date" name="date_approved_pow" value={formData.date_approved_pow} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
-
-                            {/* CATEGORY: FUNDING TRANCHES */}
-                            <div className="p-5 bg-blue-50/50 rounded-xl border border-blue-100 mt-2">
-                                <h4 className="font-bold text-blue-800 text-xs uppercase mb-3 flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Fund Release
-                                </h4>
-                                <div className="mb-3">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Schedule of Fund Release <Tooltip text="Select 'Tranches' to specify breakdown, or 'Lumpsum' for one-time release." /></label>
-                                    <select name="fund_release_schedule" value={formData.fund_release_schedule} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm">
-                                        <option value="Lumpsum">Lumpsum</option>
-                                        <option value="Tranches">Tranches</option>
-                                    </select>
-                                </div>
-
-                                {formData.fund_release_schedule === 'Tranches' && (
-                                    <div className="grid grid-cols-2 gap-3 mb-3">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches <Tooltip text="Number of funding tranches." /></label>
-                                            <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche <Tooltip text="Amount released per tranche." /></label>
-                                            <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
-                                        </div>
+                        {/* CONDITIONAL CONTENT: SHOW FULL FORM ONLY IF NOT IN UPDATE MODE */}
+                        {!projectId ? (
+                            <>
+                                {/* 1. PROJECT IDENTIFICATION */}
+                                <SectionHeader title="Project Identification" icon="🏢" />
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name <span className="text-red-500">*</span> <Tooltip text="Official name of the LGU project." /></label>
+                                        <input name="projectName" value={formData.projectName} onChange={handleChange} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                     </div>
-                                )}
+
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School ID (6 Digits) <Tooltip text="6-digit unique School ID." /></label>
+                                            <input name="schoolId" value={formData.schoolId} onChange={handleChange} placeholder="XXXXXX" maxLength={6} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm tracking-widest font-mono" />
+                                        </div>
+                                        <button type="button" onClick={handleValidateSchoolId} className="mt-6 px-4 bg-blue-100 text-blue-700 font-bold rounded-lg text-xs uppercase hover:bg-blue-200 transition">
+                                            Validate
+                                        </button>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">School Name <Tooltip text="Name of the school (Auto-filled based on ID)." /></label>
+                                        <input name="schoolName" value={formData.schoolName} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
+                                    </div>
                                     <div className="grid grid-cols-2 gap-3">
-                                    {/* Removed Duplicate Amount per Tranche */}
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded <Tooltip text="Total amount of funds downloaded/received so far." /></label>
-                                        <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Region <Tooltip text="Region where the school is located (Auto-filled)." /></label>
+                                            <input name="region" value={formData.region} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Division <Tooltip text="Division Office coverage (Auto-filled)." /></label>
+                                            <input name="division" value={formData.division} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
+                                        </div>
+                                    </div>
+
+                                    {/* MOVED LOCATION FIELDS */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Province <Tooltip text="Province where the project is located (Auto-filled)." /></label>
+                                            <input name="province" value={formData.province} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">City/Municipality <Tooltip text="City or Municipality of the project site (Auto-filled)." /></label>
+                                            <input name="municipality" value={formData.municipality} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
+                                        </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized <Tooltip text="Total amount of funds already utilized/spent." /></label>
-                                        <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Legislative District <Tooltip text="Legislative District covering the project area (Auto-filled)." /></label>
+                                        <input name="legislative_district" value={formData.legislative_district} readOnly className="w-full p-3 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600" />
                                     </div>
                                 </div>
-                            </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works <Tooltip text="Brief description of the project scope." /></label>
-                                <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                            </div>
-                        </div>
+                                {/* 2. LGU DETAILS */}
+                                <SectionHeader title="LGU Project Details" icon="🏛️" />
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
 
-                        {/* 3. PROCUREMENT DETAILS */}
-                        <SectionHeader title="Procurement Details" icon="⚖️" />
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mode of Procurement <Tooltip text="Method used for procurement (e.g. Bidding, Shopping)." /></label>
-                                    <select name="mode_of_procurement" value={formData.mode_of_procurement} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
-                                        <option value="">Select Mode...</option>
-                                        <option value="Public Bidding">Public Bidding</option>
-                                        <option value="Negotiated Procurement">Negotiated Procurement</option>
-                                        <option value="Shopping">Shopping</option>
-                                        <option value="Direct Contracting">Direct Contracting</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage <Tooltip text="Current stage in the procurement process." /></label>
-                                    <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
-                                        <option value="">Select Stage...</option>
-                                        <option value="Pre-Procurement">Pre-Procurement</option>
-                                        <option value="Advertisement">Advertisement</option>
-                                        <option value="Pre-Bid Conference">Pre-Bid Conference</option>
-                                        <option value="Opening of Bids">Opening of Bids</option>
-                                        <option value="Bid Evaluation">Bid Evaluation</option>
-                                        <option value="Post Qualification">Post Qualification</option>
-                                        <option value="Awarded">Awarded</option>
-                                        <option value="Notice to Proceed">Notice to Proceed</option>
-                                    </select>
-                                </div>
-                            </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Source Agency <Tooltip text="Agency providing the funds (e.g. National, Provincial)." /></label>
+                                            <select name="source_agency" value={formData.source_agency} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                                                <option value="">Select Agency...</option>
+                                                <option value="Province">Province</option>
+                                                <option value="Municipality">Municipality</option>
+                                                <option value="City">City</option>
+                                                <option value="National">National</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">LSB Resolution # <Tooltip text="Local School Board Resolution Number." /></label>
+                                            <input name="lsb_resolution_no" value={formData.lsb_resolution_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PhilGEPS Ref # <Tooltip text="Reference number from PhilGEPS posting." /></label>
-                                    <input name="philgeps_ref_no" value={formData.philgeps_ref_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PCAB License # <Tooltip text="Contractor's PCAB License Number." /></label>
-                                    <input name="pcab_license_no" value={formData.pcab_license_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Ref. Number <Tooltip text="Memorandum of Agreement Reference Number." /></label>
+                                            <input name="moa_ref_no" value={formData.moa_ref_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MOA Date <Tooltip text="Date of MOA signing." /></label>
+                                            <input type="date" name="moa_date" value={formData.moa_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bid Amount <Tooltip text="Amount of the winning bid." /></label>
-                                    <input name="bid_amount" value={formData.bid_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount <Tooltip text="Final contract amount signed." /></label>
-                                    <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fund Source <Tooltip text="Specific source of the fund (e.g. SEF, General Fund)." /></label>
+                                            <input name="fund_source" value={formData.fund_source} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Validity Period <Tooltip text="Validity period of the fund or agreement (in days or date)." /></label>
+                                            <input name="validity_period" value={formData.validity_period} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date of Contract Signing <Tooltip text="Date when the contract was signed." /></label>
-                                    <input type="date" name="date_contract_signing" value={formData.date_contract_signing} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Const. Start Date <Tooltip text="Date when construction actually started." /></label>
-                                    <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
-                                </div>
-                            </div>
+                                    <div className="grid grid-cols-2 gap-3 mb-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Duration <Tooltip text="Duration of the contract in calendar days." /></label>
+                                            <input name="contract_duration" value={formData.contract_duration} onChange={handleChange} placeholder="e.g. 120 Days" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date Approved POW <Tooltip text="Date when the Program of Works was approved." /></label>
+                                            <input type="date" name="date_approved_pow" value={formData.date_approved_pow} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
 
-                            {/* Key Dates Box */}
-                            <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 mt-2">
-                                <h4 className="font-bold text-slate-700 text-xs uppercase mb-3 flex items-center gap-2">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Key Dates
-                                </h4>
-                                <div className="grid grid-cols-2 gap-3">
+                                    {/* CATEGORY: FUNDING TRANCHES */}
+                                    <div className="p-5 bg-blue-50/50 rounded-xl border border-blue-100 mt-2">
+                                        <h4 className="font-bold text-blue-800 text-xs uppercase mb-3 flex items-center gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Fund Release
+                                        </h4>
+                                        <div className="mb-3">
+                                            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Schedule of Fund Release <Tooltip text="Select 'Tranches' to specify breakdown, or 'Lumpsum' for one-time release." /></label>
+                                            <select name="fund_release_schedule" value={formData.fund_release_schedule} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm">
+                                                <option value="Lumpsum">Lumpsum</option>
+                                                <option value="Tranches">Tranches</option>
+                                            </select>
+                                        </div>
+
+                                        {formData.fund_release_schedule === 'Tranches' && (
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. of Tranches <Tooltip text="Number of funding tranches." /></label>
+                                                    <input type="number" name="tranches_count" value={formData.tranches_count} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount per Tranche <Tooltip text="Amount released per tranche." /></label>
+                                                    <input name="tranche_amount" value={formData.tranche_amount} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {/* Removed Duplicate Amount per Tranche */}
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Downloaded <Tooltip text="Total amount of funds downloaded/received so far." /></label>
+                                                <input name="funds_downloaded" value={formData.funds_downloaded} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Funds Utilized <Tooltip text="Total amount of funds already utilized/spent." /></label>
+                                                <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-2 bg-white border border-blue-200 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date <Tooltip text="Date of bidding." /></label>
-                                        <input type="date" name="bidding_date" value={formData.bidding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening <Tooltip text="Date of bid opening." /></label>
-                                        <input type="date" name="bid_opening_date" value={formData.bid_opening_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resolution to Award <Tooltip text="Date of Resolution to Award." /></label>
-                                        <input type="date" name="resolution_award_date" value={formData.resolution_award_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Scope of Works <Tooltip text="Brief description of the project scope." /></label>
+                                        <textarea name="scope_of_works" rows="2" value={formData.scope_of_works} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                                     </div>
                                 </div>
-                            </div>
-                        </div>
 
-                        {/* 4. STATUS & PROGRESS */}
-                        <SectionHeader title="Status & Progress" icon="📊" />
+                                {/* 3. PROCUREMENT DETAILS */}
+                                <SectionHeader title="Procurement Details" icon="⚖️" />
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mode of Procurement <Tooltip text="Method used for procurement (e.g. Bidding, Shopping)." /></label>
+                                            <select name="mode_of_procurement" value={formData.mode_of_procurement} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                                                <option value="">Select Mode...</option>
+                                                <option value="Public Bidding">Public Bidding</option>
+                                                <option value="Negotiated Procurement">Negotiated Procurement</option>
+                                                <option value="Shopping">Shopping</option>
+                                                <option value="Direct Contracting">Direct Contracting</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Procurement Stage <Tooltip text="Current stage in the procurement process." /></label>
+                                            <select name="procurement_stage" value={formData.procurement_stage} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                                                <option value="">Select Stage...</option>
+                                                <option value="Pre-Procurement">Pre-Procurement</option>
+                                                <option value="Advertisement">Advertisement</option>
+                                                <option value="Pre-Bid Conference">Pre-Bid Conference</option>
+                                                <option value="Opening of Bids">Opening of Bids</option>
+                                                <option value="Bid Evaluation">Bid Evaluation</option>
+                                                <option value="Post Qualification">Post Qualification</option>
+                                                <option value="Awarded">Awarded</option>
+                                                <option value="Notice to Proceed">Notice to Proceed</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PhilGEPS Ref # <Tooltip text="Reference number from PhilGEPS posting." /></label>
+                                            <input name="philgeps_ref_no" value={formData.philgeps_ref_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PCAB License # <Tooltip text="Contractor's PCAB License Number." /></label>
+                                            <input name="pcab_license_no" value={formData.pcab_license_no} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bid Amount <Tooltip text="Amount of the winning bid." /></label>
+                                            <input name="bid_amount" value={formData.bid_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contract Amount <Tooltip text="Final contract amount signed." /></label>
+                                            <input name="contract_amount" value={formData.contract_amount} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Date of Contract Signing <Tooltip text="Date when the contract was signed." /></label>
+                                            <input type="date" name="date_contract_signing" value={formData.date_contract_signing} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Const. Start Date <Tooltip text="Date when construction actually started." /></label>
+                                            <input type="date" name="construction_start_date" value={formData.construction_start_date} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                        </div>
+                                    </div>
+
+                                    {/* Key Dates Box */}
+                                    <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 mt-2">
+                                        <h4 className="font-bold text-slate-700 text-xs uppercase mb-3 flex items-center gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span> Key Dates
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bidding Date <Tooltip text="Date of bidding." /></label>
+                                                <input type="date" name="bidding_date" value={formData.bidding_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bid Opening <Tooltip text="Date of bid opening." /></label>
+                                                <input type="date" name="bid_opening_date" value={formData.bid_opening_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Resolution to Award <Tooltip text="Date of Resolution to Award." /></label>
+                                                <input type="date" name="resolution_award_date" value={formData.resolution_award_date} onChange={handleChange} className="w-full p-2 bg-white border border-slate-200 rounded-lg text-sm" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : null}
+
+                        {/* 4. PROGRESS MONITORING - ALWAYS VISIBLE, BUT CUSTOMIZED FOR UPDATE */}
+                        <SectionHeader title={projectId ? "Progress Monitoring" : "Status & Progress"} icon="📊" />
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Current Status <Tooltip text="Current implementation status of the project." /></label>
@@ -725,11 +735,11 @@ const LguForm = () => {
                             </div>
 
                             {/* Conditional Accomplishment */}
-                            {showProgressAndPhotos && (
+                            {(showProgressAndPhotos || projectId) && (
                                 <div>
                                     <div className="flex justify-between items-center mb-1">
-                                         <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%) <Tooltip text="Physical accomplishment in percent." /></label>
-                                         <div className="flex gap-1">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase">Accomplishment Percentage (%) <Tooltip text="Physical accomplishment in percent." /></label>
+                                        <div className="flex gap-1">
                                             <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 5) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+5%</button>
                                             <button type="button" onClick={() => setFormData(prev => ({ ...prev, accomplishmentPercentage: Math.min(100, Number(prev.accomplishmentPercentage || 0) + 10) }))} className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded hover:bg-green-200 transition">+10%</button>
                                         </div>
@@ -742,12 +752,57 @@ const LguForm = () => {
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Status-As-Of Date <Tooltip text="Date when this status was observed." /></label>
                                 <input type="date" name="statusAsOfDate" value={formData.statusAsOfDate} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
                             </div>
+
+                            {/* ADDED: Amount Utilized for Update View */}
+                            {projectId && (
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Amount Utilized <Tooltip text="Total amount of funds already utilized/spent." /></label>
+                                    <input name="funds_utilized" value={formData.funds_utilized} onChange={handleChange} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm" />
+                                </div>
+                            )}
+
+                            {/* ADDED: Nature of Delay (Conditional) */}
+                            {(() => {
+                                // Logic to check validity
+                                const isPastValidity = () => {
+                                    if (!formData.moa_date || !formData.validity_period) return false;
+                                    
+                                    const moaDate = new Date(formData.moa_date);
+                                    const today = new Date();
+                                    
+                                    // Check if validity_period is just a number (days)
+                                    const days = parseInt(formData.validity_period);
+                                    if (!isNaN(days)) {
+                                        const expiryDate = new Date(moaDate);
+                                        expiryDate.setDate(moaDate.getDate() + days);
+                                        return today > expiryDate;
+                                    }
+                                    
+                                    // Else assume it is a date string
+                                    const validDate = new Date(formData.validity_period);
+                                    if (!isNaN(validDate.getTime())) {
+                                        return today > validDate;
+                                    }
+
+                                    return false;
+                                };
+
+                                if (projectId && isPastValidity()) {
+                                    return (
+                                        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                                             <label className="block text-xs font-bold text-red-600 uppercase mb-1">Nature of Delay <Tooltip text="Please explain the delay as the validity period has passed." /></label>
+                                             <textarea name="nature_of_delay" rows="3" value={formData.nature_of_delay} onChange={handleChange} className="w-full p-3 bg-white border border-red-200 rounded-lg text-sm" placeholder="Reason for delay..." />
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
                         </div>
 
-                        {/* 5. SITE PHOTOS (Conditional) */}
-                        {showProgressAndPhotos && (
+                        {/* 5. SITE PHOTOS (Conditional or Always in Update) */}
+                        {(showProgressAndPhotos || projectId) && (
                             <div className="mt-8 pt-6 border-t border-slate-100">
-                                <SectionHeader title="Site Photos" icon="📸" />
+                                <SectionHeader title={projectId ? "Photo Documentation" : "Site Photos"} icon="📸" />
 
                                 {/* External */}
                                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
