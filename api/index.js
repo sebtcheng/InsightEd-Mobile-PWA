@@ -3913,10 +3913,19 @@ app.put('/api/update-project/:id', async (req, res) => {
   let clientNew = null; // Fix: Define clientNew
   try {
     client = await pool.connect();
-    if (poolNew) clientNew = await poolNew.connect(); // Fix: Connect if secondary DB exists
+
+    // Attempt secondary connection safely
+    if (poolNew) {
+      try {
+        clientNew = await poolNew.connect();
+        await clientNew.query('BEGIN');
+      } catch (connErr) {
+        console.error("⚠️ Dual-Write Conn Error (Update Project):", connErr.message);
+        clientNew = null; // Continue with primary only
+      }
+    }
 
     await client.query('BEGIN');
-    if (clientNew) await clientNew.query('BEGIN'); // Fix: Transaction for secondary too
 
     // 1. Fetch Existing Data for Comparison
     const oldRes = await client.query('SELECT * FROM "engineer_form" WHERE project_id = $1', [id]);
