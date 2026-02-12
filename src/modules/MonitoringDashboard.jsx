@@ -423,11 +423,15 @@ const MonitoringDashboard = () => {
             ? sessionStorage.getItem('impersonatedLocation')
             : (userData?.role === 'Regional Office' ? userData?.region : coRegion);
 
-        if (effectiveRole === 'Regional Office') {
+        // UNIFIED: Fetch Schools for both RO and CO when a division is selected
+        if (effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && division)) {
             setLoadingDistrict(true);
             try {
+                // Determine Region
+                const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
+
                 // Fetch ALL schools in this division (API Data)
-                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(effectiveRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(targetRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
                 let apiSchools = [];
                 if (res.ok) {
                     const data = await res.json();
@@ -437,7 +441,7 @@ const MonitoringDashboard = () => {
                 // MERGE: Combine CSV Master List with API Data
                 // Filter CSV for this region/division
                 const masterList = schoolData.filter(s =>
-                    normalizeLocationName(s.region) === normalizeLocationName(effectiveRegion) &&
+                    normalizeLocationName(s.region) === normalizeLocationName(targetRegion) &&
                     normalizeLocationName(s.division) === normalizeLocationName(division)
                 );
 
@@ -457,6 +461,7 @@ const MonitoringDashboard = () => {
                             school_name: csvSchool.school_name,
                             school_id: csvSchool.school_id,
                             district: csvSchool.district,
+                            division: csvSchool.division,
                             // Set all statuses to false
                             profile_status: false,
                             head_status: false,
@@ -473,7 +478,7 @@ const MonitoringDashboard = () => {
                     }
                 });
 
-                // 2. Add API Schools that were NOT in CSV (Fix for "27 vs 20" issue)
+                // 2. Add API Schools that were NOT in CSV
                 const csvIds = new Set(masterList.map(s => s.school_id));
                 const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
 
@@ -482,8 +487,7 @@ const MonitoringDashboard = () => {
                     !csvNames.has(normalizeLocationName(api.school_name))
                 ).map(api => ({
                     ...api,
-                    // Ensure missing fields are handled if API returns incomplete shape (though it returns full shape usually)
-                    district: api.district || 'Unassigned District' // Fallback
+                    district: api.district || 'Unassigned District'
                 }));
 
                 const mergedSchools = [...csvMapped, ...extraApiSchools];
@@ -497,12 +501,12 @@ const MonitoringDashboard = () => {
             } finally {
                 setLoadingDistrict(false);
             }
-            // We don't necessarily update global stats if fetchData ignores params for RO, 
-            // but we call it to ensure sync if logic changes.
+            
+            // Update Global Stats
             if (userData?.role === 'Super User') {
                 fetchData(effectiveRegion, division);
             } else {
-                fetchData(userData.region, division);
+                fetchData(effectiveRole === 'Central Office' ? coRegion : userData.region, division);
             }
         } else {
             fetchData(coRegion, division);
@@ -1257,8 +1261,9 @@ const MonitoringDashboard = () => {
                                             const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
 
                                             // MERGE Divisions: Use both CSV and API to find all divisions
+                                            const targetRegionName = normalizeLocationName(targetRegion);
                                             const csvDivisions = [...new Set(schoolData
-                                                .filter(s => s.region === targetRegion)
+                                                .filter(s => normalizeLocationName(s.region) === targetRegionName)
                                                 .map(s => s.division))];
 
                                             const apiDivisions = divisionStats.map(d => d.division);
@@ -1356,7 +1361,7 @@ const MonitoringDashboard = () => {
                                 (effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && coDivision) || (effectiveRole === 'Regional Office' && coDivision)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
+                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision) || (effectiveRole === 'Central Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
                                         </h2>
                                         {(() => {
                                             // Determine Target Region:
@@ -1373,7 +1378,7 @@ const MonitoringDashboard = () => {
                                                 : effectiveDivision;
 
                                             // IF DISTRICT SELECTED OR REGIONAL OFFICE DRILL-DOWN: SHOW SCHOOLS
-                                            if (coDistrict || (effectiveRole === 'Regional Office' && coDivision)) {
+                                            if (coDistrict || (effectiveRole === 'Regional Office' && coDivision) || (effectiveRole === 'Central Office' && coDivision)) {
                                                 if (loadingDistrict) {
                                                     return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
                                                 }
@@ -1451,6 +1456,8 @@ const MonitoringDashboard = () => {
                                                                         onClick={() => {
                                                                             if (effectiveRole === 'Regional Office') {
                                                                                 handleDivisionChange(''); // Back to Division List
+                                                                            } else if (effectiveRole === 'Central Office') {
+                                                                                handleDivisionChange(''); // Back to Division List for CO
                                                                             } else {
                                                                                 handleDistrictChange(''); // Back to District List
                                                                             }
@@ -1461,7 +1468,7 @@ const MonitoringDashboard = () => {
                                                                     </button>
                                                                     <div>
                                                                         <h3 className="font-black text-xl text-slate-800 dark:text-white">
-                                                                            {effectiveRole === 'Regional Office' ? coDivision : coDistrict}
+                                                                            {effectiveRole === 'Regional Office' || effectiveRole === 'Central Office' ? coDivision : coDistrict}
                                                                         </h3>
                                                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sortedSchools.length} Schools</p>
                                                                     </div>
