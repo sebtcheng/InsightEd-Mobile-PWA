@@ -25,6 +25,7 @@ import MonitoringDashboard from './modules/MonitoringDashboard';
 import SchoolManagement from './modules/SchoolManagement';
 import DummyDashboard from './modules/DummyDashboard';
 import SchoolJurisdictionList from './modules/SchoolJurisdictionList';
+import SchoolAuditView from './modules/SchoolAuditView';
 import UserProfile from './modules/UserProfile';
 import Activity from './modules/Activity';
 import ProjectGallery from './modules/ProjectGallery';
@@ -127,6 +128,7 @@ const AnimatedRoutes = () => {
         <Route path="/monitoring-dashboard" element={<MonitoringDashboard />} />
         <Route path="/school-management" element={<SchoolManagement />} />
         <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
+        <Route path="/school-audit" element={<SchoolAuditView />} />
         <Route path="/dummy-forms" element={<DummyDashboard />} />
 
         {/* Menus */}

@@ -1512,7 +1512,17 @@ const MonitoringDashboard = () => {
                                                         {/* Unified School List (Paginated) */}
                                                         <div className="space-y-3 min-h-[400px]">
                                                             {paginatedSchools.map((s) => (
-                                                                <div key={s.school_id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
+                                                                <div
+                                                                    key={s.school_id}
+                                                                    onClick={() => {
+                                                                        if (userData?.role === 'Super User') {
+                                                                            sessionStorage.setItem('targetSchoolId', s.school_id);
+                                                                            sessionStorage.setItem('targetSchoolName', s.school_name);
+                                                                            navigate('/school-audit');
+                                                                        }
+                                                                    }}
+                                                                    className={`bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors ${userData?.role === 'Super User' ? 'cursor-pointer ring-2 ring-transparent hover:ring-blue-400' : ''}`}
+                                                                >
                                                                     <div className="flex-1 min-w-0 pr-4">
                                                                         <div className="flex items-center gap-2 mb-2">
                                                                             <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors truncate">{s.school_name}</h4>

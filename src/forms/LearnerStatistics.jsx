@@ -109,15 +109,20 @@ const GridSection = ({ label, category, icon, color, formData, onGridChange, isL
     );
 };
 
-const LearnerStatistics = () => {
+const LearnerStatistics = ({ embedded }) => {
     const navigate = useNavigate();
     // Use location to determine viewOnly mode
     const location = useLocation();
     const isDummy = location.state?.isDummy || false;
 
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
     // Determine Read-Only Status
     // We need to wait for auth to confirm role, but for isDummy it's immediate
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isAuditMode);
 
     const queryParams = new URLSearchParams(window.location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true'; // Legacy viewOnly
@@ -275,27 +280,31 @@ const LearnerStatistics = () => {
                     let fetchUrl = `/api/learner-statistics/${user.uid}`;
                     // Check logic for CO/Monitoring
                     const role = localStorage.getItem('userRole');
-                    if ((viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId) {
+                    if (isAuditMode) {
+                        fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                    } else if ((viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId) {
                         fetchUrl = `/api/monitoring/school-detail/${monitorSchoolId}`;
                     }
 
                     const res = await fetch(fetchUrl);
                     const result = await res.json();
-                    if (result.exists) {
-                        const fallbackOffering = result.data.curricular_offering || storedOffering || '';
+
+                    if (result.exists || (viewOnly && monitorSchoolId) || isAuditMode) {
+                        const dbData = ((viewOnly && monitorSchoolId) || isAuditMode) ? result : result.data;
+                        const fallbackOffering = dbData.curricular_offering || storedOffering || '';
 
                         // CRITICAL: Save Offering to localStorage
-                        // Assuming result.data.school_id is available
-                        const targetSchoolId = result.data.school_id || result.data.schoolId || storedSchoolId;
+                        // Assuming dbData.school_id is available
+                        const targetSchoolId = dbData.school_id || dbData.schoolId || storedSchoolId;
                         if (!viewOnly && targetSchoolId) {
                             localStorage.setItem('schoolId', targetSchoolId);
-                            localStorage.setItem('schoolOffering', result.data.curricular_offering || '');
+                            localStorage.setItem('schoolOffering', dbData.curricular_offering || '');
                         }
 
                         // Flatten the grids into formData
                         const flattenedGrids = {};
-                        if (result.data.learner_stats_grids) {
-                            Object.entries(result.data.learner_stats_grids).forEach(([key, val]) => {
+                        if (dbData.learner_stats_grids) {
+                            Object.entries(dbData.learner_stats_grids).forEach(([key, val]) => {
                                 flattenedGrids[key] = val;
                             });
                         }
@@ -306,8 +315,8 @@ const LearnerStatistics = () => {
                         categories.forEach(cat => {
                             grades.forEach(g => {
                                 const key = `stat_${cat}_${g}`;
-                                if (result.data[key] !== undefined) {
-                                    flattenedGrids[key] = result.data[key];
+                                if (dbData[key] !== undefined) {
+                                    flattenedGrids[key] = dbData[key];
                                 }
                             });
                         });
@@ -525,35 +534,37 @@ const LearnerStatistics = () => {
     );
 
     return (
-        <div className="min-h-[100dvh] bg-slate-50 pb-32 font-sans">
+        <div className={`min-h-[100dvh] pb-32 font-sans ${embedded ? '' : 'bg-slate-50'}`}>
             {/* --- PREMIUM BLUE HEADER --- */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => isDummy ? navigate('/dummy-forms', { state: { type: 'school' } }) : navigate(-1)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">Learner Statistics</h1>
-                                {formData.curricular_offering && (
-                                    <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                        {formData.curricular_offering}
-                                    </span>
-                                )}
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => isDummy ? navigate('/dummy-forms', { state: { type: 'school' } }) : navigate(-1)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">Learner Statistics</h1>
+                                    {formData.curricular_offering && (
+                                        <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                            {formData.curricular_offering}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the breakdown of learners per category or characteristic?</p>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the breakdown of learners per category or characteristic?</p>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
-            <div className="px-5 -mt-10 relative z-20 space-y-5">
+            <div className={`px-5 relative z-20 space-y-5 ${embedded ? '' : '-mt-10'}`}>
                 {/* --- SPECIAL PROGRAMS --- */}
                 <GridSection
                     label="SNEd (Special Needs)"
@@ -648,30 +659,32 @@ const LearnerStatistics = () => {
             </div>
 
             {/* --- FLOATING ACTION BAR --- */}
-            <div className={`fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50 ${isReadOnly ? 'hidden' : ''}`}>
-                <div className="max-w-4xl mx-auto flex gap-3">
-                    {isLocked ? (
-                        <button
-                            onClick={() => setIsLocked(false)}
-                            className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                        >
-                            <TbActivity /> 🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {saving ? (
-                                'Saving...'
-                            ) : (
-                                <><FiSave /> Save Statistics</>
-                            )}
-                        </button>
-                    )}
+            {!embedded && (
+                <div className={`fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-200 p-4 z-50 ${isReadOnly ? 'hidden' : ''}`}>
+                    <div className="max-w-4xl mx-auto flex gap-3">
+                        {isLocked ? (
+                            <button
+                                onClick={() => setIsLocked(false)}
+                                className="w-full py-4 rounded-2xl bg-slate-100 text-slate-600 font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+                            >
+                                <TbActivity /> 🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="w-full py-4 rounded-2xl bg-[#004A99] text-white font-bold shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {saving ? (
+                                    'Saving...'
+                                ) : (
+                                    <><FiSave /> Save Statistics</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {showInfoModal && (
                 <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">

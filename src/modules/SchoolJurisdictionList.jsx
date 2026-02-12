@@ -193,7 +193,14 @@ const SchoolJurisdictionList = () => {
                         {schools.map((school) => (
                             <div
                                 key={school.school_id}
-                                className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-900 transition-all group"
+                                onClick={() => {
+                                    if (userData?.role === 'Super User') {
+                                        sessionStorage.setItem('targetSchoolId', school.school_id);
+                                        sessionStorage.setItem('targetSchoolName', school.school_name);
+                                        navigate('/school-audit');
+                                    }
+                                }}
+                                className={`bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-900 transition-all group ${userData?.role === 'Super User' ? 'cursor-pointer ring-2 ring-transparent hover:ring-blue-400' : ''}`}
                             >
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="flex-1 pr-4">

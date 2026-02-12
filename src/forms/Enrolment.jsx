@@ -37,7 +37,7 @@ const GridSection = ({ label, icon, color, children, totalLabel, totalValue }) =
     </div>
 );
 
-const Enrolment = () => {
+const Enrolment = ({ embedded = false }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
@@ -45,7 +45,13 @@ const Enrolment = () => {
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
     const isSuperUserReadOnly = useReadOnly(); // Use Hook
-    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly || isAuditMode);
 
     // Sync state if hook changes
     useEffect(() => {
@@ -191,7 +197,10 @@ const Enrolment = () => {
                     if (!restored) {
                         let fetchUrl = `/api/enrolment/${user.uid}`;
                         const role = localStorage.getItem('userRole');
-                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+
+                        if (isAuditMode) {
+                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -201,7 +210,8 @@ const Enrolment = () => {
                             const res = await fetch(fetchUrl);
                             if (res.ok) {
                                 const json = await res.json();
-                                const data = (viewOnly && schoolIdParam) ? json : (json.exists ? json.data : null);
+                                // For Audit Mode, we treat it like viewOnly with schoolIdParam
+                                const data = (isAuditMode || (viewOnly && schoolIdParam)) ? json : (json.exists ? json.data : null);
 
                                 if (data) {
                                     setSchoolId(data.school_id);
@@ -383,25 +393,27 @@ const Enrolment = () => {
     if (loading) return <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-slate-900"><div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div></div>;
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-40">
-            {/* Standard Blue Header */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Enrolment</h1>
-                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the total number of officially enrolled learners per grade level?</p>
+        <div className={`min-h-screen font-sans pb-40 ${embedded ? 'bg-transparent' : 'bg-slate-50'}`}>
+            {/* Standard Blue Header - Hide if embedded */}
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <h1 className="text-2xl font-bold text-white tracking-tight">Enrolment</h1>
+                                <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the total number of officially enrolled learners per grade level?</p>
+                            </div>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
             <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-5">
 
@@ -549,28 +561,30 @@ const Enrolment = () => {
 
             </div>
 
-            {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
-                            <FiAlertCircle /> View-Only Mode
-                        </div>
-                    ) : isLocked ? (
-                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                            🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <><FiSave /> Save Changes</>
-                            )}
-                        </button>
-                    )}
+            {/* Footer Actions - Hide if embedded (read-only implies hidden usually, but embedded specifically might want to hide entirely to rely on parent) */}
+            {!embedded && (
+                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                    <div className="max-w-lg mx-auto flex gap-3">
+                        {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
+                            <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
+                                <FiAlertCircle /> View-Only Mode
+                            </div>
+                        ) : isLocked ? (
+                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <><FiSave /> Save Changes</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Modals */}
             {showSaveModal && (

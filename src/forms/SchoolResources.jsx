@@ -137,7 +137,7 @@ const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => 
     </div>
 );
 
-const SchoolResources = () => {
+const SchoolResources = ({ embedded }) => {
     const navigate = useNavigate();
 
     // --- STATE ---
@@ -146,7 +146,13 @@ const SchoolResources = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isAuditMode);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -306,7 +312,11 @@ const SchoolResources = () => {
                     if (!restored) {
                         let profileFetchUrl = `/api/school-by-user/${user.uid}`;
                         let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
-                        if ((viewOnly || isCORole) && schoolIdParam) {
+
+                        if (isAuditMode) {
+                            profileFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                            resourcesFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || isCORole) && schoolIdParam) {
                             profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                             resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
@@ -325,8 +335,8 @@ const SchoolResources = () => {
                         if (userDoc.exists()) setUserRole(userDoc.data().role);
 
                         // Handle Profile (Enrollment updates)
-                        if (profileRes.exists || (viewOnly && schoolIdParam)) {
-                            const pData = (viewOnly && schoolIdParam) ? profileRes : profileRes.data;
+                        if (profileRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                            const pData = ((viewOnly && schoolIdParam) || isAuditMode) ? profileRes : profileRes.data;
                             setSchoolId(pData.school_id || pData.schoolId);
                             setCurricularOffering(normalizeOffering(pData.curricular_offering || pData.curricularOffering || storedOffering));
 
@@ -348,8 +358,8 @@ const SchoolResources = () => {
                         }
 
                         // Handle Resources
-                        if (resourcesRes.exists || (viewOnly && schoolIdParam)) {
-                            const dbData = (viewOnly && schoolIdParam) ? resourcesRes : resourcesRes.data;
+                        if (resourcesRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? resourcesRes : resourcesRes.data;
 
                             // Map to State
                             const loaded = {};
@@ -556,32 +566,34 @@ const SchoolResources = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className={`min-h-screen font-sans pb-32 relative ${embedded ? '' : 'bg-slate-50'}`}>
             {/* Header */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
+                                </div>
+                                <p className="text-blue-100 text-xs font-medium mt-1">
+                                    Q: What is the current inventory status of school facilities, equipment, and utilities?
+                                </p>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">
-                                Q: What is the current inventory status of school facilities, equipment, and utilities?
-                            </p>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
+            <div className={`px-5 relative z-20 max-w-4xl mx-auto space-y-6 ${embedded ? '' : '-mt-12'}`}>
 
                 {/* EQUIPMENT & INVENTORY */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
@@ -778,25 +790,27 @@ const SchoolResources = () => {
             </div>
 
             {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
-                    ) : isLocked ? (
-                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                            🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <><FiSave /> Save Changes</>
-                            )}
-                        </button>
-                    )}
+            {!embedded && (
+                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                    <div className="max-w-lg mx-auto flex gap-3">
+                        {(viewOnly || isReadOnly) ? (
+                            <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                        ) : isLocked ? (
+                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <><FiSave /> Save Changes</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Modals for Edit/Save */}
             {showEditModal && (

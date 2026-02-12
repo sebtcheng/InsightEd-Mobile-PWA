@@ -39,7 +39,7 @@ const InputCard = ({ label, name, icon, color, value, onChange, disabled }) => (
     </div>
 );
 
-const PhysicalFacilities = () => {
+const PhysicalFacilities = ({ embedded }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
@@ -47,7 +47,13 @@ const PhysicalFacilities = () => {
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
     const isSuperUserReadOnly = useReadOnly(); // Use Hook
-    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isSuperUserReadOnly || isAuditMode);
 
     // Sync state if hook changes
     useEffect(() => {
@@ -155,7 +161,9 @@ const PhysicalFacilities = () => {
                     if (!restored) {
                         let fetchUrl = `/api/physical-facilities/${user.uid}`;
                         const role = localStorage.getItem('userRole');
-                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+                        if (isAuditMode) {
+                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -165,8 +173,8 @@ const PhysicalFacilities = () => {
                         const res = await fetch(fetchUrl);
                         const json = await res.json();
 
-                        if (json.exists || (viewOnly && schoolIdParam)) {
-                            const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                        if (json.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? json : json.data;
                             if (!schoolIdParam) setSchoolId(dbData.school_id || dbData.schoolId || storedSchoolId);
 
                             if (dbData.school_id && !viewOnly) {
@@ -318,32 +326,34 @@ const PhysicalFacilities = () => {
     if (loading) return <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-slate-900"><div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div></div>;
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-40">
+        <div className={`min-h-screen font-sans pb-40 ${embedded ? '' : 'bg-slate-50'}`}>
             {/* Header */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">Physical Facilities</h1>
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">Physical Facilities</h1>
+                                </div>
+                                <p className="text-blue-100 text-xs font-medium mt-1">
+                                    Q: What is the current condition and total number of instructional classrooms?
+                                </p>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">
-                                Q: What is the current condition and total number of instructional classrooms?
-                            </p>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
-            <div className="px-5 -mt-12 relative z-20 max-w-lg mx-auto space-y-4">
+            <div className={`px-5 relative z-20 max-w-lg mx-auto space-y-4 ${embedded ? '' : '-mt-12'}`}>
 
                 {/* Total Classrooms (Highlight) */}
                 <div className="bg-white p-8 rounded-[2rem] shadow-xl shadow-blue-900/5 border border-slate-100 text-center mb-6">
@@ -368,27 +378,29 @@ const PhysicalFacilities = () => {
             </div>
 
             {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
-                            <FiInfo /> View-Only Mode
-                        </div>
-                    ) : isLocked ? (
-                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                            🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <><FiSave /> Save Changes</>
-                            )}
-                        </button>
-                    )}
+            {!embedded && (
+                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                    <div className="max-w-lg mx-auto flex gap-3">
+                        {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
+                            <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
+                                <FiInfo /> View-Only Mode
+                            </div>
+                        ) : isLocked ? (
+                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <><FiSave /> Save Changes</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Modals */}
             {showEditModal && (

@@ -294,7 +294,11 @@ app.get('/api/debug/scan/:uid', async (req, res) => {
     // AUTO-HEAL: If the calculation here differs from DB, update DB
     if (completed !== sp.forms_completed_count) {
       report.fix_applied = true;
-      await calculateSchoolProgress(sp.school_id, pool); // Force trigger the main function
+      try {
+        await calculateSchoolProgress(sp.school_id, pool); // Force trigger the main function
+      } catch (e) {
+        console.error("Auto-heal calc error:", e.message);
+      }
     }
 
     res.json(report);
@@ -304,33 +308,12 @@ app.get('/api/debug/scan/:uid', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// --- DEBUG: RECALCULATE ALL ENDPOINT ---
-app.get('/api/debug/recalculate-all', async (req, res) => {
-  try {
-    console.log("ðŸ”„ Starting Full Snapshot Recalculation...");
-    const result = await pool.query('SELECT school_id FROM school_profiles');
-    const schools = result.rows;
 
-    let count = 0;
-    for (const s of schools) {
-      if (s.school_id) {
-        await calculateSchoolProgress(s.school_id, pool);
-        count++;
-      }
-    }
+// --- HELPER FUNCTION: Calculate School Progress ---
+// MOVED UP HERE FOR VISIBILITY but normally defined below
+// (Assuming it is defined later in the file, we just need to find where it spawns python)
 
-    console.log(`âœ… Recalculation Complete for ${count} schools.`);
-    res.json({
-      success: true,
-      message: `Recalculated progress for ${count} schools.`,
-      count: count
-    });
 
-  } catch (err) {
-    console.error("âŒ Backfill Error:", err);
-    res.status(500).json({ error: "Backfill failed: " + err.message });
-  }
-});
 // --- VERCEL CRON ENDPOINT (MOVED TO TOP) ---
 // Support both /api/cron... (Local) and /cron... (Vercel)
 app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
@@ -1583,22 +1566,30 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     if (percentage === 100) {
       console.log(`ðŸš€ School ${schoolId} is 100% complete. Triggering Advanced Fraud Detection...`);
 
-      const { spawn } = await import('child_process');
-      // Pass schoolId as an argument
-      const pythonProcess = spawn('python', ['advanced_fraud_detection.py', schoolId]);
+      try {
+        const { spawn } = await import('child_process');
+        // Pass schoolId as an argument
+        const pythonProcess = spawn('python', ['advanced_fraud_detection.py', schoolId]);
 
-      pythonProcess.stdout.on('data', (data) => {
-        // Optional: reduce log spam unless critical
-        // console.log(`[Fraud Detection Output]: ${data}`);
-      });
+        pythonProcess.stdout.on('data', (data) => {
+          // Optional: reduce log spam unless critical
+          // console.log(`[Fraud Detection Output]: ${data}`);
+        });
 
-      pythonProcess.stderr.on('data', (data) => {
-        console.error(`[Fraud Detection Error]: ${data}`);
-      });
+        pythonProcess.stderr.on('data', (data) => {
+          console.error(`[Fraud Detection Error]: ${data}`);
+        });
 
-      pythonProcess.on('close', (code) => {
-        console.log(`âœ… Fraud Detection process completed with code ${code}`);
-      });
+        pythonProcess.on('error', (err) => {
+          console.error("❌ Failed to spawn python process:", err.message);
+        });
+
+        pythonProcess.on('close', (code) => {
+          console.log(`âœ… Fraud Detection process completed with code ${code}`);
+        });
+      } catch (e) {
+        console.error("❌ Error initializing fraud detection:", e.message);
+      }
     }
 
   } catch (err) {
