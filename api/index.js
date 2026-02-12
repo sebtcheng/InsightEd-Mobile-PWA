@@ -209,6 +209,52 @@ const initDB = async () => {
 };
 initDB();
 
+// --- NEW VALIDATION ENDPOINTS ---
+
+// 1. Fetch ALL Schools for Offline Caching
+// 1. Fetch ALL Schools for Offline Caching
+app.get('/api/offline/schools', async (req, res) => {
+  try {
+    // Fetch only necessary fields to keep payload light
+    // CHANGED: Use 'schools' table instead of 'school_profiles'
+    const query = `
+            SELECT school_id, school_name, region, division, latitude, longitude 
+            FROM schools 
+            WHERE school_id IS NOT NULL
+        `;
+    const result = await pool.query(query);
+
+    console.log(`✅ Fetched ${result.rows.length} schools for offline cache from 'schools' table.`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Failed to fetch schools for cache:", err);
+    res.status(500).json({ error: "Failed to fetch schools" });
+  }
+});
+
+// 2. Fetch Single School Profile (Online Validation)
+app.get('/api/school-profile/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    // CHANGED: Use 'schools' table instead of 'school_profiles'
+    const query = `
+            SELECT school_id, school_name, region, division, latitude, longitude 
+            FROM schools 
+            WHERE school_id = $1
+        `;
+    const result = await pool.query(query, [schoolId]);
+
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).json({ error: "School not found" });
+    }
+  } catch (err) {
+    console.error("❌ Failed to fetch school profile:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 // --- DEBUG: SCANNER ENDPOINT ---
 app.get('/api/debug/scan/:uid', async (req, res) => {
   const { uid } = req.params;
@@ -2510,12 +2556,27 @@ app.get('/api/check-school/:id', async (req, res) => {
 });
 
 // --- 3a. GET: Get School Profile by ID (For Validation) ---
+// --- 3. GET: Fetch All Schools (Lightweight for Offline Caching) ---
+app.get('/api/offline/schools', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT school_id, school_name, region, division, latitude, longitude 
+      FROM schools 
+      WHERE school_id IS NOT NULL
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Offline Schools Error:", err);
+    res.status(500).json({ error: "Failed to fetch schools for offline cache" });
+  }
+});
+
 app.get('/api/school-profile/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const result = await pool.query(`
       SELECT school_id, school_name, region, division, latitude, longitude 
-      FROM school_profiles 
+      FROM schools 
       WHERE school_id = $1
     `, [schoolId]);
 

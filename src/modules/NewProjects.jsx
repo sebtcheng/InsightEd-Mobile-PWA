@@ -70,6 +70,8 @@ const NewProjects = () => {
         fetchRole();
     }, []);
 
+
+
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // --- NEW STATE FOR FAB AND IMAGES ---
@@ -96,9 +98,6 @@ const NewProjects = () => {
         CONTRACT: null
     });
 
-    // State to hold the CSV data
-    const [schoolData, setSchoolData] = useState([]);
-
     // 1.) Category Choices
     const PROJECT_CATEGORIES = [
         "New Construction",
@@ -110,10 +109,195 @@ const NewProjects = () => {
         "Gabaldon",
         "Repairs"
     ];
-    // --- 1. REMOVED CSV LOADING (USING API NOW) ---
-    // const [schoolData, setSchoolData] = useState([]); // REMOVED
 
-    // --- 2. VALIDATION LOGIC (API BASED) ---
+
+    
+    // --- PRE-FILL DUMMY DATA ---
+    useEffect(() => {
+        if (isDummy) {
+            setFormData({
+                region: 'Region I',
+                division: 'Ilocos Norte',
+                schoolName: 'Sample School Elementary',
+                projectName: 'Construction of 2 Storey 4 Classroom',
+                schoolId: '100001',
+                status: 'Ongoing',
+                accomplishmentPercentage: 45,
+                statusAsOfDate: '2023-10-15',
+                targetCompletionDate: '2024-03-30',
+                actualCompletionDate: '',
+                noticeToProceed: '2023-08-01',
+                contractorName: 'XYZ Construction Corp.',
+                projectAllocation: '12,500,000',
+                batchOfFunds: 'Batch 2',
+                otherRemarks: 'On schedule. Foundation complete. This is a sample entry.'
+            });
+        }
+    }, [isDummy]);
+
+    const [formData, setFormData] = useState({
+        // Basic Info
+        region: '',
+        division: '',
+        schoolName: '',
+        projectName: '',
+        schoolId: '',
+
+        // Status & Progress
+        status: 'Not Yet Started',
+        accomplishmentPercentage: 0,
+        statusAsOfDate: '',
+
+        // Timelines
+        targetCompletionDate: '',
+        actualCompletionDate: '',
+        noticeToProceed: '',
+
+        // Contractors & Funds
+        contractorName: '',
+        projectAllocation: '',
+        batchOfFunds: '',
+
+        // Remarks
+        otherRemarks: '',
+
+        // Location (New)
+        latitude: '',
+        longitude: '',
+
+        // --- NEW FIELDS ---
+        projectCategory: '',
+        scopeOfWork: '',
+        constructionStartDate: '',
+
+        // --- NEW LGU FIELDS ---
+        moa_date: '',
+        tranches_count: '',
+        tranche_amount: '',
+        fund_source: '',
+        province: '',
+        city: '',
+        municipality: '',
+        legislative_district: '',
+        scope_of_works: '',
+        contract_amount: '',
+        bid_opening_date: '',
+        resolution_award_date: '',
+        procurement_stage: '',
+        bidding_date: '',
+        awarding_date: '',
+        construction_start_date: '',
+        funds_downloaded: '',
+        funds_utilized: ''
+    });
+
+    // --- NEW: GEOLOCATION LOGIC ---
+    const handleGetLocation = () => {
+        if (!navigator.geolocation) {
+            alert("❌ Geolocation is not supported by your browser.");
+            return;
+        }
+
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        };
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude.toFixed(6);
+                const long = position.coords.longitude.toFixed(6);
+
+                setFormData(prev => ({
+                    ...prev,
+                    latitude: lat,
+                    longitude: long
+                }));
+            },
+            (error) => {
+                console.warn("Geolocation warning:", error);
+
+                // Fallback / Detailed Error
+                let msg = "Unable to retrieve location.";
+                if (error.code === 1) msg = "❌ Location permission denied. Please enable location services.";
+                else if (error.code === 2) msg = "❌ Position unavailable. Check your GPS signal.";
+                else if (error.code === 3) msg = "❌ Location request timed out.";
+
+                alert(msg);
+            },
+            options
+        );
+    };
+
+    const handleLocationSelect = (lat, lng) => {
+        setFormData(prev => ({
+            ...prev,
+            latitude: lat.toFixed(6),
+            longitude: lng.toFixed(6)
+        }));
+    };
+
+    // --- NEW: FILE HANDLING FUNCTIONS ---
+    const handleFileChange = (e) => {
+        const files = e.target.files;
+        if (files) {
+            const newFiles = Array.from(files);
+            const newPreviews = newFiles.map(file => URL.createObjectURL(file));
+
+            if (activeCategory === 'Internal') {
+                setInternalFiles(prev => [...prev, ...newFiles]);
+                setInternalPreviews(prev => [...prev, ...newPreviews]);
+            } else {
+                setExternalFiles(prev => [...prev, ...newFiles]);
+                setExternalPreviews(prev => [...prev, ...newPreviews]);
+            }
+        }
+        // Reset input
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const removeFile = (index, category) => {
+        if (category === 'Internal') {
+            setInternalFiles(prev => prev.filter((_, i) => i !== index));
+            setInternalPreviews(prev => prev.filter((_, i) => i !== index));
+        } else {
+            setExternalFiles(prev => prev.filter((_, i) => i !== index));
+            setExternalPreviews(prev => prev.filter((_, i) => i !== index));
+        }
+    };
+
+    const handleDocumentSelect = (e, type) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.type !== "application/pdf") {
+                alert("⚠️ INVALID FORMAT\n\nPlease upload a valid PDF file.");
+                return;
+            }
+            // Store raw file object for upload
+            setDocuments(prev => ({ ...prev, [type]: file }));
+        }
+    };
+
+    const removeDocument = (type) => {
+        setDocuments(prev => ({ ...prev, [type]: null }));
+    };
+
+    const triggerFilePicker = (mode, category) => {
+        setActiveCategory(category);
+        if (fileInputRef.current) {
+            if (mode === 'camera') {
+                fileInputRef.current.setAttribute('capture', 'environment');
+            } else {
+                fileInputRef.current.removeAttribute('capture');
+            }
+            fileInputRef.current.click();
+        }
+    };
+
+    // --- 2. VALIDATION LOGIC ---
+    // ONLINE: Uses database API
+    // OFFLINE: Parses public/schools.csv directly (static asset, always available)
     const handleValidateSchoolId = async () => {
         // Basic check
         if (!formData.schoolId) {
@@ -121,31 +305,66 @@ const NewProjects = () => {
             return;
         }
 
-        // OFFLINE CHECK
+        const schoolId = formData.schoolId.trim();
+
+        // Helper to update form with found data
+        const updateForm = (found) => {
+             setFormData(prev => ({
+                ...prev,
+                schoolName: found.school_name,
+                region: found.region,
+                division: found.division,
+                // --- AUTO POPULATE COORDINATES ---
+                latitude: found.latitude || prev.latitude,
+                longitude: found.longitude || prev.longitude
+            }));
+
+            let idMsg = `✅ School Found: ${found.school_name}`;
+            if (found.latitude && found.longitude) {
+                idMsg += `\n📍 Coordinates Auto-Detected!`;
+            }
+            alert(idMsg);
+        };
+
+        // ========== OFFLINE MODE: Parse CSV directly ==========
         if (!navigator.onLine) {
-            alert("⚠️ OFFLINE MODE\n\nCannot validate School ID while offline.\nPlease ensure the ID is correct, or connect to the internet to validate.");
+            console.log("⚠️ Offline Mode: Parsing schools.csv for school ID:", schoolId);
+            try {
+                // Fetch the CSV from public folder (works offline because it's a cached static asset)
+                const response = await fetch('/schools.csv');
+                const csvText = await response.text();
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const found = results.data.find(row => 
+                            String(row.school_id).trim() === String(schoolId).trim()
+                        );
+                        if (found) {
+                            updateForm(found);
+                        } else {
+                            alert("❌ School ID not found.\nPlease check the ID and try again.");
+                        }
+                    },
+                    error: (err) => {
+                        console.error("CSV Parse Error:", err);
+                        alert("❌ Failed to read school data file.");
+                    }
+                });
+            } catch (err) {
+                console.error("Offline CSV Fetch Error:", err);
+                alert("❌ Could not load school data for offline validation.");
+            }
             return;
         }
 
+        // ========== ONLINE MODE: Use database API ==========
         try {
-            const res = await fetch(`/api/school-profile/${formData.schoolId}`);
+            const res = await fetch(`/api/school-profile/${schoolId}`);
             if (res.ok) {
                 const found = await res.json();
-                setFormData(prev => ({
-                    ...prev,
-                    schoolName: found.school_name,
-                    region: found.region,
-                    division: found.division,
-                    // --- AUTO POPULATE COORDINATES ---
-                    latitude: found.latitude || prev.latitude,
-                    longitude: found.longitude || prev.longitude
-                }));
-
-                let idMsg = `✅ School Found: ${found.school_name}`;
-                if (found.latitude && found.longitude) {
-                    idMsg += `\n📍 Coordinates Auto-Detected!`;
-                }
-                alert(idMsg);
+                updateForm(found);
             } else {
                 alert("❌ School ID not found in database.");
                 setFormData(prev => ({
@@ -157,7 +376,29 @@ const NewProjects = () => {
             }
         } catch (err) {
             console.error("Validation Error:", err);
-            alert("❌ Validation Failed: Unable to connect to server.");
+            // Fallback: Try CSV if API fails
+            console.log("🔄 API failed, trying CSV fallback...");
+            try {
+                const response = await fetch('/schools.csv');
+                const csvText = await response.text();
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const found = results.data.find(row => 
+                            String(row.school_id).trim() === String(schoolId).trim()
+                        );
+                        if (found) {
+                            console.log("✅ Found via CSV fallback");
+                            updateForm(found);
+                        } else {
+                            alert("❌ Validation Failed: Unable to connect to server and school not found in local data.");
+                        }
+                    }
+                });
+            } catch (csvErr) {
+                alert("❌ Validation Failed: Unable to connect to server.");
+            }
         }
     };
 
@@ -522,7 +763,7 @@ const NewProjects = () => {
                                     <button
                                         type="button"
                                         onClick={handleValidateSchoolId}
-                                        disabled={schoolData.length === 0 || isDummy}
+                                        disabled={!formData.schoolId || formData.schoolId.length < 6 || isDummy}
                                         className="px-4 py-2 bg-blue-100 text-blue-700 font-bold text-xs uppercase rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Validate
@@ -532,6 +773,8 @@ const NewProjects = () => {
                                     {formData.schoolId.length}/6 digits
                                 </div>
                             </div>
+
+
 
                             {/* 3. SCHOOL NAME (READ ONLY) */}
                             <div>

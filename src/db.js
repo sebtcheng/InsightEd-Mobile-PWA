@@ -8,10 +8,14 @@ const ENG_STORE = 'engineer_pending'; // New store for Engineer
 const PROJECTS_STORE = 'projects_cache'; // New store for caching projects
 const GALLERY_STORE = 'gallery_cache'; // New store for caching gallery images
 
+const SCHOOLS_STORE = 'schools_cache'; // Define constant at top
+
+// UNIFIED DB VERSION — all functions must use THIS version 
+const DB_VERSION = 8;
+
 // 1. Initialize the Database
 export async function initDB() {
-  // Version bumped to 6 to add gallery store
-  return openDB(DB_NAME, 6, {
+  return openDB(DB_NAME, DB_VERSION, {
     upgrade(db) {
       // Ensure School Head store exists
       if (!db.objectStoreNames.contains(SH_STORE)) {
@@ -28,6 +32,10 @@ export async function initDB() {
       // Create Gallery cache store
       if (!db.objectStoreNames.contains(GALLERY_STORE)) {
         db.createObjectStore(GALLERY_STORE, { keyPath: 'projectId' });
+      }
+      // Create Schools cache store
+      if (!db.objectStoreNames.contains(SCHOOLS_STORE)) {
+        db.createObjectStore(SCHOOLS_STORE, { keyPath: 'school_id' });
       }
     },
   });
@@ -141,3 +149,58 @@ export async function getCachedGallery(projectId) {
   if (!entry && !isNaN(projectId)) entry = await db.get(GALLERY_STORE, Number(projectId));
   return entry ? entry.images : [];
 }
+
+// ==========================================
+//        SCHOOL CACHING FUNCTIONS (Offline Validation)
+// ==========================================
+// SCHOOLS_STORE is defined at the top of the file
+
+/**
+ * Caches the schools list for offline validation
+ * @param {Array} schools - List of school objects
+ */
+export async function cacheSchools(schools) {
+  const db = await initDB(); // Use unified initDB — same version, same upgrade
+
+  const tx = db.transaction(SCHOOLS_STORE, 'readwrite');
+  const store = tx.objectStore(SCHOOLS_STORE);
+
+  // Clear old data and replace with fresh server data
+  await store.clear();
+
+  for (const school of schools) {
+    await store.put(school);
+  }
+
+  await tx.done;
+  console.log(`✅ [db.js] Cached ${schools.length} schools to IndexedDB.`);
+}
+
+/**
+ * Retrieves a cached school by ID
+ * @param {string} schoolId
+ */
+export async function getCachedSchool(schoolId) {
+  const db = await initDB(); // Use unified initDB
+
+  // Try exact match first
+  let school = await db.get(SCHOOLS_STORE, schoolId);
+
+  // Fallback: Try as string if it was a number, or vice versa
+  if (!school && typeof schoolId === 'string') {
+    school = await db.get(SCHOOLS_STORE, Number(schoolId));
+  } else if (!school && typeof schoolId === 'number') {
+    school = await db.get(SCHOOLS_STORE, String(schoolId));
+  }
+
+  return school;
+}
+
+/**
+ * Returns count of cached schools (for debugging)
+ */
+export async function getCachedSchoolCount() {
+  const db = await initDB();
+  return db.count(SCHOOLS_STORE);
+}
+
