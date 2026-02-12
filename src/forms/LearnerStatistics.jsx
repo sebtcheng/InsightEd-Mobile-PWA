@@ -322,10 +322,10 @@ const LearnerStatistics = ({ embedded }) => {
                         });
 
                         const loadedData = {
-                            ...result.data,
+                            ...dbData,
                             ...flattenedGrids,
                             curricular_offering: fallbackOffering,
-                            learner_stats_grids: result.data.learner_stats_grids || {}
+                            learner_stats_grids: dbData.learner_stats_grids || {}
                         };
 
                         setFormData(prev => ({ ...prev, ...loadedData }));
@@ -334,7 +334,7 @@ const LearnerStatistics = ({ embedded }) => {
 
                         // CACHE DATA
                         const CACHE_KEY = `CACHE_LEARNER_STATS_${user.uid}`;
-                        localStorage.setItem(CACHE_KEY, JSON.stringify(result.data));
+                        localStorage.setItem(CACHE_KEY, JSON.stringify(loadedData));
                     }
                 }
             } catch (err) {
