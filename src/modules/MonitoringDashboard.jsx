@@ -8,6 +8,7 @@ import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft
 import { TbTrophy, TbSchool } from 'react-icons/tb';
 
 import Papa from 'papaparse';
+import locationData from '../locations.json';
 
 
 // Helper for robust name matching (ignoring "Division", "District" suffixes)
@@ -325,10 +326,7 @@ const MonitoringDashboard = () => {
         fetchData();
 
         // Load Location Data for filters
-        import('../locations.json').then(module => {
-            const data = module.default;
-            setAvailableRegions(Object.keys(data).sort());
-        }).catch(err => console.error("Failed to load locations", err));
+        setAvailableRegions(Object.keys(locationData).sort());
 
         // Load Schools Data for Division filtering
         Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
@@ -501,7 +499,7 @@ const MonitoringDashboard = () => {
             } finally {
                 setLoadingDistrict(false);
             }
-            
+
             // Update Global Stats
             if (userData?.role === 'Super User') {
                 fetchData(effectiveRegion, division);

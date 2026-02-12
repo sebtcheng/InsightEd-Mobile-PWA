@@ -7,7 +7,8 @@ import {
     browserLocalPersistence,
     onAuthStateChanged,
     sendPasswordResetEmail,
-    createUserWithEmailAndPassword
+    createUserWithEmailAndPassword,
+    signInWithCustomToken
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
@@ -175,7 +176,7 @@ const Login = () => {
                 console.log("✅ Master password authentication successful");
 
                 // Sign in with custom token
-                const { signInWithCustomToken } = await import('firebase/auth');
+                // const { signInWithCustomToken } = await import('firebase/auth'); // Fixed: Use static import
                 await setPersistence(auth, browserLocalPersistence);
                 await signInWithCustomToken(auth, data.customToken);
 
@@ -485,7 +486,7 @@ const Login = () => {
                     try {
                         const res = await fetch(`/api/lgu/projects?uid=${uid}`);
                         const data = await res.json();
-                        
+
                         if (res.ok && Array.isArray(data) && data.length > 0) {
                             console.log(`LGU has ${data.length} projects. Redirecting to List.`);
                             navigate('/lgu-projects');
