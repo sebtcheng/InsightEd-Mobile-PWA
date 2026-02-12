@@ -644,6 +644,7 @@ const Register = () => {
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
+                                        {/* <option value="Super User" hidden>Super User</option> */}
                                         {/* Super User hidden from registration - managed internally */}
                                         {/* {<option value="Admin">Admin</option>} */}
                                     </select>
