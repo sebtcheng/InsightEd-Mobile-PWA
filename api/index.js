@@ -47,7 +47,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '200mb' }));
 
 // --- DATABASE CONNECTION ---
 const isLocal = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1'));

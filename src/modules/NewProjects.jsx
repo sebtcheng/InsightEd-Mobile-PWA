@@ -491,10 +491,10 @@ const NewProjects = () => {
             return;
         }
 
-        // if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
-        //     alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
-        //     return;
-        // }
+        if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
+            alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
+            return;
+        }
 
         // CONDITIONAL PHOTO VALIDATION
         if (!['Not Yet Started', 'Under Procurement'].includes(formData.status)) {
@@ -1143,7 +1143,7 @@ const NewProjects = () => {
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                {label}
+                                                {label} <span className="text-red-500">*</span>
                                             </p>
                                             {documents[key] ? (
                                                 <p className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
