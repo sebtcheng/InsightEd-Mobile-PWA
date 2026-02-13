@@ -11,6 +11,8 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
+import { exec } from 'child_process';
+
 
 // Load environment variables11111111111111
 dotenv.config();
@@ -304,6 +306,40 @@ app.get('/api/debug/scan/:uid', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// --- VALIDATE SCHOOL HEALTH ---
+app.post('/api/validate-school-health', async (req, res) => {
+  const { school_id } = req.body;
+  if (!school_id) {
+    return res.status(400).json({ error: 'Missing school_id' });
+  }
+
+  console.log(`Running Fraud Detection for School: ${school_id}...`);
+
+  // Assuming the python script is in the parent directory or specific path
+  // Adjust path as needed. Based on file system, it's in the root of the project.
+  // api/index.js is in api/ folder, so script is ../advanced_fraud_detection.py
+  // But usually running from root context?
+  // Let's assume standard execution from project root if possible, or use absolute path.
+  // The user runs `npm run dev:full` from `c:\Users\user\OneDrive - Department of Education\001 DepEd Seb\InsightED\InsightEd-Mobile-PWA`
+
+  const scriptPath = path.join(path.resolve(), 'advanced_fraud_detection.py');
+  const command = `python "${scriptPath}" --school_id "${school_id}"`;
+
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).json({ error: 'Validation failed', details: stderr || error.message });
+    }
+
+    // Log stdout/stderr but don't fail if just warnings
+    console.log(`Validator Output: ${stdout}`);
+    if (stderr) console.warn(`Validator Warnings/Errors: ${stderr}`);
+
+    res.json({ success: true, message: 'Validation completed successfully.', output: stdout });
+  });
+});
+
 // --- DEBUG: RECALCULATE ALL ENDPOINT ---
 app.get('/api/debug/recalculate-all', async (req, res) => {
   try {
