@@ -13,13 +13,19 @@ import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal'; // NEW // NEW
 import { normalizeOffering } from '../utils/dataNormalization';
 
-const SchoolProfile = () => {
+const SchoolProfile = ({ embedded }) => {
     const navigate = useNavigate();
     const location = useLocation();
 
     const isFirstTime = location.state?.isFirstTime || false;
     const isDummy = location.state?.isDummy || false; // NEW: Dummy Mode Check
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isAuditMode);
     const queryParams = new URLSearchParams(location.search);
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const monitorSchoolId = queryParams.get('schoolId');
@@ -294,14 +300,17 @@ const SchoolProfile = () => {
             // STEP 2: BACKGROUND FETCH
             try {
                 const role = localStorage.getItem('userRole');
-                const fetchUrl = (viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId
-                    ? `/api/monitoring/school-detail/${monitorSchoolId}`
-                    : `/api/school-by-user/${user.uid}`;
+                let fetchUrl = `/api/school-by-user/${user.uid}`;
+                if (isAuditMode) {
+                    fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                } else if ((viewOnly || role === 'Central Office' || isDummy) && monitorSchoolId) {
+                    fetchUrl = `/api/monitoring/school-detail/${monitorSchoolId}`;
+                }
 
                 const response = await fetch(fetchUrl);
                 if (response.ok) {
                     const result = await response.json();
-                    const dbData = (viewOnly && monitorSchoolId) ? result : result.data;
+                    const dbData = ((viewOnly && monitorSchoolId) || isAuditMode) ? result : result.data;
 
                     if (dbData) {
                         const loadedData = mapDbToForm(dbData);
@@ -616,33 +625,35 @@ const SchoolProfile = () => {
     return (
         <>
             <PageTransition>
-                <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32 relative">
+                <div className={`min-h-screen font-sans pb-32 relative ${embedded ? 'bg-transparent' : 'bg-slate-50 dark:bg-slate-900'}`}>
 
                     {/* DUMMY MODE BANNER */}
-                    {isDummy && (
+                    {(isDummy && !embedded) && (
                         <div className="bg-amber-100 border-b border-amber-200 px-6 py-3 sticky top-0 z-50 flex items-center justify-center gap-2 shadow-sm">
                             <span className="font-bold text-amber-800 text-sm uppercase tracking-wide">⚠️ Sample Mode: Read-Only Preview</span>
                         </div>
                     )}
 
                     {/* HEADER */}
-                    <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-                        <div className="relative z-10 flex items-center gap-4">
-                            {!isFirstTime && (
-                                <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
-                            )}
-                            <div>
-                                <h1 className="text-2xl font-bold text-white">School Profile</h1>
-                                <p className="text-blue-200 text-xs mt-1">
-                                    {isFirstTime ? "Welcome! Please setup your profile." : (lastUpdated ? `Last Updated: ${formatTimestamp(lastUpdated)}` : 'Create your school profile')}
-                                </p>
+                    {!embedded && (
+                        <div className="bg-[#004A99] px-6 pt-12 pb-24 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                            <div className="relative z-10 flex items-center gap-4">
+                                {!isFirstTime && (
+                                    <button onClick={goBack} className="text-white/80 hover:text-white text-2xl transition">&larr;</button>
+                                )}
+                                <div>
+                                    <h1 className="text-2xl font-bold text-white">School Profile</h1>
+                                    <p className="text-blue-200 text-xs mt-1">
+                                        {isFirstTime ? "Welcome! Please setup your profile." : (lastUpdated ? `Last Updated: ${formatTimestamp(lastUpdated)}` : 'Create your school profile')}
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* FORM */}
-                    <div className="px-5 -mt-12 relative z-20">
+                    <div className={`px-5 relative z-20 ${embedded ? '' : '-mt-12'}`}>
                         {isOffline && (
                             <div className="bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 mb-4 rounded shadow-md relative z-30" role="alert">
                                 <p className="font-bold">You are offline</p>
@@ -650,7 +661,7 @@ const SchoolProfile = () => {
                             </div>
                         )}
 
-                        {formData.iern && (
+                        {formData.iern && !embedded && (
                             <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-900/50 mb-6 flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-[#004A99] rounded-xl flex items-center justify-center text-white font-bold">🆔</div>
@@ -665,7 +676,7 @@ const SchoolProfile = () => {
                             </div>
                         )}
                         <form onSubmit={(e) => { e.preventDefault(); setAck1(false); setAck2(false); setShowSaveModal(true); }}>
-                            <fieldset disabled={isOffline || viewOnly || isLocked || isDummy || isReadOnly} className="disabled:opacity-95">
+                            <fieldset disabled={isAuditMode || isOffline || viewOnly || isLocked || isDummy || isReadOnly} className="disabled:opacity-95">
 
                                 {/* 1. IDENTITY */}
                                 <div className={sectionClass}>

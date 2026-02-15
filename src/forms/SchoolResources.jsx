@@ -6,10 +6,27 @@ import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
 // LoadingScreen import removed
-import { addToOutbox, getOutbox } from '../db';
+import { addToOutbox, getOutbox, saveSpaceDraft, getSpaceDrafts, clearSpaceDrafts } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 import { normalizeOffering } from '../utils/dataNormalization';
+import MapTutorialModal from '../components/MapTutorialModal'; // [NEW]
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Rectangle } from 'react-leaflet'; // [MODIFIED] Added Rectangle
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix Leaflet Icons
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+const PHILIPPINES_CENTER = [12.8797, 121.7740];
 
 
 
@@ -137,7 +154,7 @@ const LabRow = ({ label, name, formData, handleChange, isLocked, viewOnly }) => 
     </div>
 );
 
-const SchoolResources = () => {
+const SchoolResources = ({ embedded }) => {
     const navigate = useNavigate();
 
     // --- STATE ---
@@ -146,7 +163,13 @@ const SchoolResources = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isAuditMode);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -173,9 +196,133 @@ const SchoolResources = () => {
     const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
 
     const [schoolId, setSchoolId] = useState(null);
+    const [iern, setIern] = useState(null); // [NEW] IERN State
     const [formData, setFormData] = useState({});
     // const isDummy = location.state?.isDummy || false; // Moved up
     const [originalData, setOriginalData] = useState(null);
+
+    // --- BUILDABLE SPACES STATE ---
+    const [spaces, setSpaces] = useState([]);
+    const [schoolLocation, setSchoolLocation] = useState(null); // [NEW]
+    const [showTutorial, setShowTutorial] = useState(false); // [NEW]
+    const [currentSpace, setCurrentSpace] = useState({ lat: null, lng: null, length: '', width: '', area: 0 });
+    const [mapCenter, setMapCenter] = useState([12.8797, 121.7740]); // Default PH Center
+
+    // Trigger Tutorial when 'Yes' is selected
+    useEffect(() => {
+        if (formData.res_buildable_space === 'Yes' && !isAuditMode && !viewOnly) {
+            const hasSeen = localStorage.getItem('hasSeenMapTutorial');
+            if (!hasSeen) {
+                setShowTutorial(true);
+            }
+        }
+    }, [formData.res_buildable_space]);
+
+    // Helper: Calculate Bounds from Center + Dimensions (Meters)
+    const getBounds = (lat, lng, length, width) => {
+        if (!lat || !lng || !length || !width) return null;
+        // Approx: 1 deg lat = 111320m
+        const latOffset = (width / 2) / 111320;
+        // Approx: 1 deg lng = 111320 * cos(lat)
+        const lngOffset = (length / 2) / (111320 * Math.cos(lat * (Math.PI / 180)));
+        return [
+            [lat - latOffset, lng - lngOffset], // SouthWest
+            [lat + latOffset, lng + lngOffset]  // NorthEast
+        ];
+    };
+
+    const AddMarker = () => {
+        const map = useMap();
+
+        // 4. INVALIDATE SIZE
+        useEffect(() => {
+            if (formData.res_buildable_space === 'Yes') {
+                setTimeout(() => { map.invalidateSize(); }, 400); // Delay for transition
+            }
+        }, [formData.res_buildable_space, map]);
+
+        useMapEvents({
+            click(e) {
+                if (!isLocked && !viewOnly && !isReadOnly && formData.res_buildable_space === 'Yes') {
+                    setCurrentSpace(prev => ({ ...prev, lat: e.latlng.lat, lng: e.latlng.lng }));
+                }
+            },
+        });
+
+        // Draggable Marker Logic
+        const markerRef = React.useRef(null);
+        const eventHandlers = React.useMemo(
+            () => ({
+                dragend() {
+                    const marker = markerRef.current;
+                    if (marker != null) {
+                        const { lat, lng } = marker.getLatLng();
+                        setCurrentSpace(prev => ({ ...prev, lat, lng }));
+                    }
+                },
+            }),
+            [],
+        );
+
+        // Calculate Dynamic Bounds for Preview
+        const previewBounds = getBounds(currentSpace.lat, currentSpace.lng, parseFloat(currentSpace.length), parseFloat(currentSpace.width));
+
+        return (
+            <>
+                {currentSpace.lat && (
+                    <Marker
+                        draggable={!isLocked && !viewOnly && !isReadOnly}
+                        eventHandlers={eventHandlers}
+                        position={[currentSpace.lat, currentSpace.lng]}
+                        ref={markerRef}
+                    />
+                )}
+                {/* Dynamic Preview Rectangle */}
+                {previewBounds && (
+                    <Rectangle
+                        bounds={previewBounds}
+                        pathOptions={{ color: '#3b82f6', weight: 1, fillOpacity: 0.4 }}
+                    />
+                )}
+            </>
+        );
+    };
+
+    const handleSpaceInput = (e) => {
+        let { name, value } = e.target;
+
+        // Enforce 3-digit limit (max 999)
+        if (value.length > 3) value = value.slice(0, 3);
+
+        const val = parseFloat(value) || 0;
+
+        setCurrentSpace(prev => {
+            const newState = { ...prev, [name]: val };
+            newState.area = (newState.length || 0) * (newState.width || 0);
+            return newState;
+        });
+    };
+
+    const addSpace = () => {
+        if (!currentSpace.lat || !currentSpace.length || !currentSpace.width) {
+            alert("Please drop a pin and enter dimensions.");
+            return;
+        }
+        setSpaces(prev => {
+            const updated = [...prev, { ...currentSpace, id: Date.now() }];
+            if (auth.currentUser) saveSpaceDraft(auth.currentUser.uid, updated).catch(console.error);
+            return updated;
+        });
+        setCurrentSpace({ lat: null, lng: null, length: '', width: '', area: 0 });
+    };
+
+    const removeSpace = (id) => {
+        setSpaces(prev => {
+            const updated = prev.filter(s => s.id !== id);
+            if (auth.currentUser) saveSpaceDraft(auth.currentUser.uid, updated).catch(console.error);
+            return updated;
+        });
+    };
 
     const goBack = () => {
         if (isDummy) {
@@ -250,6 +397,7 @@ const SchoolResources = () => {
                         const pData = JSON.parse(cachedProfile);
                         // Offering from profile has precedence if valid
                         if (pData.curricular_offering) setCurricularOffering(pData.curricular_offering);
+                        if (pData.iern) setIern(pData.iern); // [NEW] Load IERN from cache
 
                         // Map Enrollment using cached data
                         setEnrollmentData({
@@ -294,6 +442,7 @@ const SchoolResources = () => {
                             if (draft) {
                                 console.log("Restored draft from Outbox");
                                 setFormData({ ...defaultFormData, ...draft.payload });
+                                if (draft.payload.spaces) setSpaces(draft.payload.spaces); // Restore spaces
                                 setIsLocked(false);
                                 restored = true;
                                 setLoading(false);
@@ -302,11 +451,16 @@ const SchoolResources = () => {
                         } catch (e) { console.error("Outbox check failed:", e); }
                     }
 
+
                     // 3. BACKGROUND FETCHES
                     if (!restored) {
                         let profileFetchUrl = `/api/school-by-user/${user.uid}`;
                         let resourcesFetchUrl = `/api/school-resources/${user.uid}`;
-                        if ((viewOnly || isCORole) && schoolIdParam) {
+
+                        if (isAuditMode) {
+                            profileFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                            resourcesFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || isCORole) && schoolIdParam) {
                             profileFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                             resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
@@ -325,9 +479,10 @@ const SchoolResources = () => {
                         if (userDoc.exists()) setUserRole(userDoc.data().role);
 
                         // Handle Profile (Enrollment updates)
-                        if (profileRes.exists || (viewOnly && schoolIdParam)) {
-                            const pData = (viewOnly && schoolIdParam) ? profileRes : profileRes.data;
+                        if (profileRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                            const pData = ((viewOnly && schoolIdParam) || isAuditMode) ? profileRes : profileRes.data;
                             setSchoolId(pData.school_id || pData.schoolId);
+                            if (pData.iern) setIern(pData.iern); // [NEW] Set IERN from fetch
                             setCurricularOffering(normalizeOffering(pData.curricular_offering || pData.curricularOffering || storedOffering));
 
                             const newEnrollment = {
@@ -345,11 +500,34 @@ const SchoolResources = () => {
                             if (!viewOnly && pData.school_id) {
                                 localStorage.setItem('schoolId', pData.school_id);
                             }
+
+                            // [NEW] SMART MAP INITIALIZATION
+                            if (pData.latitude && pData.longitude && !isNaN(pData.latitude)) {
+                                const lat = parseFloat(pData.latitude);
+                                const lng = parseFloat(pData.longitude);
+                                setSchoolLocation({ lat, lng });
+                                setMapCenter([lat, lng]);
+                                console.log("Map Centered on School Profile:", lat, lng);
+                            } else {
+                                // Fallback: Try Device GPS
+                                if (navigator.geolocation) {
+                                    navigator.geolocation.getCurrentPosition(
+                                        (pos) => {
+                                            const { latitude, longitude } = pos.coords;
+                                            setSchoolLocation({ lat: latitude, lng: longitude }); // Treat as temp school loc
+                                            setMapCenter([latitude, longitude]);
+                                            console.log("Map Centered on Device GPS");
+                                        },
+                                        (err) => console.warn("GPS Fallback failed:", err),
+                                        { enableHighAccuracy: true, timeout: 5000 }
+                                    );
+                                }
+                            }
                         }
 
                         // Handle Resources
-                        if (resourcesRes.exists || (viewOnly && schoolIdParam)) {
-                            const dbData = (viewOnly && schoolIdParam) ? resourcesRes : resourcesRes.data;
+                        if (resourcesRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? resourcesRes : resourcesRes.data;
 
                             // Map to State
                             const loaded = {};
@@ -365,6 +543,31 @@ const SchoolResources = () => {
 
                             // Update Cache
                             localStorage.setItem(CACHE_KEY_RES, JSON.stringify(loaded));
+
+                            // Fetch Buildable Spaces if applicable
+                            // Use dbData (current scope) or fallback IDs
+                            const resolvedSchoolId = dbData.school_id || schoolIdParam || auditTargetId;
+                            if (loaded.res_buildable_space === 'Yes' && resolvedSchoolId) {
+                                try {
+                                    const spacesRes = await fetch(`/api/buildable-spaces/${resolvedSchoolId}`);
+                                    if (spacesRes.ok) {
+                                        const spacesData = await spacesRes.json();
+                                        const mappedSpaces = spacesData.map(s => ({
+                                            id: s.space_id,
+                                            lat: parseFloat(s.latitude),
+                                            lng: parseFloat(s.longitude),
+                                            length: parseFloat(s.length),
+                                            width: parseFloat(s.width),
+                                            area: parseFloat(s.total_area)
+                                        }));
+                                        setSpaces(mappedSpaces);
+                                        // Cache Spaces
+                                        localStorage.setItem(`CACHE_SPACES_${user.uid}`, JSON.stringify(mappedSpaces));
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to load spaces", e);
+                                }
+                            }
                         }
                     }
 
@@ -380,6 +583,21 @@ const SchoolResources = () => {
                                 setOriginalData(data);
                                 const hasOfflineData = Object.keys(initialFields).some(k => data[k]);
                                 setIsLocked(hasOfflineData);
+
+                                // Load Spaces Draft from IndexedDB (Priority over cache)
+                                try {
+                                    const drafts = await getSpaceDrafts(user.uid);
+                                    if (drafts && drafts.length > 0) {
+                                        setSpaces(drafts);
+                                        console.log("Loaded spaces from IndexedDB Drafts");
+                                    } else {
+                                        // Fallback to localStorage if no IDB draft
+                                        const cachedSpaces = localStorage.getItem(`CACHE_SPACES_${user.uid}`);
+                                        if (cachedSpaces) {
+                                            setSpaces(JSON.parse(cachedSpaces));
+                                        }
+                                    }
+                                } catch (e) { console.error("Failed to load space drafts", e); }
                             } catch (e) { }
                         }
                     }
@@ -460,7 +678,8 @@ const SchoolResources = () => {
         const rawPayload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
             uid: auth.currentUser.uid,
-            ...formData
+            ...formData,
+            spaces: formData.res_buildable_space === 'Yes' ? spaces : [] // Include spaces
         };
 
         // Sanitize Payload: Convert empty strings to 0 for numeric fields
@@ -470,9 +689,11 @@ const SchoolResources = () => {
             'res_buildable_space', 'sha_category',
             'schoolId', 'uid'
         ];
+        const skipFields = ['spaces']; // Complex types handled by backend separately
 
         const payload = {};
         Object.keys(rawPayload).forEach(key => {
+            if (skipFields.includes(key)) return; // Skip complex types
             if (stringFields.includes(key)) {
                 payload[key] = rawPayload[key];
             } else {
@@ -481,6 +702,9 @@ const SchoolResources = () => {
                 payload[key] = (val === '' || val === null || val === undefined) ? 0 : val;
             }
         });
+        // Re-attach complex fields
+        payload.spaces = rawPayload.spaces;
+        payload.iern = iern || schoolId || localStorage.getItem('schoolId'); // Use IERN state first
 
         if (!payload.schoolId) {
             alert("Error: School ID is missing. Please ensure your profile is loaded.");
@@ -504,6 +728,7 @@ const SchoolResources = () => {
                 setShowSuccessModal(true);
                 setOriginalData({ ...formData });
                 setIsLocked(true);
+                if (auth.currentUser) clearSpaceDrafts(auth.currentUser.uid).catch(console.error);
             } else {
                 const errorData = await res.json();
                 alert(`Server Error: ${errorData.error || errorData.message || "Update failed"}`);
@@ -525,6 +750,7 @@ const SchoolResources = () => {
             url: '/api/save-school-resources',
             payload: payload
         });
+        if (auth.currentUser) clearSpaceDrafts(auth.currentUser.uid).catch(console.error);
         setShowOfflineModal(true);
         setOriginalData({ ...formData });
         setIsLocked(true);
@@ -556,32 +782,34 @@ const SchoolResources = () => {
     // LoadingScreen check removed
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className={`min-h-screen font-sans pb-32 relative ${embedded ? '' : 'bg-slate-50'}`}>
             {/* Header */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">School Resources</h1>
+                                </div>
+                                <p className="text-blue-100 text-xs font-medium mt-1">
+                                    Q: What is the current inventory status of school facilities, equipment, and utilities?
+                                </p>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">
-                                Q: What is the current inventory status of school facilities, equipment, and utilities?
-                            </p>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
+            <div className={`px-5 relative z-20 max-w-4xl mx-auto space-y-6 ${embedded ? '' : '-mt-12'}`}>
 
                 {/* EQUIPMENT & INVENTORY */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
@@ -661,6 +889,163 @@ const SchoolResources = () => {
                             options={["Yes", "No"]}
                             formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly}
                         />
+
+                        {formData.res_buildable_space === 'Yes' && (
+                            <div className="col-span-1 sm:col-span-2 space-y-4 mt-4 border-t border-slate-100 pt-4">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-sm font-bold text-slate-700">Manage Buildable Spaces</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTutorial(true)}
+                                        className="text-blue-500 hover:text-blue-700 p-1 rounded-full hover:bg-blue-50 transition-colors"
+                                        title="Show Map Guide"
+                                    >
+                                        <FiHelpCircle size={18} />
+                                    </button>
+                                </div>
+
+                                <MapTutorialModal
+                                    isOpen={showTutorial}
+                                    onClose={() => setShowTutorial(false)}
+                                    onDoNotShowAgain={() => localStorage.setItem('hasSeenMapTutorial', 'true')}
+                                />
+
+                                {/* MAP */}
+                                <div className="h-64 rounded-xl overflow-hidden border border-slate-200 z-0 relative">
+                                    <MapContainer
+                                        key={JSON.stringify(mapCenter)}
+                                        center={mapCenter}
+                                        zoom={schoolLocation ? 18 : 6}
+                                        scrollWheelZoom={false}
+                                        style={{ height: '100%', width: '100%' }}
+                                    >
+                                        <TileLayer
+                                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                        />
+
+                                        {/* REFERENCE MARKER (School Location) */}
+                                        {schoolLocation && (
+                                            <Marker position={[schoolLocation.lat, schoolLocation.lng]}>
+                                                <Popup>
+                                                    <strong>School Location</strong><br />
+                                                    Reference Point
+                                                </Popup>
+                                            </Marker>
+                                        )}
+
+                                        <AddMarker />
+
+                                        {spaces.map(s => {
+                                            const bounds = getBounds(s.lat, s.lng, s.length, s.width);
+                                            return (
+                                                <React.Fragment key={s.id}>
+                                                    <Marker position={[s.lat, s.lng]}>
+                                                        <Popup>
+                                                            Area: {s.area} sqm<br />
+                                                            {s.length}m x {s.width}m
+                                                        </Popup>
+                                                    </Marker>
+                                                    {bounds && (
+                                                        <Rectangle
+                                                            bounds={bounds}
+                                                            pathOptions={{ color: '#3b82f6', weight: 1, fillOpacity: 0.4 }}
+                                                        />
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </MapContainer>
+                                    {(!currentSpace.lat && !isLocked && !viewOnly) && (
+                                        <div className="absolute top-2 right-2 bg-white/90 px-3 py-1 rounded-lg text-xs font-bold shadow-md z-[1000]">
+                                            Tap map to pin location
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* INPUTS */}
+                                {!isLocked && !viewOnly && !isReadOnly && (
+                                    <div className="transition-all duration-500 ease-in-out overflow-hidden" style={{ maxHeight: currentSpace.lat ? '24rem' : '0', opacity: currentSpace.lat ? 1 : 0 }}>
+                                        <div className="bg-slate-50 p-4 rounded-xl space-y-3 mt-3 border border-slate-200 shadow-sm">
+                                            <div className="flex justify-between items-center">
+                                                <p className="text-xs font-bold text-slate-500 uppercase">New Space Details</p>
+                                                <button onClick={() => setCurrentSpace({ lat: null, lng: null, length: '', width: '', area: 0 })} className="text-[10px] text-red-400 hover:text-red-600 font-bold uppercase">
+                                                    Cancel / Clear Pin
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div>
+                                                    <label className="text-[10px] uppercase font-bold text-slate-400">Length (m)</label>
+                                                    <input
+                                                        type="number"
+                                                        name="length"
+                                                        value={currentSpace.length}
+                                                        onChange={handleSpaceInput}
+                                                        className="w-full p-2 rounded-lg border border-slate-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        placeholder="0"
+                                                        onInput={(e) => { if (e.target.value.length > 3) e.target.value = e.target.value.slice(0, 3); }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] uppercase font-bold text-slate-400">Width (m)</label>
+                                                    <input
+                                                        type="number"
+                                                        name="width"
+                                                        value={currentSpace.width}
+                                                        onChange={handleSpaceInput}
+                                                        className="w-full p-2 rounded-lg border border-slate-200 font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                                                        placeholder="0"
+                                                        onInput={(e) => { if (e.target.value.length > 3) e.target.value = e.target.value.slice(0, 3); }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] uppercase font-bold text-slate-400">Area (sqm)</label>
+                                                    <input type="number" value={currentSpace.area} readOnly className="w-full p-2 rounded-lg border border-slate-200 bg-slate-100 font-bold text-slate-500" />
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={addSpace}
+                                                disabled={!currentSpace.length || !currentSpace.width}
+                                                className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg disabled:opacity-50 hover:bg-blue-700 transition shadow-md hover:shadow-lg active:scale-95"
+                                            >
+                                                Add Space to List
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2 mt-4">
+                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Recorded Spaces ({spaces.length})</p>
+                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                                        {spaces.map((s, idx) => (
+                                            <div key={s.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs border border-blue-100">
+                                                        #{idx + 1}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex gap-2 items-baseline">
+                                                            <span className="font-bold text-slate-700 text-sm">{s.area.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">sqm</span></span>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-400 font-medium block -mt-0.5">{s.length}m x {s.width}m</span>
+                                                    </div>
+                                                </div>
+                                                {!isLocked && !viewOnly && !isReadOnly && (
+                                                    <button
+                                                        onClick={() => removeSpace(s.id)}
+                                                        className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                                                        title="Remove Space"
+                                                    >
+                                                        <FiXCircle size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <SelectField
                             label="SHA (Special Hardship Allowance) Category"
                             name="sha_category"
@@ -778,25 +1163,27 @@ const SchoolResources = () => {
             </div>
 
             {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
-                    ) : isLocked ? (
-                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                            🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <><FiSave /> Save Changes</>
-                            )}
-                        </button>
-                    )}
+            {!embedded && (
+                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                    <div className="max-w-lg mx-auto flex gap-3">
+                        {(viewOnly || isReadOnly) ? (
+                            <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                        ) : isLocked ? (
+                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <><FiSave /> Save Changes</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Modals for Edit/Save */}
             {showEditModal && (

@@ -60,7 +60,7 @@ const GradeRow = ({ label, lvl, shifts, modes, onShiftChange, onModeChange, isLo
     </div>
 );
 
-const ShiftingModalities = () => {
+const ShiftingModalities = ({ embedded }) => {
     const navigate = useNavigate();
 
     // --- STATE ---
@@ -69,7 +69,13 @@ const ShiftingModalities = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isAuditMode);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -237,7 +243,9 @@ const ShiftingModalities = () => {
                     if (!restored) {
                         let fetchUrl = `/api/learning-modalities/${user.uid}`;
                         const role = localStorage.getItem('userRole');
-                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+                        if (isAuditMode) {
+                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
@@ -248,7 +256,7 @@ const ShiftingModalities = () => {
                             const res = await fetch(fetchUrl);
                             const json = await res.json();
 
-                            if (json.exists || (viewOnly && schoolIdParam)) {
+                            if (json.exists || (viewOnly && schoolIdParam) || isAuditMode) {
                                 // Update IDs
                                 setSchoolId(json.school_id || json.schoolId || storedSchoolId);
                                 const newOffering = json.curricular_offering || json.offering || storedOffering || '';
@@ -259,7 +267,7 @@ const ShiftingModalities = () => {
                                     localStorage.setItem('schoolOffering', newOffering);
                                 }
 
-                                const data = (viewOnly && schoolIdParam) ? (json.data || json) : (json.data || {});
+                                const data = ((viewOnly && schoolIdParam) || isAuditMode) ? (json.data || json) : (json.data || {});
 
                                 // Map DB -> State
                                 const loadedShifts = {};
@@ -422,35 +430,37 @@ const ShiftingModalities = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-40">
+        <div className={`min-h-screen font-sans pb-40 ${embedded ? '' : 'bg-slate-50'}`}>
             {/* --- PREMIUM BLUE HEADER --- */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
 
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
-                                {offering && (
-                                    <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
-                                        {offering}
-                                    </span>
-                                )}
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">Shifting & Modality</h1>
+                                    {offering && (
+                                        <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm border border-white/10">
+                                            {offering}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the shifting schedule and learning delivery mode adopted by each grade level?</p>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">Q: What is the shifting schedule and learning delivery mode adopted by each grade level?</p>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
-            <div className="px-5 -mt-10 relative z-20 max-w-4xl mx-auto space-y-6">
+            <div className={`px-5 relative z-20 max-w-4xl mx-auto space-y-6 ${embedded ? '' : '-mt-10'}`}>
 
                 {/* --- GRADE LEVEL STRATEGIES --- */}
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
@@ -542,25 +552,27 @@ const ShiftingModalities = () => {
             </div>
 
             {/* --- STANDARDIZED FOOTER            {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
-                    ) : isLocked ? (
-                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                            🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <><FiSave /> Save Changes</>
-                            )}
-                        </button>
-                    )}
+            {!embedded && (
+                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                    <div className="max-w-lg mx-auto flex gap-3">
+                        {(viewOnly || isReadOnly) ? (
+                            <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                        ) : isLocked ? (
+                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving || !isFormValid()} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <><FiSave /> Save Changes</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* --- MODALS --- */}
             {

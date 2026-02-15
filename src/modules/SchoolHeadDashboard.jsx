@@ -807,7 +807,7 @@ const SchoolHeadDashboard = () => {
             </PageTransition >
 
             {
-                showDeadlineAlert && deadlineDate && (
+                showDeadlineAlert && deadlineDate && progress < 100 && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
                         <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-amber-200 dark:border-amber-900/40">
                             {/* Glowing Background Effect */}

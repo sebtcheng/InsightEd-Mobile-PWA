@@ -22,8 +22,8 @@ const getInitialFields = () => ({
     spec_esp_major: 0, spec_esp_teaching: 0,
     spec_tle_major: 0, spec_tle_teaching: 0,
     // General Education (For Purely Elementary)
-    spec_general_major: 0,
-    spec_ece_major: 0,
+    spec_general_major: 0, spec_general_teaching: 0,
+    spec_ece_major: 0, spec_ece_teaching: 0,
     // New Secondary Fields
     spec_bio_sci_major: 0, spec_bio_sci_teaching: 0,
     spec_phys_sci_major: 0, spec_phys_sci_teaching: 0,
@@ -97,7 +97,7 @@ const ElementaryRow = ({ label, id, formData, handleChange, isLocked, viewOnly }
     );
 };
 
-const TeacherSpecialization = () => {
+const TeacherSpecialization = ({ embedded }) => {
     // ... [Hooks unchanged] ...
     const navigate = useNavigate();
     const location = useLocation();
@@ -105,7 +105,13 @@ const TeacherSpecialization = () => {
     const viewOnly = queryParams.get('viewOnly') === 'true';
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
-    const [isReadOnly, setIsReadOnly] = useState(isDummy);
+
+    // Super User / Audit Context
+    const isSuperUser = localStorage.getItem('userRole') === 'Super User';
+    const auditTargetId = sessionStorage.getItem('targetSchoolId');
+    const isAuditMode = isSuperUser && !!auditTargetId;
+
+    const [isReadOnly, setIsReadOnly] = useState(isDummy || isAuditMode);
 
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -235,7 +241,10 @@ const TeacherSpecialization = () => {
                     if (!restored) {
                         let fetchUrl = `/api/teacher-specialization/${user.uid}`;
                         const role = localStorage.getItem('userRole');
-                        if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
+
+                        if (isAuditMode) {
+                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
                             fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
                         if (!loadedFromCache) setLoading(true);
@@ -268,7 +277,7 @@ const TeacherSpecialization = () => {
                             }
 
                             // If we have data OR we fetched profile successfully
-                            if (json.exists || (viewOnly && schoolIdParam) || (profileResult && profileResult.exists)) {
+                            if (json.exists || (viewOnly && schoolIdParam) || (profileResult && profileResult.exists) || isAuditMode) {
 
                                 setOffering(fetchedOffering); // Update state
 
@@ -282,7 +291,7 @@ const TeacherSpecialization = () => {
                                     if (fetchedOffering) localStorage.setItem('schoolOffering', fetchedOffering);
                                 }
 
-                                const dbData = (viewOnly && schoolIdParam) ? json : json.data;
+                                const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? json : json.data;
                                 // If dbData is null (because we only fetched profile), use empty object or defaults
                                 const safeData = dbData || {};
 
@@ -404,31 +413,33 @@ const TeacherSpecialization = () => {
     );
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans pb-32 relative">
+        <div className={`min-h-screen font-sans pb-32 relative ${embedded ? '' : 'bg-slate-50'}`}>
             {/* ... [Header Unchanged] ... */}
-            <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
-                <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-                <div className="relative z-10 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-white tracking-tight">Teacher Specialization</h1>
+            {!embedded && (
+                <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
+                    <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+                    <div className="relative z-10 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={goBack} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold text-white tracking-tight">Teacher Specialization</h1>
+                                </div>
+                                <p className="text-blue-100 text-xs font-medium mt-1">
+                                    Q: How many teachers specialized/majored in the subject as compared to how many teachers are actually teaching the subject?
+                                </p>
                             </div>
-                            <p className="text-blue-100 text-xs font-medium mt-1">
-                                Q: How many teachers specialized/majored in the subject as compared to how many teachers are actually teaching the subject?
-                            </p>
                         </div>
+                        <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
+                            <FiHelpCircle size={24} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowInfoModal(true)} className="text-white/80 hover:text-white transition-colors p-2 rounded-full hover:bg-white/10">
-                        <FiHelpCircle size={24} />
-                    </button>
                 </div>
-            </div>
+            )}
 
-            <div className="px-5 -mt-12 relative z-20 max-w-4xl mx-auto space-y-6">
+            <div className={`px-5 relative z-20 max-w-4xl mx-auto space-y-6 ${embedded ? '' : '-mt-12'}`}>
 
                 {/* SECTION: ELEMENTARY */}
                 {hasElementary && (
@@ -502,25 +513,27 @@ const TeacherSpecialization = () => {
 
 
             {/* Footer Actions */}
-            <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                <div className="max-w-lg mx-auto flex gap-3">
-                    {(viewOnly || isReadOnly) ? (
-                        <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
-                    ) : isLocked ? (
-                        <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                            🔓 Unlock to Edit Data
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <><FiSave /> Save Changes</>
-                            )}
-                        </button>
-                    )}
+            {!embedded && (
+                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                    <div className="max-w-lg mx-auto flex gap-3">
+                        {(viewOnly || isReadOnly) ? (
+                            <div className="w-full text-center p-3 text-slate-400 font-bold bg-slate-100 rounded-2xl text-sm">Read-Only Mode</div>
+                        ) : isLocked ? (
+                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                🔓 Unlock to Edit Data
+                            </button>
+                        ) : (
+                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                {isSaving ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    <><FiSave /> Save Changes</>
+                                )}
+                            </button>
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Modals */}
             {showEditModal && (

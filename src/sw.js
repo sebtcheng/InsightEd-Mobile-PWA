@@ -34,7 +34,92 @@ self.addEventListener('sync', (event) => {
         console.log('[ServiceWorker] Sync event fired: sync-surveys');
         event.waitUntil(syncSurveys());
     }
+    if (event.tag === 'sync-facility-repairs') {
+        console.log('[ServiceWorker] Sync event fired: sync-facility-repairs');
+        event.waitUntil(syncFacilityRepairs());
+    }
 });
+
+// 5. Facility Repairs Background Sync
+const REPAIR_DB_NAME = 'InsightEd_Outbox';
+const REPAIR_DB_VERSION = 10;
+const REPAIR_STORE_NAME = 'facility_repairs';
+
+async function syncFacilityRepairs() {
+    console.log('[ServiceWorker] Starting facility repairs sync...');
+    try {
+        const repairs = await getAllRepairsFromDB();
+        if (!repairs || repairs.length === 0) {
+            console.log('[ServiceWorker] No facility repairs to sync.');
+            return;
+        }
+        console.log(`[ServiceWorker] Found ${repairs.length} facility repairs to sync.`);
+
+        for (const repair of repairs) {
+            try {
+                const payload = { ...repair };
+                const localId = payload.local_id;
+                delete payload.local_id;
+                delete payload.timestamp;
+                delete payload.status;
+
+                const response = await fetch('/api/save-facility-repair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (response.ok) {
+                    console.log(`[ServiceWorker] Successfully synced repair local_id=${localId}`);
+                    await deleteRepairFromDB(localId);
+                } else {
+                    console.error(`[ServiceWorker] Server error for repair local_id=${localId}. Status: ${response.status}`);
+                }
+            } catch (err) {
+                console.error(`[ServiceWorker] Failed to sync repair:`, err);
+            }
+        }
+        console.log('[ServiceWorker] Facility repairs sync complete.');
+    } catch (err) {
+        console.error('[ServiceWorker] Error during facility repairs sync:', err);
+    }
+}
+
+function openRepairDB() {
+    return new Promise((resolve, reject) => {
+        const request = self.indexedDB.open(REPAIR_DB_NAME, REPAIR_DB_VERSION);
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => reject(event.target.error);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains(REPAIR_STORE_NAME)) {
+                const store = db.createObjectStore(REPAIR_STORE_NAME, { keyPath: 'local_id', autoIncrement: true });
+                store.createIndex('iern', 'iern', { unique: false });
+            }
+        };
+    });
+}
+
+async function getAllRepairsFromDB() {
+    const db = await openRepairDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([REPAIR_STORE_NAME], 'readonly');
+        const store = transaction.objectStore(REPAIR_STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
+
+async function deleteRepairFromDB(id) {
+    const db = await openRepairDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([REPAIR_STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(REPAIR_STORE_NAME);
+        const request = store.delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = (event) => reject(event.target.error);
+    });
+}
 
 async function syncSurveys() {
     console.log('[ServiceWorker] Starting survey sync...');

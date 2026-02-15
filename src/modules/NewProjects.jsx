@@ -70,6 +70,8 @@ const NewProjects = () => {
         fetchRole();
     }, []);
 
+
+
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // --- NEW STATE FOR FAB AND IMAGES ---
@@ -96,9 +98,6 @@ const NewProjects = () => {
         CONTRACT: null
     });
 
-    // State to hold the CSV data
-    const [schoolData, setSchoolData] = useState([]);
-
     // 1.) Category Choices
     const PROJECT_CATEGORIES = [
         "New Construction",
@@ -110,23 +109,9 @@ const NewProjects = () => {
         "Gabaldon",
         "Repairs"
     ];
-    // --- 1. LOAD CSV DATA ---
-    useEffect(() => {
-        // A. Load CSV
-        Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                console.log("Loaded schools:", results.data.length);
-                setSchoolData(results.data);
-            },
-            error: (err) => {
-                console.error("Error loading CSV:", err);
-            }
-        });
-    }, [isDummy, navigate]);
 
+
+    
     // --- PRE-FILL DUMMY DATA ---
     useEffect(() => {
         if (isDummy) {
@@ -311,16 +296,20 @@ const NewProjects = () => {
     };
 
     // --- 2. VALIDATION LOGIC ---
-    const handleValidateSchoolId = () => {
+    // ONLINE: Uses database API
+    // OFFLINE: Parses public/schools.csv directly (static asset, always available)
+    const handleValidateSchoolId = async () => {
         // Basic check
         if (!formData.schoolId) {
             alert("Please enter a School ID.");
             return;
         }
 
-        const found = schoolData.find(s => String(s.school_id) === String(formData.schoolId));
-        if (found) {
-            setFormData(prev => ({
+        const schoolId = formData.schoolId.trim();
+
+        // Helper to update form with found data
+        const updateForm = (found) => {
+             setFormData(prev => ({
                 ...prev,
                 schoolName: found.school_name,
                 region: found.region,
@@ -335,14 +324,81 @@ const NewProjects = () => {
                 idMsg += `\n📍 Coordinates Auto-Detected!`;
             }
             alert(idMsg);
-        } else {
-            alert("❌ School ID not found in database.");
-            setFormData(prev => ({
-                ...prev,
-                schoolName: '',
-                region: '',
-                division: ''
-            }));
+        };
+
+        // ========== OFFLINE MODE: Parse CSV directly ==========
+        if (!navigator.onLine) {
+            console.log("⚠️ Offline Mode: Parsing schools.csv for school ID:", schoolId);
+            try {
+                // Fetch the CSV from public folder (works offline because it's a cached static asset)
+                const response = await fetch('/schools.csv');
+                const csvText = await response.text();
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const found = results.data.find(row => 
+                            String(row.school_id).trim() === String(schoolId).trim()
+                        );
+                        if (found) {
+                            updateForm(found);
+                        } else {
+                            alert("❌ School ID not found.\nPlease check the ID and try again.");
+                        }
+                    },
+                    error: (err) => {
+                        console.error("CSV Parse Error:", err);
+                        alert("❌ Failed to read school data file.");
+                    }
+                });
+            } catch (err) {
+                console.error("Offline CSV Fetch Error:", err);
+                alert("❌ Could not load school data for offline validation.");
+            }
+            return;
+        }
+
+        // ========== ONLINE MODE: Use database API ==========
+        try {
+            const res = await fetch(`/api/school-profile/${schoolId}`);
+            if (res.ok) {
+                const found = await res.json();
+                updateForm(found);
+            } else {
+                alert("❌ School ID not found in database.");
+                setFormData(prev => ({
+                    ...prev,
+                    schoolName: '',
+                    region: '',
+                    division: ''
+                }));
+            }
+        } catch (err) {
+            console.error("Validation Error:", err);
+            // Fallback: Try CSV if API fails
+            console.log("🔄 API failed, trying CSV fallback...");
+            try {
+                const response = await fetch('/schools.csv');
+                const csvText = await response.text();
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const found = results.data.find(row => 
+                            String(row.school_id).trim() === String(schoolId).trim()
+                        );
+                        if (found) {
+                            console.log("✅ Found via CSV fallback");
+                            updateForm(found);
+                        } else {
+                            alert("❌ Validation Failed: Unable to connect to server and school not found in local data.");
+                        }
+                    }
+                });
+            } catch (csvErr) {
+                alert("❌ Validation Failed: Unable to connect to server.");
+            }
         }
     };
 
@@ -435,10 +491,10 @@ const NewProjects = () => {
             return;
         }
 
-        // if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
-        //     alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
-        //     return;
-        // }
+        if (!documents.POW || !documents.DUPA || !documents.CONTRACT) {
+            alert("⚠️ INCOMPLETE SUBMISSION\n\nYou must fill up all the forms and upload all required documents (POW, DUPA, Signed Contract) before creating the project.");
+            return;
+        }
 
         // CONDITIONAL PHOTO VALIDATION
         if (!['Not Yet Started', 'Under Procurement'].includes(formData.status)) {
@@ -707,7 +763,7 @@ const NewProjects = () => {
                                     <button
                                         type="button"
                                         onClick={handleValidateSchoolId}
-                                        disabled={schoolData.length === 0 || isDummy}
+                                        disabled={!formData.schoolId || formData.schoolId.length < 6 || isDummy}
                                         className="px-4 py-2 bg-blue-100 text-blue-700 font-bold text-xs uppercase rounded-lg hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Validate
@@ -717,6 +773,8 @@ const NewProjects = () => {
                                     {formData.schoolId.length}/6 digits
                                 </div>
                             </div>
+
+
 
                             {/* 3. SCHOOL NAME (READ ONLY) */}
                             <div>
@@ -1085,7 +1143,7 @@ const NewProjects = () => {
                                     <div className="flex justify-between items-center">
                                         <div>
                                             <p className={`text-xs font-black uppercase tracking-widest ${documents[key] ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                                {label}
+                                                {label} <span className="text-red-500">*</span>
                                             </p>
                                             {documents[key] ? (
                                                 <p className="text-[10px] text-emerald-600 font-medium mt-0.5 flex items-center gap-1">

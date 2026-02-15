@@ -8,6 +8,7 @@ import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft
 import { TbTrophy, TbSchool } from 'react-icons/tb';
 
 import Papa from 'papaparse';
+import locationData from '../locations.json';
 
 
 // Helper for robust name matching (ignoring "Division", "District" suffixes)
@@ -325,10 +326,7 @@ const MonitoringDashboard = () => {
         fetchData();
 
         // Load Location Data for filters
-        import('../locations.json').then(module => {
-            const data = module.default;
-            setAvailableRegions(Object.keys(data).sort());
-        }).catch(err => console.error("Failed to load locations", err));
+        setAvailableRegions(Object.keys(locationData).sort());
 
         // Load Schools Data for Division filtering
         Papa.parse(`${import.meta.env.BASE_URL}schools.csv`, {
@@ -423,11 +421,15 @@ const MonitoringDashboard = () => {
             ? sessionStorage.getItem('impersonatedLocation')
             : (userData?.role === 'Regional Office' ? userData?.region : coRegion);
 
-        if (effectiveRole === 'Regional Office') {
+        // UNIFIED: Fetch Schools for both RO and CO when a division is selected
+        if (effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && division)) {
             setLoadingDistrict(true);
             try {
+                // Determine Region
+                const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
+
                 // Fetch ALL schools in this division (API Data)
-                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(effectiveRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
+                const res = await fetch(`/api/monitoring/schools?region=${encodeURIComponent(targetRegion)}&division=${encodeURIComponent(division)}&limit=1000`);
                 let apiSchools = [];
                 if (res.ok) {
                     const data = await res.json();
@@ -437,7 +439,7 @@ const MonitoringDashboard = () => {
                 // MERGE: Combine CSV Master List with API Data
                 // Filter CSV for this region/division
                 const masterList = schoolData.filter(s =>
-                    normalizeLocationName(s.region) === normalizeLocationName(effectiveRegion) &&
+                    normalizeLocationName(s.region) === normalizeLocationName(targetRegion) &&
                     normalizeLocationName(s.division) === normalizeLocationName(division)
                 );
 
@@ -457,6 +459,7 @@ const MonitoringDashboard = () => {
                             school_name: csvSchool.school_name,
                             school_id: csvSchool.school_id,
                             district: csvSchool.district,
+                            division: csvSchool.division,
                             // Set all statuses to false
                             profile_status: false,
                             head_status: false,
@@ -473,7 +476,7 @@ const MonitoringDashboard = () => {
                     }
                 });
 
-                // 2. Add API Schools that were NOT in CSV (Fix for "27 vs 20" issue)
+                // 2. Add API Schools that were NOT in CSV
                 const csvIds = new Set(masterList.map(s => s.school_id));
                 const csvNames = new Set(masterList.map(s => normalizeLocationName(s.school_name)));
 
@@ -482,8 +485,7 @@ const MonitoringDashboard = () => {
                     !csvNames.has(normalizeLocationName(api.school_name))
                 ).map(api => ({
                     ...api,
-                    // Ensure missing fields are handled if API returns incomplete shape (though it returns full shape usually)
-                    district: api.district || 'Unassigned District' // Fallback
+                    district: api.district || 'Unassigned District'
                 }));
 
                 const mergedSchools = [...csvMapped, ...extraApiSchools];
@@ -497,12 +499,12 @@ const MonitoringDashboard = () => {
             } finally {
                 setLoadingDistrict(false);
             }
-            // We don't necessarily update global stats if fetchData ignores params for RO, 
-            // but we call it to ensure sync if logic changes.
+
+            // Update Global Stats
             if (userData?.role === 'Super User') {
                 fetchData(effectiveRegion, division);
             } else {
-                fetchData(userData.region, division);
+                fetchData(effectiveRole === 'Central Office' ? coRegion : userData.region, division);
             }
         } else {
             fetchData(coRegion, division);
@@ -1257,8 +1259,9 @@ const MonitoringDashboard = () => {
                                             const targetRegion = effectiveRole === 'Central Office' ? coRegion : effectiveRegion;
 
                                             // MERGE Divisions: Use both CSV and API to find all divisions
+                                            const targetRegionName = normalizeLocationName(targetRegion);
                                             const csvDivisions = [...new Set(schoolData
-                                                .filter(s => s.region === targetRegion)
+                                                .filter(s => normalizeLocationName(s.region) === targetRegionName)
                                                 .map(s => s.division))];
 
                                             const apiDivisions = divisionStats.map(d => d.division);
@@ -1356,7 +1359,7 @@ const MonitoringDashboard = () => {
                                 (effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && coDivision) || (effectiveRole === 'Regional Office' && coDivision)) && (
                                     <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700 mt-6">
                                         <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">
-                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
+                                            {(coDistrict || (effectiveRole === 'Regional Office' && coDivision) || (effectiveRole === 'Central Office' && coDivision)) ? 'Accomplishment Rate per School' : 'Accomplishment Rate per District'}
                                         </h2>
                                         {(() => {
                                             // Determine Target Region:
@@ -1373,7 +1376,7 @@ const MonitoringDashboard = () => {
                                                 : effectiveDivision;
 
                                             // IF DISTRICT SELECTED OR REGIONAL OFFICE DRILL-DOWN: SHOW SCHOOLS
-                                            if (coDistrict || (effectiveRole === 'Regional Office' && coDivision)) {
+                                            if (coDistrict || (effectiveRole === 'Regional Office' && coDivision) || (effectiveRole === 'Central Office' && coDivision)) {
                                                 if (loadingDistrict) {
                                                     return <div className="p-8 text-center text-slate-400 animate-pulse">Loading schools...</div>;
                                                 }
@@ -1451,6 +1454,8 @@ const MonitoringDashboard = () => {
                                                                         onClick={() => {
                                                                             if (effectiveRole === 'Regional Office') {
                                                                                 handleDivisionChange(''); // Back to Division List
+                                                                            } else if (effectiveRole === 'Central Office') {
+                                                                                handleDivisionChange(''); // Back to Division List for CO
                                                                             } else {
                                                                                 handleDistrictChange(''); // Back to District List
                                                                             }
@@ -1461,7 +1466,7 @@ const MonitoringDashboard = () => {
                                                                     </button>
                                                                     <div>
                                                                         <h3 className="font-black text-xl text-slate-800 dark:text-white">
-                                                                            {effectiveRole === 'Regional Office' ? coDivision : coDistrict}
+                                                                            {effectiveRole === 'Regional Office' || effectiveRole === 'Central Office' ? coDivision : coDistrict}
                                                                         </h3>
                                                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{sortedSchools.length} Schools</p>
                                                                     </div>
@@ -1512,21 +1517,43 @@ const MonitoringDashboard = () => {
                                                         {/* Unified School List (Paginated) */}
                                                         <div className="space-y-3 min-h-[400px]">
                                                             {paginatedSchools.map((s) => (
-                                                                <div key={s.school_id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors">
+                                                                <div
+                                                                    key={s.school_id}
+                                                                    onClick={() => {
+                                                                        if (userData?.role === 'Super User') {
+                                                                            sessionStorage.setItem('targetSchoolId', s.school_id);
+                                                                            sessionStorage.setItem('targetSchoolName', s.school_name);
+                                                                            navigate('/school-audit');
+                                                                        }
+                                                                    }}
+                                                                    className={`bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex justify-between items-center group hover:border-blue-200 transition-colors ${userData?.role === 'Super User' ? 'cursor-pointer ring-2 ring-transparent hover:ring-blue-400' : ''}`}
+                                                                >
                                                                     <div className="flex-1 min-w-0 pr-4">
                                                                         <div className="flex items-center gap-2 mb-2">
                                                                             <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm group-hover:text-blue-600 transition-colors truncate">{s.school_name}</h4>
                                                                             {s.percentage === 100 && <FiCheckCircle className="text-emerald-500 shrink-0" size={14} />}
 
-                                                                            {/* VALIDATION BADGES (Based on Data Health from school_summary) */}
-                                                                            {/* DATA HEALTH SCORE DISPLAY */}
+                                                                            {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0">No Data</span>}
+                                                                        </div>
+
+                                                                        <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden mb-2">
+                                                                            <div
+                                                                                className={`h-full rounded-full transition-all duration-500 ${s.percentage === 100 ? 'bg-emerald-500' :
+                                                                                    s.percentage >= 50 ? 'bg-blue-500' :
+                                                                                        s.percentage > 0 ? 'bg-amber-500' : 'bg-slate-300'
+                                                                                    }`}
+                                                                                style={{ width: `${s.percentage}%` }}
+                                                                            ></div>
+                                                                        </div>
+
+                                                                        <div className="space-y-1">
+                                                                            {/* DATA HEALTH SCORE DISPLAY - MOVED BELOW BAR */}
                                                                             {(() => {
                                                                                 // Default to 0 if undefined
                                                                                 const score = s.data_health_score !== undefined ? s.data_health_score : 0;
 
                                                                                 let colorClass = 'bg-slate-100 text-slate-600';
                                                                                 let label = '';
-                                                                                let showScore = true;
 
                                                                                 // 1. Determine Label & Color based on Score
                                                                                 if (score <= 50) {
@@ -1543,18 +1570,8 @@ const MonitoringDashboard = () => {
                                                                                     label = 'Excellent';
                                                                                 }
 
-                                                                                // 2. Override for Manually Validated (Optional: Keep separate or merge?)
-                                                                                // User Note: "Instead of just For Validation..."
-                                                                                // If already Validated, we can show "Validated" tag AND the score
-
                                                                                 return (
-                                                                                    <div className="flex flex-col items-start gap-1">
-
-                                                                                        {/* Always show Data Health Score if not just generic "Validated" fallback */}
-                                                                                        {/* If it's validated, we might still want to see the underlying score if it differs? 
-                                                            Usually Validated implies Score 100 or manually overridden. 
-                                                            Let's show the score tag regardless, as it gives more info.
-                                                        */}
+                                                                                    <div className="flex items-center gap-2">
                                                                                         <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 flex items-center gap-1 ${colorClass}`}>
                                                                                             <FiAlertCircle size={10} />
                                                                                             <span className="opacity-75">Score: {score}</span> • {label}
@@ -1562,24 +1579,13 @@ const MonitoringDashboard = () => {
                                                                                     </div>
                                                                                 );
                                                                             })()}
-                                                                            {s.percentage === 0 && <span className="text-[9px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0">No Data</span>}
-                                                                        </div>
 
-                                                                        <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                                                                            <div
-                                                                                className={`h-full rounded-full transition-all duration-500 ${s.percentage === 100 ? 'bg-emerald-500' :
-                                                                                    s.percentage >= 50 ? 'bg-blue-500' :
-                                                                                        s.percentage > 0 ? 'bg-amber-500' : 'bg-slate-300'
-                                                                                    }`}
-                                                                                style={{ width: `${s.percentage}%` }}
-                                                                            ></div>
+                                                                            {s.missing.length > 0 && s.missing.length < 10 && (
+                                                                                <p className="text-[10px] text-slate-400 truncate">
+                                                                                    Missing: {s.missing.join(', ')}
+                                                                                </p>
+                                                                            )}
                                                                         </div>
-
-                                                                        {s.missing.length > 0 && s.missing.length < 10 && (
-                                                                            <p className="text-[10px] text-slate-400 mt-1.5 truncate">
-                                                                                Missing: {s.missing.join(', ')}
-                                                                            </p>
-                                                                        )}
                                                                     </div>
 
                                                                     <div className="text-right shrink-0">

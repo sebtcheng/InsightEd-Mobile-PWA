@@ -119,6 +119,9 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
           </thead>
           <tbody className="divide-y divide-slate-50 dark:divide-slate-700 text-xs text-slate-600 dark:text-slate-300">
             {projects.map((p, idx) => {
+              // DEBUG: Check values for "Warning" logic
+              if (idx === 0) console.log("DEBUG RENDER Project[0]:", { id: p.id, school: p.schoolName, pow: p.pow_pdf, dupa: p.dupa_pdf, contract: p.contract_pdf });
+
               const isLocked = p.status === ProjectStatus.Completed;
               const progress = p.accomplishmentPercentage || 0;
 
@@ -216,14 +219,7 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                   <td className="sticky right-0 bg-white dark:bg-slate-800 group-hover:bg-blue-50/30 dark:group-hover:bg-blue-900/20 z-10 p-4 border-l border-slate-50 dark:border-slate-700 text-center">
                     <div className="flex flex-col gap-2">
                       {/* CONDITIONAL ACTION: Upload Docs / View Docs */}
-                      {(!readOnly && (!p.pow_pdf || !p.dupa_pdf || !p.contract_pdf)) && (
-                        <button
-                          onClick={() => onEdit(p, 'docs_only')}
-                          className="w-full py-1.5 bg-red-500 text-white text-[10px] font-bold rounded-lg shadow-md shadow-red-500/30 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center gap-1 animate-pulse"
-                        >
-                          ⚠️ UPLOAD DOCS
-                        </button>
-                      )}
+
 
 
 
@@ -456,6 +452,13 @@ const EngineerProjects = () => {
   };
 
   const handleSaveProject = async (updatedProject) => {
+    console.log("DEBUG SAVE PROJECT PAYLOAD:", {
+       id: updatedProject.id, 
+       pow_len: updatedProject.pow_pdf?.length, 
+       dupa_len: updatedProject.dupa_pdf?.length, 
+       contract_len: updatedProject.contract_pdf?.length 
+    });
+
     const user = auth.currentUser;
     if (!user) return;
 

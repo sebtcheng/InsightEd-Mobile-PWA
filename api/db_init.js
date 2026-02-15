@@ -528,6 +528,49 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to create pending_schools table:`, migErr.message);
     }
+
+    // --- 15. FACILITY REPAIRS TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS facility_repairs (
+                repair_id SERIAL PRIMARY KEY,
+                school_id TEXT NOT NULL,
+                iern TEXT,
+                building_no TEXT,
+                room_no TEXT,
+                remarks TEXT,
+                
+                -- Repair Items (Booleans stored as TRUE/FALSE)
+                repair_roofing BOOLEAN DEFAULT FALSE,
+                repair_ceiling_ext BOOLEAN DEFAULT FALSE,
+                repair_ceiling_int BOOLEAN DEFAULT FALSE,
+                repair_wall_ext BOOLEAN DEFAULT FALSE,
+                repair_partition BOOLEAN DEFAULT FALSE,
+                repair_door BOOLEAN DEFAULT FALSE,
+                repair_windows BOOLEAN DEFAULT FALSE,
+                repair_flooring BOOLEAN DEFAULT FALSE,
+                repair_structural BOOLEAN DEFAULT FALSE,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        // --- MIGRATION: ADD MISSING COLUMNS IF TABLE EXISTS ---
+        await client.query(`
+            ALTER TABLE facility_repairs 
+            ADD COLUMN IF NOT EXISTS repair_roofing BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_ceiling_ext BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_ceiling_int BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_wall_ext BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_partition BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_door BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_windows BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_flooring BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS repair_structural BOOLEAN DEFAULT FALSE;
+        `);
+        console.log(`✅ [${dbLabel}] Facility Repairs Table Initialized & Updated`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init facility_repairs table:`, migErr.message);
+    }
 };
 
 export { initOtpTable, runMigrations };
