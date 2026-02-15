@@ -282,13 +282,15 @@ const LguForm = () => {
     };
 
     // --- SCHOOL VALIDATION ---
-    const handleValidateSchoolId = () => {
+    const handleValidateSchoolId = async () => {
         if (!formData.schoolId) return alert("Please enter School ID");
-        if (formData.schoolId.length !== 6) return alert("School ID must be exactly 6 digits.");
+        // if (formData.schoolId.length !== 6) return alert("School ID must be exactly 6 digits.");
 
-        const found = schoolData.find(s => String(s.school_id) === String(formData.schoolId));
-        if (found) {
-            setFormData(prev => ({
+        const schoolId = formData.schoolId.trim();
+
+        // Helper
+        const updateForm = (found) => {
+             setFormData(prev => ({
                 ...prev,
                 schoolName: found.school_name,
                 region: found.region,
@@ -300,8 +302,35 @@ const LguForm = () => {
                 legislative_district: found.leg_district || prev.legislative_district // Autofill using leg_district
             }));
             alert(`✅ Found: ${found.school_name}`);
+        };
+
+        // 1. ONLINE CHECK
+        try {
+             // Use the specific endpoint for school profile
+             const res = await fetch(`/api/school-profile/${schoolId}`);
+             if (res.ok) {
+                 const found = await res.json();
+                 updateForm(found);
+                 return;
+             } else {
+                 if (navigator.onLine) {
+                     alert(`❌ School ID ${schoolId} not found in database.`);
+                     return;
+                 }
+             }
+        } catch (err) {
+             console.error("API Validation failed:", err);
+             // Fall through to CSV if offline or API error
+        }
+
+        // 2. OFFLINE / FALLBACK CSV
+        console.log("Checking local CSV...");
+        const found = schoolData.find(s => String(s.school_id) === String(schoolId));
+        if (found) {
+            updateForm(found);
+            // alert(`✅ Found (Offline Cache): ${found.school_name}`);
         } else {
-            alert("❌ School ID not found");
+            alert(`❌ School ID ${schoolId} not found (checked DB and Local).`);
         }
     };
 
@@ -394,11 +423,8 @@ const LguForm = () => {
 
             const finalImages = compressedImages.map(img => img.image_data); // Simplified for now as per previous logic
 
-            // 2. Process Docs
-            const processedDocs = [];
-            if (documents.POW) processedDocs.push({ type: 'POW', base64: await convertToBase64(documents.POW) });
-            if (documents.DUPA) processedDocs.push({ type: 'DUPA', base64: await convertToBase64(documents.DUPA) });
-            if (documents.CONTRACT) processedDocs.push({ type: 'CONTRACT', base64: await convertToBase64(documents.CONTRACT) });
+            // 2. Process Docs - REMOVED from payload
+            // processedDocs removed to prevent 413 error. Sequential upload below.
 
             // 3. Payload
             const payload = {
@@ -434,7 +460,7 @@ const LguForm = () => {
             } else {
                 // CREATE MODE
                 payload.images = finalImages;
-                payload.documents = processedDocs;
+                // payload.documents = processedDocs; // REMOVED
 
                 res = await fetch('/api/lgu/save-project', {
                     method: 'POST',
@@ -449,6 +475,41 @@ const LguForm = () => {
             }
 
             const data = await res.json();
+            const targetId = data.project?.project_id || projectId;
+            
+            if (targetId) {
+                 const uploadDoc = async (type, file) => {
+                     if (!file) return;
+                     try {
+                         console.log(`Uploading ${type}...`);
+                         const base64 = await convertToBase64(file);
+                         
+                         const docRes = await fetch('/api/lgu/upload-project-document', {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             body: JSON.stringify({
+                                 projectId: targetId,
+                                 type: type,
+                                 base64: base64,
+                                 uid: auth.currentUser?.uid
+                             })
+                         });
+                         
+                         if (!docRes.ok) throw new Error(`Failed to upload ${type}`);
+                         console.log(`${type} Uploaded!`);
+                     } catch (err) {
+                         console.error(`Failed to upload ${type}:`, err);
+                         alert(`⚠️ Failed to upload ${type}.`);
+                     }
+                };
+
+                // Sequential
+                if (documents.POW) await uploadDoc('POW', documents.POW);
+                if (documents.DUPA) await uploadDoc('DUPA', documents.DUPA);
+                if (documents.CONTRACT) await uploadDoc('CONTRACT', documents.CONTRACT);
+            }
+
+            // const data = await res.json(); // Already read above
             alert(projectId ? "✅ Project Updated Successfully!" : `✅ Project Created! IPC: ${data.ipc}`);
             navigate('/lgu-projects');
 

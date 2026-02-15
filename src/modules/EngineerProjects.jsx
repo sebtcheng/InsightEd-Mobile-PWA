@@ -468,6 +468,12 @@ const EngineerProjects = () => {
       return;
     }
 
+    // CHECK: Completed Projects must have Actual Completion Date
+    if (updatedProject.status === 'Completed' && !updatedProject.actualCompletionDate) {
+      alert("⚠️ DATE REQUIRED\n\nYou cannot mark a project as 'Completed' without specifying the Actual Completion Date.");
+      return;
+    }
+
     // CHECK: Mandatory Location REMOVED per user request
     // if (!updatedProject.latitude || !updatedProject.longitude) {
     //   alert("⚠️ LOCATION REQUIRED\n\nPlease capture the project coordinates (Latitude/Longitude) before saving.");
@@ -476,7 +482,19 @@ const EngineerProjects = () => {
 
     setIsUploading(true);
     try {
-      const body = { ...updatedProject, uid: user.uid, modifiedBy: userName };
+      // Create payload copy
+      const payload = { ...updatedProject, uid: user.uid, modifiedBy: userName };
+
+      // OPTIMIZATION: Remove large existing docs if they haven't changed
+      // This prevents 413 Payload Too Large errors on servers with low limits
+      const original = projects.find(p => p.id === updatedProject.id);
+      if (original) {
+        if (original.pow_pdf === payload.pow_pdf) delete payload.pow_pdf;
+        if (original.dupa_pdf === payload.dupa_pdf) delete payload.dupa_pdf;
+        if (original.contract_pdf === payload.contract_pdf) delete payload.contract_pdf;
+      }
+
+      const body = payload;
       if (!navigator.onLine) {
         await addEngineerToOutbox({
           url: `${API_BASE}/api/update-project/${updatedProject.id}`,

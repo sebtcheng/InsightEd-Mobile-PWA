@@ -9,6 +9,8 @@ import { initOtpTable, runMigrations } from './db_init.js';
 
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs'; // Added for seed
+import csv from 'csv-parser'; // Added for seed
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
@@ -49,7 +51,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-app.use(express.json({ limit: '200mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // --- DATABASE CONNECTION ---
 const isLocal = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1'));
@@ -191,6 +193,17 @@ const initDB = async () => {
     `);
     console.log("✅ DB Init: LGU Schema verified (lgu_forms + extra columns + lgu_image).");
 
+    // --- MIGRATION: ADD IPC TO ENGINEER_IMAGE AND BACKFILL ---
+    await pool.query(`
+      ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT;
+      
+      UPDATE engineer_image ei
+      SET ipc = ef.ipc
+      FROM engineer_form ef
+      WHERE ei.project_id = ef.project_id
+      AND ei.ipc IS NULL;
+    `);
+    console.log("✅ DB Init: Engineer Image IPC column verified and backfilled.");
 
 
     // --- MIGRATION: ADD MISSING COLUMNS (CLASSROOMS, SITES, STOREYS, FUNDS) ---
@@ -198,13 +211,22 @@ const initDB = async () => {
       ALTER TABLE engineer_form 
       ADD COLUMN IF NOT EXISTS number_of_classrooms INTEGER DEFAULT 0,
       ADD COLUMN IF NOT EXISTS number_of_sites INTEGER DEFAULT 1,
-      ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS internal_description TEXT,
-      ADD COLUMN IF NOT EXISTS external_description TEXT;
+        ADD COLUMN IF NOT EXISTS number_of_storeys INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS funds_utilized NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS internal_description TEXT,
+              ADD COLUMN IF NOT EXISTS external_description TEXT;
     `);
     console.log("✅ DB Init: Engineer Form extra columns verified.");
 
+    // --- MIGRATION: ADD IPC TO ENGINEER_IMAGE (SECONDARY DB) ---
+    if (poolNew) {
+      try {
+        await poolNew.query(`ALTER TABLE engineer_image ADD COLUMN IF NOT EXISTS ipc TEXT; `);
+        console.log("✅ DB Init: Secondary DB schema synced (engineer_image + ipc).");
+      } catch (err) {
+        console.error("⚠️ Secondary DB Schema Sync Error:", err.message);
+      }
+    }
     // --- MIGRATION: ADD BUILDABLE SPACES ---
     await pool.query(`
       CREATE TABLE IF NOT EXISTS buildable_spaces (
@@ -289,11 +311,12 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     // CHANGED: Use 'schools' table instead of 'school_profiles'
+    console.log(`🔎 Searching for School ID: ${schoolId} in 'schools' table...`);
     const query = `
             SELECT school_id, school_name, region, division, latitude, longitude 
             FROM schools 
             WHERE school_id = $1
-        `;
+      `;
     const result = await pool.query(query, [schoolId]);
 
     if (result.rows.length > 0) {
@@ -404,6 +427,123 @@ app.get('/api/debug/scan/:uid', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- DEBUG: SEED SCHOOLS (For Production Fix) ---
+app.get('/api/debug/seed-schools', async (req, res) => {
+  console.log("🌱 Seeding Schools initiated...");
+  const client = await pool.connect();
+
+  try {
+    // 1. Fetch CSV from Public URL (Self-hosted)
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const csvUrl = `${protocol}://${host}/schools.csv`;
+    console.log(`📥 Fetching CSV from: ${csvUrl}`);
+
+    const response = await fetch(csvUrl);
+    if (!response.ok) throw new Error(`Failed to fetch CSV: ${response.statusText}`);
+
+    const csvText = await response.text();
+
+    // 2. Parse CSV (Manual Parsing for simplicity without filesystem stream if fetch returns text)
+    // Or use csv-parser with a readable stream from string
+    const results = [];
+    const Readable = require('stream').Readable;
+    const s = new Readable();
+    s.push(csvText);
+    s.push(null); // end of stream
+
+    await new Promise((resolve, reject) => {
+      s.pipe(csv())
+        .on('data', (data) => results.push(data))
+        .on('end', resolve)
+        .on('error', reject);
+    });
+
+    console.log(`📊 Parsed ${results.length} schools.`);
+
+    if (results.length === 0) return res.json({ message: "CSV is empty" });
+
+    // 3. Insert Data
+    // Create table if not exists
+    await client.query(`
+            CREATE TABLE IF NOT EXISTS schools (
+                school_id TEXT PRIMARY KEY,
+                school_name TEXT,
+                region TEXT,
+                division TEXT,
+                leg_district TEXT,
+                province TEXT,
+                municipality TEXT,
+                barangay TEXT,
+                latitude TEXT,
+                longitude TEXT,
+                sub_office TEXT,
+                school_type TEXT,
+                school_abbreviation TEXT
+            );
+        `);
+
+    // Batch Insert
+    const BATCH_SIZE = 1000;
+    let inserted = 0;
+
+    // We use ON CONFLICT DO NOTHING to avoid errors on duplicates
+    for (let i = 0; i < results.length; i += BATCH_SIZE) {
+      const batch = results.slice(i, i + BATCH_SIZE);
+      const values = [];
+      const placeholders = [];
+
+      batch.forEach((row, idx) => {
+        // Map CSV headers to columns (assuming CSV headers match or we map them)
+        // Use sanitize logic if needed, but assuming CSV keys match for now or just generic mapping
+        // Let's use specific columns to be safe based on import_schools.js
+        // import_schools uses dynamic headers.
+        // We'll trust the CSV keys match DB columns for now or just map known ones.
+        // Actually, let's just log headers first if we can?
+        // results[0] keys are headers.
+      });
+
+      // Re-use logic from import script (Dynamic Columns)
+      if (batch.length === 0) continue;
+      const headers = Object.keys(batch[0]);
+
+      // Construct query
+      const batchValues = [];
+      batch.forEach((row, rIdx) => {
+        const rowVals = Object.values(row);
+        rowVals.forEach(v => batchValues.push(v));
+
+        const rowPlaceholders = rowVals.map((_, cIdx) => `$${(rIdx * headers.length) + cIdx + 1}`);
+        placeholders.push(`(${rowPlaceholders.join(',')})`);
+      });
+
+      const query = `
+                INSERT INTO schools (${headers.map(h => h.replace(/[^a-z0-9_]/gi, '_').toLowerCase()).join(',')})
+                VALUES ${placeholders.join(',')}
+                ON CONFLICT (school_id) DO UPDATE SET 
+                    school_name = EXCLUDED.school_name,
+                    region = EXCLUDED.region,
+                    division = EXCLUDED.division,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude
+            `;
+
+      // Note: Postgres params limit is 65535. 1000 rows * 13 cols = 13000. Safe.
+      await client.query(query, batchValues);
+      inserted += batch.length;
+      console.log(`... Inserted/Updated ${inserted} rows`);
+    }
+
+    res.json({ success: true, count: results.length, inserted });
+
+  } catch (err) {
+    console.error("Seed Error:", err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  } finally {
+    client.release();
   }
 });
 
@@ -3969,8 +4109,8 @@ app.post('/api/save-project', async (req, res) => {
     // 4. Insert Images (If they exist in the payload)
     if (data.images && Array.isArray(data.images) && data.images.length > 0) {
       const imageQuery = `
-        INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
+        VALUES ($1, $2, $3, $4, $5)
       `;
 
       for (const imgItem of data.images) {
@@ -3978,8 +4118,16 @@ app.post('/api/save-project', async (req, res) => {
         const imgData = typeof imgItem === 'string' ? imgItem : imgItem.image_data;
         const category = typeof imgItem === 'object' ? imgItem.category : 'Internal';
 
-        await client.query(imageQuery, [newProjectId, imgData, data.uid, category]);
+        await client.query(imageQuery, [newProjectId, imgData, data.uid, category, newIpc]);
       }
+    } else {
+      // DEFAULT RECORD (Empty string for image_data to avoid NOT NULL issues)
+      console.log("ℹ️ No images uploaded. Creating default tracking record.");
+      const defaultImageQuery = `
+            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
+            VALUES ($1, '', $2, 'Default', $3)
+        `;
+      await client.query(defaultImageQuery, [newProjectId, data.uid, newIpc]);
     }
 
     // 5. NO External Document Table Insert needed (Stored in engineer_form)
@@ -4006,14 +4154,21 @@ app.post('/api/save-project', async (req, res) => {
         // 2. Insert Images
         if (data.images && Array.isArray(data.images) && data.images.length > 0) {
           const imageQuery = `
-            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
+            VALUES ($1, $2, $3, $4, $5)
           `;
           for (const imgItem of data.images) {
             const imgData = typeof imgItem === 'string' ? imgItem : imgItem.image_data;
             const category = typeof imgItem === 'object' ? imgItem.category : 'Internal';
-            await clientNew.query(imageQuery, [newProjIdSecondary, imgData, data.uid, category]);
+            await clientNew.query(imageQuery, [newProjIdSecondary, imgData, data.uid, category, newIpc]);
           }
+        } else {
+          // DEFAULT RECORD (Secondary - Empty string)
+          const defaultImageQuery = `
+                INSERT INTO "engineer_image" (project_id, image_data, uploaded_by, category, ipc)
+                VALUES ($1, '', $2, 'Default', $3)
+            `;
+          await clientNew.query(defaultImageQuery, [newProjIdSecondary, data.uid, newIpc]);
         }
 
         await clientNew.query('COMMIT');
@@ -4430,8 +4585,25 @@ app.post('/api/upload-image', async (req, res) => {
   if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
 
   try {
-    const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by, category) VALUES ($1, $2, $3, $4) RETURNING id;`;
-    const result = await pool.query(query, [projectId, imageData, uploadedBy, category || 'Internal']);
+    // 1. Fetch IPC first
+    const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+    const ipc = ipcRes.rows.length > 0 ? ipcRes.rows[0].ipc : null;
+
+    // 2. Resolve Latest Project ID (Fix for Updates)
+    let finalProjectId = projectId;
+    if (ipc) {
+      const latestRes = await pool.query(
+        'SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1',
+        [ipc]
+      );
+      if (latestRes.rows.length > 0) {
+        finalProjectId = latestRes.rows[0].project_id;
+      }
+    }
+
+    // 3. Insert with Latest Project ID
+    const query = `INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) VALUES ($1, $2, $3, $4, $5) RETURNING id;`;
+    const result = await pool.query(query, [finalProjectId, imageData, uploadedBy, category || 'Internal', ipc]);
 
     await logActivity(uploadedBy, 'Engineer', 'Engineer', 'UPLOAD', `Project ID: ${projectId}`, `Uploaded a new site image (${category || 'Internal'})`);
     res.status(201).json({ success: true, imageId: result.rows[0].id });
@@ -4439,41 +4611,68 @@ app.post('/api/upload-image', async (req, res) => {
     // --- DUAL WRITE: UPLOAD IMAGE ---
     if (poolNew) {
       try {
-        console.log("ðŸ”„ Dual-Write: Syncing Project Image...");
-        // Re-use query? Yes.
-        // NOTE: The ID returned might be different on secondary, but we don't return it here for dual-write context.
-        // We just ensure the image exists there.
-        // However, we need to map the project_id correctly if it differs.
-        // But for this simplified setup, we assume IPC/IDs are synced or we rely on the Primary ID logic (assuming simple replication).
-        // Actually, in `save-project` we used the same parameters.
-        // Ideally we should look up the project by IPC, but `upload-image` takes `projectId`.
-        // If `projectId` (Serial PK) is different on Secondary, this will FAIL or attach to WRONG project.
+        console.log("🔄 Dual-Write: Syncing Project Image...");
+        if (ipc) {
+          // Insert into Secondary using IPC for linking (Project ID might differ but IPC is constant)
+          // We'll try to find the project_id on the secondary DB that has this IPC (latest one?)
+          // Or just insert blindly if secondary table has IPC column?
+          // Assuming secondary has same schema update applied via some mechanism (or we do it here if possible, but migrations run on start).
 
-        // Safer Approach: Look up project on Secondary by IPC?
-        // But we don't have IPC here. We only have `projectId`.
-        // We must fetch the IPC from Primary first to find the correct project on Secondary.
-
-        // 1. Get IPC from Primary using projectId
-        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
-        if (ipcRes.rows.length > 0) {
-          const ipc = ipcRes.rows[0].ipc;
-
-          // 2. Insert into Secondary using Subquery for Project ID based on IPC
+          // Ideally, we find the project_id on secondary that matches this IPC.
           const dwQuery = `
-                INSERT INTO engineer_image (project_id, image_data, uploaded_by) 
-                VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1), $2, $3);
+                INSERT INTO engineer_image (project_id, image_data, uploaded_by, category, ipc) 
+                VALUES ((SELECT project_id FROM engineer_form WHERE ipc = $1 ORDER BY project_id DESC LIMIT 1), $2, $3, $4, $1);
             `;
-          await poolNew.query(dwQuery, [ipc, imageData, uploadedBy]);
-          console.log("âœ… Dual-Write: Project Image Synced via IPC!");
+          await poolNew.query(dwQuery, [ipc, imageData, uploadedBy, category || 'Internal']);
+          console.log("✅ Dual-Write: Project Image Synced via IPC!");
         }
-
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Upload Image):", dwErr.message);
+        console.error("❌ Dual-Write Error (Upload Image):", dwErr.message);
       }
     }
   } catch (err) {
-    console.error("âŒ Image Upload Error:", err.message);
+    console.error("❌ Image Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save image to database" });
+  }
+});
+
+// --- 20b. POST: Upload Project Document (Sequential) ---
+app.post('/api/upload-project-document', async (req, res) => {
+  const { projectId, type, base64, uid } = req.body;
+  if (!projectId || !type || !base64) return res.status(400).json({ error: "Missing required data" });
+
+  let column = '';
+  if (type === 'POW') column = 'pow_pdf';
+  else if (type === 'DUPA') column = 'dupa_pdf';
+  else if (type === 'CONTRACT') column = 'contract_pdf';
+  else return res.status(400).json({ error: "Invalid document type" });
+
+  try {
+    const query = `UPDATE engineer_form SET ${column} = $1 WHERE project_id = $2`;
+    await pool.query(query, [base64, projectId]);
+
+    // Optional: Log activity
+    // await logActivity(uid, 'Engineer', 'Engineer', 'UPLOAD', \`Project ID: \${projectId}\`, \`Uploaded \${type}\`);
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      try {
+        // Get IPC to find project on secondary
+        const ipcRes = await pool.query('SELECT ipc FROM engineer_form WHERE project_id = $1', [projectId]);
+        if (ipcRes.rows.length > 0) {
+          const ipc = ipcRes.rows[0].ipc;
+          await poolNew.query(`UPDATE engineer_form SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
+          console.log(`✅ Dual-Write: ${type} Synced via IPC!`);
+        }
+      } catch (dwErr) {
+        console.error("❌ Dual-Write Doc Upload Error:", dwErr.message);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Doc Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save document" });
   }
 });
 
@@ -4481,28 +4680,26 @@ app.post('/api/upload-image', async (req, res) => {
 
 
 
-
-// --- 21. GET: Fetch Project Images (Active) ---
 app.get('/api/project-images/:projectId', async (req, res) => {
   const { projectId } = req.params;
   try {
-    // FIXED: Included image_data so frontend can render them
-    // AND fetch by IPC to ensure persistence across updates (new project_ids)
+    // Fetch via IPC column directly (much faster and cleaner)
+    // We first need the IPC of the requested project
+
     const query = `
-      SELECT id, uploaded_by, created_at, image_data, category 
+      SELECT id, uploaded_by, created_at, image_data, category, ipc 
       FROM engineer_image 
-      WHERE project_id IN (
-          SELECT project_id FROM engineer_form WHERE ipc = (
-              SELECT ipc FROM engineer_form WHERE project_id = $1
-          )
+      WHERE ipc = (
+          SELECT ipc FROM engineer_form WHERE project_id = $1
       ) 
+      OR project_id = $1 -- Fallback for old images before migration if backfill missed anything (unlikely)
       ORDER BY created_at DESC;
     `;
     const result = await pool.query(query, [projectId]);
 
     res.json(result.rows);
   } catch (err) {
-    console.error("âŒ Error fetching project images:", err.message);
+    console.error("❌ Error fetching project images:", err.message);
     res.status(500).json({ error: "Failed to fetch images" });
   }
 });
@@ -6590,6 +6787,43 @@ app.post('/api/lgu/upload-image', async (req, res) => {
   } catch (err) {
     console.error("❌ LGU Image Upload Error:", err.message);
     res.status(500).json({ error: "Failed to save image" });
+  }
+});
+
+// --- LGU 2b. POST: Upload Project Document (LGU Sequential) ---
+app.post('/api/lgu/upload-project-document', async (req, res) => {
+  const { projectId, type, base64, uid } = req.body;
+
+  if (!projectId || !type || !base64) return res.status(400).json({ error: "Missing required data" });
+
+  let column = '';
+  if (type === 'POW') column = 'pow_pdf';
+  else if (type === 'DUPA') column = 'dupa_pdf';
+  else if (type === 'CONTRACT') column = 'contract_pdf';
+  else return res.status(400).json({ error: "Invalid document type" });
+
+  try {
+    const query = `UPDATE lgu_forms SET ${column} = $1 WHERE project_id = $2`;
+    await pool.query(query, [base64, projectId]);
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      try {
+        const ipcRes = await pool.query('SELECT ipc FROM lgu_forms WHERE project_id = $1', [projectId]);
+        if (ipcRes.rows.length > 0) {
+          const ipc = ipcRes.rows[0].ipc;
+          await poolNew.query(`UPDATE lgu_forms SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
+          console.log(`✅ Dual-Write LGU: ${type} Synced via IPC!`);
+        }
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Doc Upload Error:", dwErr.message);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ LGU Doc Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save document" });
   }
 });
 
