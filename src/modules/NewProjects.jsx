@@ -366,7 +366,9 @@ const NewProjects = () => {
                 const found = await res.json();
                 updateForm(found);
             } else {
-                alert("❌ School ID not found in database.");
+                if (navigator.onLine) {
+                     alert(`❌ School ID ${schoolId} not found in database.`);
+                }
                 setFormData(prev => ({
                     ...prev,
                     schoolName: '',
@@ -544,12 +546,8 @@ const NewProjects = () => {
                 compressedImages.push({ image_data: base64, category: 'External' });
             }
 
-            // B. Prepare Documents (Base64)
-            // Convert docs to Base64 to send DIRECTLY to DB (No Firebase)
-            const processedDocs = [];
-            if (documents.POW) processedDocs.push({ type: 'POW', base64: await convertFullFileToBase64(documents.POW) });
-            if (documents.DUPA) processedDocs.push({ type: 'DUPA', base64: await convertFullFileToBase64(documents.DUPA) });
-            if (documents.CONTRACT) processedDocs.push({ type: 'CONTRACT', base64: await convertFullFileToBase64(documents.CONTRACT) });
+            // B. Prepare Documents (Base64) - REMOVED from initial payload
+            // We will upload them sequentially AFTER project creation
 
             // C. Construct Payload
             const projectBody = {
@@ -558,7 +556,7 @@ const NewProjects = () => {
                 uid: auth.currentUser?.uid,
                 modifiedBy: auth.currentUser?.displayName || 'Engineer',
                 images: compressedImages,
-                documents: processedDocs, // Send docs directly!
+                // documents: processedDocs, // REMOVED: Sending docs separately
                 statusAsOfDate: new Date().toISOString()
             };
 
@@ -575,7 +573,7 @@ const NewProjects = () => {
 
             if (!navigator.onLine) {
                 await addEngineerToOutbox(payload);
-                alert("📁 No internet. Project & Docs saved to Sync Center.");
+                alert("📁 No internet. Project (Metadata & Images) saved to Sync Center.\n⚠️ Documents must be uploaded when online.");
                 setIsSubmitting(false);
                 navigate('/engineer-dashboard');
                 return;
@@ -596,11 +594,55 @@ const NewProjects = () => {
             });
 
             if (!projectRes.ok) {
-                const errorData = await projectRes.json();
-                throw new Error(errorData.message || 'Failed to save project');
+                const contentType = projectRes.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const errorData = await projectRes.json();
+                    throw new Error(errorData.message || 'Failed to save project');
+                } else {
+                    const errorText = await projectRes.text();
+                    throw new Error(`Server Error (${projectRes.status}): ${projectRes.statusText}`);
+                }
             }
 
             const projectData = await projectRes.json();
+            
+            // --- E. SEQUENTIAL DOCUMENT UPLOADS ---
+            const newProjectId = projectData.project.project_id;
+            console.log("Project Created! ID:", newProjectId);
+
+            // Helper function for doc upload
+            const uploadDoc = async (type, file) => {
+                if (!file) return;
+                // setUploadProgress(`Uploading ${type}...`); // If we had this state
+                try {
+                   console.log(`Uploading ${type}...`);
+                    const base64 = await convertFullFileToBase64(file);
+                    const uploadEndpoint = (userRole === 'Local Government Unit') ? '/api/lgu/upload-project-document' : '/api/upload-project-document';
+                    
+                    const docRes = await fetch(uploadEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            projectId: newProjectId,
+                            type: type,
+                            base64: base64,
+                            uid: auth.currentUser?.uid
+                        })
+                    });
+                    
+                    if (!docRes.ok) throw new Error(`Failed to upload ${type}`);
+                    console.log(`${type} Uploaded!`);
+                } catch (err) {
+                    console.error(`Failed to upload ${type}:`, err);
+                    alert(`⚠️ Failed to upload ${type}. Please try updating the project later.`);
+                    // Continue to next doc...
+                }
+            };
+
+            // Process sequentially
+            if (documents.POW) await uploadDoc('POW', documents.POW);
+            if (documents.DUPA) await uploadDoc('DUPA', documents.DUPA);
+            if (documents.CONTRACT) await uploadDoc('CONTRACT', documents.CONTRACT);
             const ipc = projectData.ipc;
 
             alert(`✅ Project ${ipc} created and all documents saved successfully!`);
