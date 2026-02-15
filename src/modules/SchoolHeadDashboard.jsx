@@ -9,7 +9,7 @@ import "swiper/css/pagination";
 // Icons (Using the libraries you already have installed)
 import { TbSearch, TbX, TbChevronRight, TbSchool, TbUsers, TbBooks, TbActivity, TbBell, TbTrophy, TbReportAnalytics } from "react-icons/tb";
 import { LuLayoutDashboard, LuFileCheck, LuHistory } from "react-icons/lu";
-import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle, FiCheckSquare } from "react-icons/fi";
+import { FiUser, FiBox, FiLayers, FiAlertCircle, FiAlertTriangle, FiCheckSquare, FiActivity } from "react-icons/fi";
 
 import { auth, db, app } from '../firebase'; // Import app
 import { doc, getDoc } from 'firebase/firestore';
@@ -57,6 +57,10 @@ const SchoolHeadDashboard = () => {
     const [validationTimer, setValidationTimer] = useState(30);
     const [canValidate, setCanValidate] = useState(false);
 
+    // --- SINGLE SCHOOL VALIDATION STATE ---
+    const [isValidating, setIsValidating] = useState(true); // Start with loading to prevent score flash
+    const [showExcellentModal, setShowExcellentModal] = useState(false);
+
     useEffect(() => {
         let timer;
         if (showValidationModal && validationTimer > 0) {
@@ -103,6 +107,67 @@ const SchoolHeadDashboard = () => {
             alert("An error occurred during validation.");
         }
     };
+
+    /**
+     * Trigger Single School Fraud Detection
+     * @param {boolean} isManual - Whether triggered by button click (shows alerts) or auto (silent)
+     */
+    const handleValidateDataHealth = async (isManual = true) => {
+        if (!schoolProfile?.school_id) return;
+
+        try {
+            setIsValidating(true); // Always show loading state
+            const response = await fetch('/api/validate-school-health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ school_id: schoolProfile.school_id })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Refresh Profile Data
+                const targetUid = impersonatedUid || (auth.currentUser ? auth.currentUser.uid : null);
+                if (targetUid) {
+                    const profileRes = await fetch(`/api/school-by-user/${targetUid}`);
+                    const profileJson = await profileRes.json();
+                    if (profileJson.exists && profileJson.data) {
+                        setSchoolProfile(profileJson.data);
+                        if (isManual) {
+                            // CHECK IF EXCELLENT (Score 100 or 'Excellent' desc)
+                            // Note: API might not return the new score directly, so we check the fresh profile
+                            if (profileJson.data.data_health_score === 100 || profileJson.data.data_health_description === 'Excellent') {
+                                setShowExcellentModal(true);
+                            } else {
+                                alert("Validation complete. Data Health Score updated.");
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (isManual) alert("Validation failed: " + (data.error || "Unknown error"));
+            }
+        } catch (error) {
+            console.error("Validation Request Error:", error);
+            if (isManual) alert("Failed to validate data health.");
+        } finally {
+            setIsValidating(false); // Always clear loading state
+        }
+    };
+
+    // --- AUTO-VALIDATION ON LOAD ---
+    useEffect(() => {
+        if (schoolProfile?.school_id) {
+            // Check if we should auto-validate (e.g., if it hasn't been done this session)
+            // For now, per user request "When i click Home", we run it every time dashboard loads.
+            // We use a small timeout to let the UI settle
+            const timer = setTimeout(() => {
+                console.log("Health Check: Auto-triggering validation...");
+                handleValidateDataHealth(false); // Silent mode
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [schoolProfile?.school_id]); // Only run when school_id changes (initial load)
 
     // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
     const SEARCHABLE_ITEMS = [
@@ -466,54 +531,25 @@ const SchoolHeadDashboard = () => {
                                         }`} size={20} />
                                 </div>
                                 <div className="flex-1">
-                                    <h4 className="font-bold text-sm flex items-center gap-2">
-                                        {schoolProfile.data_health_description === 'Critical' ? 'Critical Data Quality Issues' :
-                                            schoolProfile.data_health_description === 'Fair' ? 'Data Quality Issues Need Attention' :
-                                                'Minor Data Quality Issues Detected'}
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${schoolProfile.data_health_description === 'Critical' ? 'bg-red-200 text-red-800' :
-                                            schoolProfile.data_health_description === 'Fair' ? 'bg-amber-200 text-amber-800' :
-                                                'bg-blue-200 text-blue-800'
-                                            }`}>
-                                            {schoolProfile.data_health_description === 'Critical' ? 'Action Needed' : 'Please Review'}
-                                        </span>
-                                    </h4>
+                                    <div className="flex justify-between items-center w-full mb-3">
+                                        <h4 className="font-bold text-xl flex items-center gap-2 uppercase text-[#004A99]">
+                                            DATA HEALTH SCORE: <span className="text-3xl font-black">{schoolProfile.data_health_score}</span>
+                                        </h4>
+                                    </div>
                                     <p className="text-xs opacity-90 leading-relaxed mt-1 mb-2">
                                         Our system detected the following data quality issues:
                                     </p>
                                     {schoolProfile.data_quality_issues && schoolProfile.data_quality_issues !== 'None' && (
-                                        <div className="bg-white/60 rounded-lg p-3 text-xs font-semibold border border-opacity-50 mb-2">
+                                        <div className="bg-white/60 rounded-lg p-3 text-xs font-semibold border border-opacity-50 mb-2 whitespace-pre-wrap">
                                             {schoolProfile.data_quality_issues}
                                         </div>
                                     )}
-                                    {/* Note Removed from here */}
 
-                                    <div className="mt-2 p-2 bg-white/50 rounded-lg">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-xs font-bold uppercase tracking-wider opacity-80">Data Health Score:</span>
-                                            <span className={`text-sm font-black ${schoolProfile.data_health_score <= 50 ? 'text-red-700' :
-                                                schoolProfile.data_health_score <= 85 ? 'text-amber-700' :
-                                                    'text-green-700'
-                                                }`}>
-                                                {schoolProfile.data_health_score}
-                                            </span>
-                                        </div>
-                                        <p className="text-xs font-medium leading-snug">
-                                            {schoolProfile.data_health_score <= 50
-                                                ? "Major data anomaly/inconsistency detected. Requires major data overhaul"
-                                                : schoolProfile.data_health_score <= 85
-                                                    ? "Minor inconsistencies found. Please review flagged items."
-                                                    : "Data is accurate and consistent."}
-                                        </p>
-                                        <div className="flex justify-end mt-2">
-                                            <span className="text-[10px] opacity-75 italic text-right">
-                                                Note: Data Health Score computation may take several minutes to refresh due to volume of updates. Please check back again in a few moments.
-                                            </span>
-                                        </div>
 
-                                    </div>
                                 </div>
                             </div>
                         )}
+
 
                         {/* --- DEADLINE BANNER (THE WAGAYWAY) --- */}
                         {deadlineDate && showBanner && (() => {
@@ -560,11 +596,34 @@ const SchoolHeadDashboard = () => {
                         })()}
 
                         {/* --- NEW UPDATE MODAL --- */}
+                        {/* --- EXCELLENT HEALTH MODAL --- */}
+                        {showExcellentModal && (
+                            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-emerald-200 dark:border-emerald-900/40 text-center">
+                                    <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+                                        <FiCheckSquare className="text-emerald-600 w-8 h-8" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white">Data Health is Excellent!</h3>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                                        Your school's data quality is in perfect condition. Great job!
+                                    </p>
+                                    <button
+                                        onClick={() => setShowExcellentModal(false)}
+                                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
+                                    >
+                                        Keep it up!
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* --- NEW UPDATE MODAL --- */}
                         {isUpdateAvailable && (
                             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
                                 <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-emerald-200 dark:border-emerald-900/40">
                                     {/* Glowing Background Effect */}
                                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+
                                     <div className="absolute -top-10 -right-10 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
 
                                     <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto text-emerald-500 mb-2 shadow-sm animate-pulse">
@@ -613,13 +672,31 @@ const SchoolHeadDashboard = () => {
                                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wide mt-1">Forms</p>
                             </div>
 
-                            {/* Learners Highlight */}
-                            <div className="col-span-1 bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 p-4 rounded-2xl shadow-xl shadow-blue-900/20 flex flex-col justify-center items-center text-center text-white relative overflow-hidden">
+                            {/* Data Health Score Highlight */}
+                            <div className={`col-span-1 p-4 rounded-2xl shadow-xl flex flex-col justify-center items-center text-center text-white relative overflow-hidden ${isValidating
+                                    ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
+                                    : schoolProfile?.data_health_score === 100
+                                        ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-600 dark:to-emerald-800 shadow-emerald-900/20'
+                                        : schoolProfile?.data_health_score >= 80
+                                            ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
+                                            : schoolProfile?.data_health_score >= 50
+                                                ? 'bg-gradient-to-br from-amber-500 to-amber-700 dark:from-amber-600 dark:to-amber-800 shadow-amber-900/20'
+                                                : 'bg-gradient-to-br from-red-500 to-red-700 dark:from-red-600 dark:to-red-800 shadow-red-900/20'
+                                }`}>
                                 <div className="absolute top-0 right-0 p-2 opacity-10">
-                                    <TbUsers size={40} />
+                                    <FiCheckSquare size={40} />
                                 </div>
-                                <p className="text-2xl font-bold leading-none">{stats.enrollment || 0}</p>
-                                <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">Learners</p>
+                                {isValidating ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent mb-1"></div>
+                                        <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">Checking Data Health</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-2xl font-bold leading-none">{schoolProfile?.data_health_score ?? '--'}</p>
+                                        <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">Health Score</p>
+                                    </>
+                                )}
                             </div>
                         </div>
 
@@ -726,8 +803,7 @@ const SchoolHeadDashboard = () => {
                         </div> */}
 
                     </div>
-
-                </div>
+                </div >
             </PageTransition >
 
             {
@@ -763,50 +839,52 @@ const SchoolHeadDashboard = () => {
             }
 
             {/* --- DATA VALIDATION MODAL --- */}
-            {showValidationModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-6 relative overflow-hidden border border-red-200 dark:border-red-900/40">
-                        {/* Header */}
-                        <div className="text-center">
-                            <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto text-red-600 mb-4 shadow-sm">
-                                <FiCheckSquare size={32} />
+            {
+                showValidationModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-6 relative overflow-hidden border border-red-200 dark:border-red-900/40">
+                            {/* Header */}
+                            <div className="text-center">
+                                <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto text-red-600 mb-4 shadow-sm">
+                                    <FiCheckSquare size={32} />
+                                </div>
+                                <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+                                    Affirm Data Accuracy
+                                </h2>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                    Please read the following statement carefully.
+                                </p>
                             </div>
-                            <h2 className="text-xl font-bold text-slate-800 dark:text-white">
-                                Affirm Data Accuracy
-                            </h2>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                Please read the following statement carefully.
-                            </p>
-                        </div>
 
-                        {/* Statement */}
-                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm leading-relaxed font-medium text-justify">
-                            "I affirm that despite the data inconsistencies detected by the system, the data submitted are <strong className="text-slate-900 dark:text-white">TRUE</strong> and <strong className="text-slate-900 dark:text-white">ACCURATE</strong>. I accept full responsibility for the integrity of this report."
-                        </div>
+                            {/* Statement */}
+                            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm leading-relaxed font-medium text-justify">
+                                "I affirm that despite the data inconsistencies detected by the system, the data submitted are <strong className="text-slate-900 dark:text-white">TRUE</strong> and <strong className="text-slate-900 dark:text-white">ACCURATE</strong>. I accept full responsibility for the integrity of this report."
+                            </div>
 
-                        {/* Actions */}
-                        <div className="space-y-3">
-                            <button
-                                onClick={handleConfirmValidation}
-                                disabled={!canValidate}
-                                className={`w-full py-3.5 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2
+                            {/* Actions */}
+                            <div className="space-y-3">
+                                <button
+                                    onClick={handleConfirmValidation}
+                                    disabled={!canValidate}
+                                    className={`w-full py-3.5 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2
                                     ${canValidate
-                                        ? 'bg-red-600 hover:bg-red-700 text-white hover:shadow-red-600/30 active:scale-[0.98]'
-                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
-                            >
-                                {canValidate ? "I Affirm & Validate" : `Please wait ${validationTimer}s...`}
-                            </button>
+                                            ? 'bg-red-600 hover:bg-red-700 text-white hover:shadow-red-600/30 active:scale-[0.98]'
+                                            : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
+                                >
+                                    {canValidate ? "I Affirm & Validate" : `Please wait ${validationTimer}s...`}
+                                </button>
 
-                            <button
-                                onClick={() => setShowValidationModal(false)}
-                                className="w-full py-3 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-semibold rounded-xl transition-colors"
-                            >
-                                Go Back / Review Data
-                            </button>
+                                <button
+                                    onClick={() => setShowValidationModal(false)}
+                                    className="w-full py-3 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-semibold rounded-xl transition-colors"
+                                >
+                                    Go Back / Review Data
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <BottomNav userRole="School Head" />
 

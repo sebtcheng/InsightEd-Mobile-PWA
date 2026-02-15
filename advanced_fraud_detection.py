@@ -488,7 +488,7 @@ def update_database(df, engine, target_school_id=None):
     except Exception as e:
         print(f"Failed to update database: {e}")
 
-def update_school_summary_table(df, engine):
+def update_school_summary_table(df, engine, target_school_id=None):
     print("\nUpdating School Summary Table...")
     
     try:
@@ -641,6 +641,16 @@ def update_school_summary_table(df, engine):
         # 3. Upsert into Database (Temp Table Strategy)
         # We'll use a Temp Table to load data efficiently, then UPSERT into school_summary
         
+        # FILTER IF TARGETING SPECIFIC SCHOOL
+        if target_school_id:
+            print(f"Targeted Summary Update: Filtering for School ID {target_school_id}")
+            # Ensure target_school_id is string for matching
+            summary_df = summary_df[summary_df['school_id'].astype(str) == str(target_school_id)]
+            
+            if summary_df.empty:
+                print(f"Warning: Target school {target_school_id} not found in processed summary data.")
+                return
+        
         # Prepare Data
         # Ensure all columns match DB schema types
         if 'net_learners' in summary_df.columns:
@@ -717,7 +727,7 @@ def update_school_summary_table(df, engine):
         import traceback
         traceback.print_exc()
 
-def analyze_school_summary(engine):
+def analyze_school_summary(engine, target_school_id=None):
     """
     Phase 2: Load school_summary and perform fraud detection analysis.
     This replaces the original fraud detection that used school_profiles.
@@ -863,23 +873,26 @@ def analyze_school_summary(engine):
         df['zero_flag_count'] = df[zero_flags].sum(axis=1)
         df['other_flag_count'] = df[other_flags].sum(axis=1)
         
+        
         # Heavy penalty for zero values (20 points each), lighter for anomalies (5 points each)
         # BASE CALCULATION
         df['calculated_score'] = np.maximum(100 - (df['zero_flag_count'] * 20) - (df['other_flag_count'] * 5), 0)
         
         # === OPTIMIZATION: STRICT CAPS (Vectorized) ===
-        # 1. No Learners = Score 0 (Critical)
+        # 1. No Learners OR Missing Enrollment Data = Score 0 (Critical)
         # 2. Missing Key Resources (Teachers/Classrooms) = Max Score 75 (Fair)
         
         # Vectorized caps
         score = df['calculated_score'].copy()
 
-        # Cap for missing key resources
+        # Cap for missing key resources (Teachers or Classrooms)
         mask_missing_key = df['flag_zero_teachers'] | df['flag_zero_classrooms']
         score = np.where(mask_missing_key & (score > 75), 75, score)
 
-        # Cap for no learners (Critical)
-        score = np.where(df['total_learners'] == 0, 0, score)
+        # CRITICAL FIX: Cap for no learners OR zero enrollment data
+        # If total_learners is 0 or NaN, the school has incomplete data
+        mask_no_enrollment = (df['total_learners'].fillna(0) == 0)
+        score = np.where(mask_no_enrollment, 0, score)
 
         df['data_health_score'] = score
         
@@ -889,27 +902,27 @@ def analyze_school_summary(engine):
         # 1. Define Mapping: Flag Column -> Message
         # Order matters for matrix multiplication
         flag_map = [
-            ('flag_zero_teachers', "No Teachers Reported"),
-            ('flag_zero_classrooms', "No Classrooms Reported"),
-            ('flag_zero_seats', "No Seats Reported"),
-            ('flag_zero_toilets', "No Toilets Reported"),
-            ('flag_zero_furniture', "No Furniture Reported"),
-            ('flag_zero_resources', "No Resources Reported"),
-            ('flag_zero_organized_classes', "No Organized Classes Reported"),
-            ('flag_anomaly_teachers', "Teacher Count Inconsistent"),
-            ('flag_anomaly_classrooms', "Classroom Count Inconsistent"),
-            ('flag_anomaly_seats', "Seat Count Inconsistent"),
-            ('flag_anomaly_toilets', "Toilet Count Inconsistent"),
-            ('flag_anomaly_furniture', "Furniture Count Inconsistent"),
-            ('flag_anomaly_organized_classes', "Organized Class Count Inconsistent"),
-            ('flag_exp_mismatch', "Exp Mismatch"),
-            ('flag_spec_mismatch', "Spec Mismatch"),
-            ('flag_zero_specialization', "No Spec Data"),
-            ('flag_outlier_ptr', "Extreme PTR"),
-            ('flag_outlier_pcr', "Extreme PCR"),
-            ('flag_outlier_psr', "Extreme PSR"),
-            ('flag_outlier_ptorr', "Extreme PtrR"),
-            ('flag_outlier_pfr', "Extreme PFR")
+            ('flag_zero_teachers', "Critical Data Gap: No teachers are reported for this school despite having enrolled learners. Please verify if the school is operational or if the teacher data was omitted."),
+            ('flag_zero_classrooms', "Critical Data Gap: No classrooms are reported for this school despite having enrolled learners. Please confirm if the classroom inventory was properly encoded."),
+            ('flag_zero_seats', "Critical Data Gap: No seats (desks/chairs) are reported for this school despite having enrolled learners. This indicates missing physical facilities data."),
+            ('flag_zero_toilets', "Critical Data Gap: No toilets are reported for this school. All schools must have at least one functional toilet facility."),
+            ('flag_zero_furniture', "Critical Data Gap: No furniture inventory is reported for this school. Please check if the physical facilities form was submitted."),
+            ('flag_zero_resources', "Critical Data Gap: No learning resources (labs, equipment) are reported. While small schools may lack some, a complete zero count usually indicates missing data."),
+            ('flag_zero_organized_classes', "Critical Data Gap: No organized classes/sections are reported despite having enrollment. This suggests the class organization form was not filled out."),
+            ('flag_anomaly_teachers', "Data Inconsistency: The number of reported teachers deviates significantly from the expected count based on total enrollment. This may indicate over-reporting of students or under-reporting of teachers."),
+            ('flag_anomaly_classrooms', "Data Inconsistency: The number of reported classrooms deviates significantly from the expected count based on total enrollment. Please verify the actual classroom inventory."),
+            ('flag_anomaly_seats', "Data Inconsistency: The number of reported seats is unusually low or high relative to the student population. Please check for data entry errors."),
+            ('flag_anomaly_toilets', "Data Inconsistency: The number of toilets reported does not align with the typical ratio for the student population."),
+            ('flag_anomaly_furniture', "Data Inconsistency: The furniture count is inconsistent with the school's size and student population."),
+            ('flag_anomaly_organized_classes', "Data Inconsistency: The number of organized classes (sections) is inconsistent with the total enrollment. This often results in extremely large or small class sizes."),
+            ('flag_exp_mismatch', "Data Quality Error: The total number of teachers reported does not match the sum of teachers broken down by years of teaching experience. These two figures must be identical."),
+            ('flag_spec_mismatch', "Data Quality Error: The total number of teachers reported does not match the sum of teachers broken down by subject specialization. All teachers must be accounted for in the specialization breakdown."),
+            ('flag_zero_specialization', "Data Inconsistency: Teachers are reported, but there is no breakdown of their subject specializations. Please complete the specialization data."),
+            ('flag_outlier_ptr', "Statistical Outlier: The Pupil-Teacher Ratio (PTR) is statistically improbable (extremely high or low). This strongly suggests an error in either the enrollment count or the teacher count."),
+            ('flag_outlier_pcr', "Statistical Outlier: The Pupil-Classroom Ratio (PCR) is statistically improbable (extremely high or low). This suggests an error in the enrollment or classroom count."),
+            ('flag_outlier_psr', "Statistical Outlier: The Pupil-Seat Ratio (PSR) is statistically improbable. Please verify if the seat inventory and enrollment data are correct."),
+            ('flag_outlier_ptorr', "Statistical Outlier: The Pupil-Toilet Ratio is statistically improbable. Please verify the toilet count."),
+            ('flag_outlier_pfr', "Statistical Outlier: The Pupil-Furniture Ratio is statistically improbable. Please verify the furniture inventory.")
         ]
         
         # 2. Prepare Matrices
@@ -935,13 +948,13 @@ def analyze_school_summary(engine):
                 mask = df[col].astype(bool)
                 # This causes SettingWithCopy warning if not careful, but df is clean here
                 # Using .loc is safe
-                df.loc[mask, 'issues'] = df.loc[mask, 'issues'] + msg + "; "
+                df.loc[mask, 'issues'] = df.loc[mask, 'issues'] + "• " + msg + "\n\n"
             
         else:
             df['issues'] = ""
 
         # Cleanup
-        df['issues'] = df['issues'].str.strip("; ")
+        df['issues'] = df['issues'].str.strip()
         df['issues'].replace("", "None", inplace=True)
         
         # Description based on score (Vectorized)
@@ -1043,7 +1056,19 @@ def analyze_school_summary(engine):
                 FROM {temp_table_name} t
                 WHERE s.school_id = t.school_id;
             """
-            
+
+            # FILTER UPDATE IF TARGETING SPECIFIC SCHOOL
+            if target_school_id:
+                print(f"Targeted Analysis Update: Filtering for School ID {target_school_id}")
+                # Re-construct update SQL with additional filter
+                update_sql = f"""
+                    UPDATE school_summary s
+                    SET {', '.join(assignments)}
+                    FROM {temp_table_name} t
+                    WHERE s.school_id = t.school_id
+                    AND s.school_id = '{target_school_id}';
+                """
+
             conn.execute(text(update_sql))
             
             # 4. Drop (Auto-dropped on commit due to ON COMMIT DROP, but explicit is fine)
@@ -1058,11 +1083,16 @@ def analyze_school_summary(engine):
         import traceback
         traceback.print_exc()
 
+import argparse
+
 def main():
-    # Parse Arguments
-    target_school_id = None
-    if len(sys.argv) > 1:
-        target_school_id = sys.argv[1]
+    parser = argparse.ArgumentParser(description='Advanced Fraud Detection')
+    parser.add_argument('--school_id', type=str, help='Target School ID for single school validation')
+    args = parser.parse_args()
+
+    target_school_id = args.school_id
+
+    if target_school_id:
         print(f"Started Advanced Fraud Detection for Target School: {target_school_id}")
     else:
         print("Started Advanced Fraud Detection (Full Batch)")
@@ -1082,11 +1112,11 @@ def main():
     df = clean_and_impute(df)
     
     # 4. Update Summary Table (with aggregates from school_profiles)
-    update_school_summary_table(df, engine)
+    update_school_summary_table(df, engine, target_school_id)
     
     # === PHASE 2: Fraud Detection on School Summary ===
     # Run analysis on the populated summary table
-    analyze_school_summary(engine)
+    analyze_school_summary(engine, target_school_id)
     
     print("\nAdvanced Fraud Detection & Health Check Complete.")
 

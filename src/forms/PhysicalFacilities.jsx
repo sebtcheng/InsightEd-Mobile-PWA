@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
-import { addToOutbox, getOutbox } from '../db';
+import { addToOutbox, getOutbox, addRepairToLocal, getLocalRepairs, deleteLocalRepair } from '../db';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
-import { FiBox, FiArrowLeft, FiCheckCircle, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
+import { FiChevronRight, FiEdit, FiTrash2, FiSave, FiCheckCircle, FiInfo, FiAlertCircle, FiPlus, FiArrowRight, FiFileText, FiMapPin, FiHome, FiHelpCircle, FiSearch, FiArrowLeft, FiMoreVertical, FiLayout, FiTruck, FiBox, FiArchive, FiClock } from 'react-icons/fi';
+import RepairEntryModal from '../components/RepairEntryModal';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
 import useReadOnly from '../hooks/useReadOnly'; // Import Hook
@@ -69,6 +69,272 @@ const PhysicalFacilities = ({ embedded }) => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showInfoModal, setShowInfoModal] = useState(false);
 
+    // --- FACILITY REPAIR DATA ---
+    const [facilityData, setFacilityData] = useState([]); // [{ id, building_no, rooms: [{ room_no, ...booleans, remarks }] }]
+    const [isSavingRepair, setIsSavingRepair] = useState(false);
+    const [repairSuccessMsg, setRepairSuccessMsg] = useState('');
+    const [pendingRepairCount, setPendingRepairCount] = useState(0);
+
+    const [newBuildingName, setNewBuildingName] = useState('');
+    const [buildingError, setBuildingError] = useState('');
+    const [isRepairSubmitted, setIsRepairSubmitted] = useState(false);
+    const [isLoadingRepairs, setIsLoadingRepairs] = useState(false);
+
+
+    const repairItems = [
+        { key: 'repair_roofing', label: 'Roofing' },
+        { key: 'repair_ceiling_ext', label: 'Ceiling (Exterior)' },
+        { key: 'repair_ceiling_int', label: 'Ceiling (Interior)' },
+        { key: 'repair_wall_ext', label: 'Wall (Exterior)' },
+        { key: 'repair_partition', label: 'Partition' },
+        { key: 'repair_door', label: 'Door' },
+        { key: 'repair_windows', label: 'Windows' },
+        { key: 'repair_flooring', label: 'Flooring' },
+        { key: 'repair_structural', label: 'Beams / Columns' }
+    ];
+
+    const defaultRoomData = {
+        room_no: '', repair_roofing: false, repair_ceiling_ext: false, repair_ceiling_int: false,
+        repair_wall_ext: false, repair_partition: false, repair_door: false,
+        repair_windows: false, repair_flooring: false, repair_structural: false, remarks: ''
+    };
+
+    // --- BUILDING CRUD ---
+    const isDuplicateBuilding = newBuildingName.trim() !== '' && facilityData.some(
+        b => b.building_no.toLowerCase() === newBuildingName.trim().toLowerCase()
+    );
+
+    const addBuilding = () => {
+        const name = newBuildingName.trim();
+        if (!name) return;
+        if (facilityData.some(b => b.building_no.toLowerCase() === name.toLowerCase())) {
+            setBuildingError('This building has already been added.');
+            setTimeout(() => setBuildingError(''), 3000);
+            return;
+        }
+        setBuildingError('');
+        setFacilityData(prev => [...prev, { id: Date.now(), building_no: name, rooms: [] }]);
+        setNewBuildingName('');
+    };
+
+    const removeBuilding = (bIdx) => {
+        setFacilityData(prev => prev.filter((_, i) => i !== bIdx));
+    };
+
+    // --- REPAIR MODAL & STATE ---
+    const [showRoomModal, setShowRoomModal] = useState(false);
+    const [activeBuildingIdx, setActiveBuildingIdx] = useState(null);
+    const [editingRoomIdx, setEditingRoomIdx] = useState(null); // null = adding, number = editing
+
+
+
+    const [roomModalData, setRoomModalData] = useState({ ...defaultRoomData });
+
+    const openAddRoom = (bIdx) => {
+        setActiveBuildingIdx(bIdx);
+        setEditingRoomIdx(null);
+        setRoomModalData({ ...defaultRoomData });
+        setShowRoomModal(true);
+    };
+
+    const openEditRoom = (bIdx, rIdx) => {
+        setActiveBuildingIdx(bIdx);
+        setEditingRoomIdx(rIdx);
+        setRoomModalData({ ...facilityData[bIdx].rooms[rIdx] });
+        setShowRoomModal(true);
+    };
+
+    const saveRoomFromModal = () => {
+        if (!roomModalData.room_no.trim()) {
+            alert('Please enter a Room Number.');
+            return;
+        }
+        setFacilityData(prev => {
+            const updated = [...prev];
+            const building = { ...updated[activeBuildingIdx], rooms: [...updated[activeBuildingIdx].rooms] };
+            if (editingRoomIdx !== null) {
+                building.rooms[editingRoomIdx] = { ...roomModalData };
+            } else {
+                building.rooms.push({ ...roomModalData });
+            }
+            updated[activeBuildingIdx] = building;
+            return updated;
+        });
+        setShowRoomModal(false);
+    };
+
+    // --- DELETED INLINE LOGIC, RESTORED MODAL ---
+    const deleteRoom = (bIdx, rIdx) => {
+        if (!window.confirm("Delete this room?")) return;
+        setFacilityData(prev => {
+            const updated = [...prev];
+            const building = { ...updated[bIdx], rooms: updated[bIdx].rooms.filter((_, i) => i !== rIdx) };
+            updated[bIdx] = building;
+            return updated;
+        });
+    };
+
+    // --- SUBMIT ALL REPAIRS ---
+    const submitAllRepairs = async () => {
+        // Flatten facilityData into individual room records
+        const flatRepairs = [];
+        for (const building of facilityData) {
+            for (const room of building.rooms) {
+                // Skip already saved rooms to prevent duplicates
+                if (!room.saved) {
+                    flatRepairs.push({
+                        schoolId: schoolId || localStorage.getItem('schoolId'),
+                        iern: schoolId || localStorage.getItem('schoolId'),
+                        building_no: building.building_no,
+                        ...room
+                    });
+                }
+            }
+        }
+        if (flatRepairs.length === 0) {
+            if (facilityData.some(b => b.rooms.length > 0)) {
+                alert('All loaded assessments are already saved.');
+            } else {
+                alert('No room assessments to submit. Add at least one room.');
+            }
+            return;
+        }
+
+        setIsSavingRepair(true);
+        setRepairSuccessMsg('');
+        let savedCount = 0;
+        let offlineCount = 0;
+
+        for (const payload of flatRepairs) {
+            try {
+                await addRepairToLocal(payload);
+                if (navigator.onLine) {
+                    const res = await fetch('/api/save-facility-repair', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        const localRepairs = await getLocalRepairs();
+                        const latest = localRepairs[localRepairs.length - 1];
+                        if (latest) await deleteLocalRepair(latest.local_id);
+                        savedCount++;
+                    } else {
+                        throw new Error('Server error');
+                    }
+                } else {
+                    throw new Error('Offline');
+                }
+            } catch (e) {
+                offlineCount++;
+                try {
+                    const registration = await navigator.serviceWorker.ready;
+                    await registration.sync.register('sync-facility-repairs');
+                } catch (_) { }
+            }
+        }
+
+        if (offlineCount > 0) {
+            setRepairSuccessMsg(`${savedCount} saved online, ${offlineCount} queued offline — will sync when connected.`);
+        } else {
+            setRepairSuccessMsg(`All ${savedCount} room assessments submitted successfully!`);
+        }
+        if (offlineCount === 0) {
+            // All saved online — lock the form
+            setIsRepairSubmitted(true);
+        } else {
+            // Some went offline — clear so user doesn't double-submit
+            setFacilityData([]);
+        }
+        setIsSavingRepair(false);
+        try {
+            const pending = await getLocalRepairs();
+            setPendingRepairCount(pending.length);
+        } catch (_) { }
+    };
+
+    // --- CHECK PENDING REPAIRS ON MOUNT ---
+    useEffect(() => {
+        const checkPending = async () => {
+            try {
+                const pending = await getLocalRepairs();
+                setPendingRepairCount(pending.length);
+            } catch (_) { }
+        };
+        checkPending();
+        const handleOnline = () => checkPending();
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, []);
+
+    // --- SYNC REPAIR COUNT FROM FACILITY DATA ---
+    useEffect(() => {
+        const totalRooms = facilityData.reduce((sum, b) => sum + b.rooms.length, 0);
+        if (totalRooms !== (formData.build_classrooms_repair || 0)) {
+            setFormData(prev => ({ ...prev, build_classrooms_repair: totalRooms }));
+        }
+    }, [facilityData]);
+
+    // --- FETCH AND HYDRATE REPAIRS ---
+    useEffect(() => {
+        const fetchAndHydrateRepairs = async () => {
+            const iern = schoolIdParam || localStorage.getItem('schoolId');
+            if (!iern) return;
+
+            setIsLoadingRepairs(true);
+            try {
+                let data = [];
+                // 1. Try fetching from API
+                if (navigator.onLine) {
+                    try {
+                        const res = await fetch(`/api/facility-repairs/${iern}`);
+                        if (res.ok) {
+                            data = await res.json();
+                        }
+                    } catch (err) {
+                        console.warn("API Fetch failed, will try IndexedDB:", err);
+                    }
+                }
+
+                // 2. Fallback to local IndexedDB (for pending repairs)
+                const local = await getLocalRepairs();
+                const localForSchool = local.filter(r => r.iern === iern || r.schoolId === iern);
+
+                // Combine data (avoid duplicates if possible, but regrouping will handle it)
+                const combined = [...data, ...localForSchool];
+
+                if (combined.length > 0) {
+                    const groups = {};
+                    combined.forEach((row, idx) => {
+                        const bKey = row.building_no;
+                        if (!groups[bKey]) {
+                            groups[bKey] = {
+                                id: Date.now() + idx, // Simple stable-ish ID for this session
+                                building_no: bKey,
+                                rooms: []
+                            };
+                        }
+                        // Check if room already exists in this building group to avoid duplicates
+                        const exists = groups[bKey].rooms.some(r => r.room_no === row.room_no);
+                        if (!exists) {
+                            groups[bKey].rooms.push({
+                                ...row,
+                                saved: true // Automatic Read-Only for fetched/local records
+                            });
+                        }
+                    });
+                    setFacilityData(Object.values(groups));
+                }
+            } catch (error) {
+                console.error("Hydration Error:", error);
+            } finally {
+                setIsLoadingRepairs(false);
+            }
+        };
+
+        fetchAndHydrateRepairs();
+    }, [schoolIdParam]);
+
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -119,7 +385,7 @@ const PhysicalFacilities = ({ embedded }) => {
 
                 // STEP 1: LOAD CACHE IMMEDIATELY
                 let loadedFromCache = false;
-                const CACHE_KEY = `CACHE_PHYSICAL_FACILITIES_${user.uid}`;
+                const CACHE_KEY = `CACHE_PHYSICAL_FACILITIES_${user.uid} `;
                 const cachedData = localStorage.getItem(CACHE_KEY);
 
                 if (cachedData) {
@@ -159,12 +425,12 @@ const PhysicalFacilities = ({ embedded }) => {
 
                     // STEP 3: BACKGROUND FETCH
                     if (!restored) {
-                        let fetchUrl = `/api/physical-facilities/${user.uid}`;
+                        let fetchUrl = `/ api / physical - facilities / ${user.uid} `;
                         const role = localStorage.getItem('userRole');
                         if (isAuditMode) {
-                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                            fetchUrl = `/ api / monitoring / school - detail / ${auditTargetId} `;
                         } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
-                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                            fetchUrl = `/ api / monitoring / school - detail / ${schoolIdParam} `;
                         }
 
                         // Only show loading if we didn't load from cache
@@ -212,7 +478,7 @@ const PhysicalFacilities = ({ embedded }) => {
                     console.error("Fetch Error:", error);
                     if (!loadedFromCache) {
                         // Fallback: Try main cache again
-                        const CACHE_KEY = `CACHE_PHYSICAL_FACILITIES_${user.uid}`;
+                        const CACHE_KEY = `CACHE_PHYSICAL_FACILITIES_${user.uid} `;
                         const cached = localStorage.getItem(CACHE_KEY);
                         if (cached) {
                             const data = JSON.parse(cached);
@@ -323,10 +589,13 @@ const PhysicalFacilities = ({ embedded }) => {
 
 
 
+
+
+
     if (loading) return <div className="min-h-screen grid place-items-center bg-slate-50 dark:bg-slate-900"><div className="w-10 h-10 border-4 border-blue-500 rounded-full animate-spin border-t-transparent"></div></div>;
 
     return (
-        <div className={`min-h-screen font-sans pb-40 ${embedded ? '' : 'bg-slate-50'}`}>
+        <div className={`min-h-screen font-sans pb-40 ${embedded ? '' : 'bg-slate-50'} `}>
             {/* Header */}
             {!embedded && (
                 <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
@@ -353,7 +622,7 @@ const PhysicalFacilities = ({ embedded }) => {
                 </div>
             )}
 
-            <div className={`px-5 relative z-20 max-w-lg mx-auto space-y-4 ${embedded ? '' : '-mt-12'}`}>
+            <div className={`px-5 relative z-20 max-w-lg mx-auto space-y-4 ${embedded ? '' : '-mt-12'} `}>
 
                 {/* Total Classrooms (Highlight) */}
                 <div className="bg-white p-8 rounded-[2rem] shadow-xl shadow-blue-900/5 border border-slate-100 text-center mb-6">
@@ -372,82 +641,315 @@ const PhysicalFacilities = ({ embedded }) => {
 
                 <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
                 <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
-                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
+                <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? 0} onChange={handleChange} disabled={true} />
+                <p className="text-[10px] text-orange-400 font-semibold -mt-2 ml-1 flex items-center gap-1">✨ Calculated from rooms added below</p>
                 <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
 
+                {/* --- FACILITY REPAIR ASSESSMENT SECTION --- */}
+                {!viewOnly && !isReadOnly && (
+                    <div className="bg-white p-6 rounded-3xl shadow-xl shadow-orange-900/5 border border-orange-100 mt-6 relative overflow-hidden">
+                        {isLoadingRepairs && (
+                            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
+                                <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+                                <p className="text-xs font-bold text-orange-600 animate-pulse">Loading assessments...</p>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="p-3 bg-orange-100 rounded-2xl text-2xl">🔧</div>
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-800">Repair Assessment</h2>
+                                <p className="text-xs text-slate-400 font-medium">Add buildings and assess rooms needing repair</p>
+                            </div>
+                            {pendingRepairCount > 0 && (
+                                <div className="ml-auto bg-amber-100 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 animate-pulse">
+                                    <div className="w-2 h-2 bg-amber-500 rounded-full" />
+                                    {pendingRepairCount} Pending Sync
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Add Building Input */}
+                        <div className="mb-4">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newBuildingName}
+                                    onChange={(e) => { setNewBuildingName(e.target.value); setBuildingError(''); }}
+                                    placeholder="Building name or number"
+                                    disabled={isRepairSubmitted}
+                                    className={`flex-1 p-3 bg-slate-50 border rounded-xl text-sm font-semibold text-slate-700 focus:ring-4 outline-none transition-colors ${isDuplicateBuilding
+                                        ? 'border-red-400 focus:ring-red-100 bg-red-50'
+                                        : 'border-slate-200 focus:ring-orange-100'
+                                        } ${isRepairSubmitted ? 'opacity-50 cursor-not-allowed' : ''} `}
+                                    onKeyDown={(e) => e.key === 'Enter' && addBuilding()}
+                                />
+                                <button
+                                    onClick={addBuilding}
+                                    disabled={isDuplicateBuilding || !newBuildingName.trim() || isRepairSubmitted}
+                                    className="px-5 py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors text-sm shadow-md shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    + Add
+                                </button>
+                            </div>
+                            {(buildingError || isDuplicateBuilding) && (
+                                <p className="text-red-500 text-xs font-semibold mt-1.5 flex items-center gap-1">
+                                    ⚠️ {buildingError || 'This building has already been added.'}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Building Cards */}
+                        {
+                            facilityData.length === 0 && (
+                                <div className="text-center py-8 text-slate-400 text-sm">
+                                    <p className="text-3xl mb-2">🏢</p>
+                                    <p className="font-medium">No buildings added yet.</p>
+                                    <p className="text-xs mt-1">Start by adding a building above.</p>
+                                </div>
+                            )
+                        }
+
+                        <div className="space-y-4">
+                            {facilityData.map((building, bIdx) => (
+                                <div key={building.id} className={`p - 4 rounded - 2xl border transition - colors ${isRepairSubmitted
+                                    ? 'bg-slate-100 border-slate-300 opacity-80'
+                                    : 'bg-slate-50 border-slate-200'
+                                    } `}>
+                                    {/* Building Header */}
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg">🏢</span>
+                                            <h3 className="font-bold text-slate-700">Building {building.building_no}</h3>
+                                            <span className="text-xs bg-blue-100 text-blue-600 font-bold px-2 py-0.5 rounded-full">
+                                                {building.rooms.length} Rooms Recorded
+                                            </span>
+                                            {isRepairSubmitted && (
+                                                <span className="text-xs bg-green-100 text-green-600 font-bold px-2 py-0.5 rounded-full">
+                                                    Submitted ✓
+                                                </span>
+                                            )}
+                                        </div>
+                                        {!isRepairSubmitted && (
+                                            <button
+                                                onClick={() => removeBuilding(bIdx)}
+                                                className="text-red-400 hover:text-red-600 text-xs font-bold transition-colors"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Room Summary List (Card View) */}
+                                    {building.rooms.length > 0 && (
+                                        <div className="space-y-3 mb-4">
+                                            {building.rooms.map((room, rIdx) => {
+                                                const checkedCount = repairItems.filter(it => room[it.key]).length;
+                                                const checkedLabels = repairItems.filter(it => room[it.key]).map(it => it.label);
+                                                const isSaved = room.saved;
+
+                                                return (
+                                                    <div
+                                                        key={rIdx}
+                                                        onClick={() => !isRepairSubmitted && openEditRoom(bIdx, rIdx)}
+                                                        className={`group p-4 rounded-[1.25rem] border transition-all flex items-center justify-between active:scale-[0.98] ${isRepairSubmitted || isSaved
+                                                            ? 'bg-slate-50 border-slate-100'
+                                                            : 'bg-white border-slate-100 hover:border-orange-200 hover:shadow-md cursor-pointer'
+                                                            } `}
+                                                    >
+                                                        <div className="flex-1 min-w-0 pr-2">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <p className="text-sm font-extrabold text-slate-800">Room {room.room_no}</p>
+                                                                {isSaved && (
+                                                                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[9px] font-black uppercase tracking-tighter">
+                                                                        Saved
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-orange-600 font-bold">
+                                                                {checkedCount > 0 ? checkedLabels.join(', ') : 'No items checked'}
+                                                            </p>
+                                                            {room.remarks && (
+                                                                <p className="text-[10px] text-slate-400 font-medium truncate mt-1 bg-slate-50 p-1.5 rounded-lg border border-slate-100/50">
+                                                                    📝 {room.remarks}
+                                                                </p>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            {!isRepairSubmitted && !isSaved && (
+                                                                <>
+                                                                    <div className="w-8 h-8 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                        <FiEdit size={14} />
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={(e) => { e.stopPropagation(); deleteRoom(bIdx, rIdx); }}
+                                                                        className="w-8 h-8 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 transition-colors"
+                                                                    >
+                                                                        <FiTrash2 size={14} />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                            {(isRepairSubmitted || isSaved) && (
+                                                                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-300 flex items-center justify-center">
+                                                                    <FiChevronRight size={18} />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Add Room Button */}
+                                    {!isRepairSubmitted && (
+                                        <button
+                                            onClick={() => openAddRoom(bIdx)}
+                                            className="w-full py-2.5 border-2 border-dashed border-orange-200 text-orange-500 font-bold text-sm rounded-xl hover:bg-orange-50 transition-colors"
+                                        >
+                                            + Add Room Assessment
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Success Message */}
+                        {
+                            repairSuccessMsg && (
+                                <div className="bg-green-50 border border-green-200 text-green-700 text-sm font-semibold p-3 rounded-xl mt-4 flex items-center gap-2">
+                                    <FiCheckCircle /> {repairSuccessMsg}
+                                </div>
+                            )
+                        }
+
+                        {/* Submit / New Assessment Buttons */}
+                        {
+                            isRepairSubmitted ? (
+                                <button
+                                    onClick={() => {
+                                        setIsRepairSubmitted(false);
+                                        setFacilityData([]);
+                                        setRepairSuccessMsg('');
+                                    }}
+                                    className="w-full mt-4 bg-slate-100 text-slate-600 font-bold py-3.5 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    🔄 Start New Assessment
+                                </button>
+                            ) : facilityData.some(b => b.rooms.length > 0) && (
+                                <button
+                                    onClick={submitAllRepairs}
+                                    disabled={isSavingRepair}
+                                    className="w-full mt-4 bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSavingRepair ? (
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <>📤 Submit All Repairs ({facilityData.reduce((sum, b) => sum + b.rooms.length, 0)} rooms)</>
+                                    )}
+                                </button>
+                            )
+                        }
+                    </div>
+                )}
             </div>
 
             {/* Footer Actions */}
-            {!embedded && (
-                <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
-                    <div className="max-w-lg mx-auto flex gap-3">
-                        {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
-                            <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
-                                <FiInfo /> View-Only Mode
-                            </div>
-                        ) : isLocked ? (
-                            <button onClick={() => setIsLocked(false)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
-                                🔓 Unlock to Edit Data
-                            </button>
-                        ) : (
-                            <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                                {isSaving ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <><FiSave /> Save Changes</>
-                                )}
-                            </button>
-                        )}
+            {
+                !embedded && (
+
+                    <div className="fixed bottom-0 left-0 w-full bg-white/80 backdrop-blur-md border-t border-slate-100 p-4 pb-8 z-40">
+                        <div className="max-w-lg mx-auto flex gap-3">
+                            {(viewOnly || isReadOnly || isSuperUserReadOnly) ? (
+                                <div className="w-full text-center p-3 text-slate-500 font-bold bg-slate-200 rounded-2xl text-sm flex items-center justify-center gap-2">
+                                    <FiInfo /> View-Only Mode
+                                </div>
+                            ) : isLocked ? (
+                                <button onClick={() => setShowEditModal(true)} className="flex-1 bg-slate-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-colors">
+                                    🔓 Unlock to Edit Data
+                                </button>
+                            ) : (
+                                <button onClick={() => setShowSaveModal(true)} disabled={isSaving} className="flex-1 bg-[#004A99] text-white font-bold py-4 rounded-2xl hover:bg-blue-800 transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {isSaving ? (
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <><FiSave /> Save Changes</>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
+
+
+
+            {/* Room Repair Assessment Modal */}
+            <RepairEntryModal
+                isOpen={showRoomModal}
+                onClose={() => setShowRoomModal(false)}
+                onSave={saveRoomFromModal}
+                editingRoomIdx={editingRoomIdx}
+                activeBuildingIdx={activeBuildingIdx}
+                facilityData={facilityData}
+                roomModalData={roomModalData}
+                setRoomModalData={setRoomModalData}
+                repairItems={repairItems}
+                readOnly={isReadOnly || roomModalData.saved}
+            />
 
             {/* Modals */}
-            {showEditModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
-                        <h3 className="font-bold text-xl text-slate-800 mb-2">Enable Editing?</h3>
-                        <p className="text-slate-500 text-sm mb-6">This allows you to modify the physical facilities data.</p>
-                        <div className="flex gap-3">
-                            <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-                            <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
+            {
+                showEditModal && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                            <h3 className="font-bold text-xl text-slate-800 mb-2">Enable Editing?</h3>
+                            <p className="text-slate-500 text-sm mb-6">This allows you to modify the physical facilities data.</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                                <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showSaveModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
-                        <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
-                            <FiCheckCircle size={24} />
-                        </div>
-                        <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
-                        <p className="text-slate-500 text-center text-sm mb-6">You are about to update the physical facilities record.</p>
-                        <div className="flex gap-3">
-                            <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-                            <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+            {
+                showSaveModal && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl transform scale-100 animate-in fade-in zoom-in duration-200">
+                            <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 mx-auto">
+                                <FiCheckCircle size={24} />
+                            </div>
+                            <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Save Changes?</h3>
+                            <p className="text-slate-500 text-center text-sm mb-6">You are about to update the physical facilities record.</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                                <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showInfoModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
-                        <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
-                            <FiInfo />
+            {
+                showInfoModal && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-2xl">
+                            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mx-auto mb-4 text-blue-600 text-2xl">
+                                <FiInfo />
+                            </div>
+                            <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
+                            <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the current condition and total number of instructional classrooms?'</b></p>
+                            <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                         </div>
-                        <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the current condition and total number of instructional classrooms?'</b></p>
-                        <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <OfflineSuccessModal isOpen={showOfflineModal} onClose={() => setShowOfflineModal(false)} />
             <SuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} message="Physical Facilities report saved successfully!" />
-        </div>
+        </div >
     );
 };
 

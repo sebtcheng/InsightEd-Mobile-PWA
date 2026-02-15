@@ -13,6 +13,8 @@ import fs from 'fs'; // Added for seed
 import csv from 'csv-parser'; // Added for seed
 import { createRequire } from "module"; // Added for JSON import
 const require = createRequire(import.meta.url);
+import { exec } from 'child_process';
+
 
 // Load environment variables11111111111111
 dotenv.config();
@@ -225,6 +227,56 @@ const initDB = async () => {
         console.error("⚠️ Secondary DB Schema Sync Error:", err.message);
       }
     }
+    // --- MIGRATION: ADD BUILDABLE SPACES ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS buildable_spaces (
+        space_id SERIAL PRIMARY KEY,
+        school_id TEXT REFERENCES school_profiles(school_id),
+        iern TEXT,
+        space_number INTEGER,
+        latitude NUMERIC,
+        longitude NUMERIC,
+        length NUMERIC,
+        width NUMERIC,
+        total_area NUMERIC,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Add columns if they don't exist (for existing tables)
+    await pool.query(`ALTER TABLE buildable_spaces ADD COLUMN IF NOT EXISTS iern TEXT;`);
+    await pool.query(`ALTER TABLE buildable_spaces ADD COLUMN IF NOT EXISTS space_number INTEGER;`);
+
+    await pool.query(`
+      ALTER TABLE school_profiles
+      ADD COLUMN IF NOT EXISTS has_buildable_space BOOLEAN;
+    `);
+    console.log("✅ DB Init: Buildable Spaces schema verified.");
+
+    // --- MIGRATION: ADD FACILITY REPAIRS ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS facility_repairs (
+        repair_id SERIAL PRIMARY KEY,
+        school_id TEXT REFERENCES school_profiles(school_id),
+        iern TEXT,
+        building_no TEXT,
+        room_no TEXT,
+        repair_roofing BOOLEAN DEFAULT FALSE,
+        repair_ceiling_ext BOOLEAN DEFAULT FALSE,
+        repair_ceiling_int BOOLEAN DEFAULT FALSE,
+        repair_wall_ext BOOLEAN DEFAULT FALSE,
+        repair_partition BOOLEAN DEFAULT FALSE,
+        repair_door BOOLEAN DEFAULT FALSE,
+        repair_windows BOOLEAN DEFAULT FALSE,
+        repair_flooring BOOLEAN DEFAULT FALSE,
+        repair_structural BOOLEAN DEFAULT FALSE,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);`);
+    console.log("✅ DB Init: Facility Repairs schema verified.");
+
   } catch (err) {
     console.error("âŒ DB Init Error:", err);
   }
@@ -494,6 +546,54 @@ app.get('/api/debug/seed-schools', async (req, res) => {
     client.release();
   }
 });
+
+// --- VALIDATE SCHOOL HEALTH ---
+app.post('/api/validate-school-health', async (req, res) => {
+  const { school_id } = req.body;
+  if (!school_id) {
+    return res.status(400).json({ error: 'Missing school_id' });
+  }
+
+  console.log(`Running Fraud Detection for School: ${school_id}...`);
+
+  // Assuming the python script is in the parent directory or specific path
+  // Adjust path as needed. Based on file system, it's in the root of the project.
+  // api/index.js is in api/ folder, so script is ../advanced_fraud_detection.py
+  // But usually running from root context?
+  // Let's assume standard execution from project root if possible, or use absolute path.
+  // The user runs `npm run dev:full` from `c:\Users\user\OneDrive - Department of Education\001 DepEd Seb\InsightED\InsightEd-Mobile-PWA`
+
+  const scriptPath = path.join(path.resolve(), 'advanced_fraud_detection.py');
+  const command = `python "${scriptPath}" --school_id "${school_id}"`;
+
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).json({ error: 'Validation failed', details: stderr || error.message });
+    }
+
+    // Log stdout/stderr but don't fail if just warnings
+    console.log(`Validator Output: ${stdout}`);
+    if (stderr) console.warn(`Validator Warnings/Errors: ${stderr}`);
+
+    res.json({ success: true, message: 'Validation completed successfully.', output: stdout });
+  });
+});
+
+// --- DEBUG: RECALCULATE ALL ENDPOINT ---
+app.get('/api/debug/recalculate-all', async (req, res) => {
+  try {
+    console.log("ðŸ”„ Starting Full Snapshot Recalculation...");
+    const result = await pool.query('SELECT school_id FROM school_profiles');
+    const schools = result.rows;
+
+    let count = 0;
+    for (const s of schools) {
+      if (s.school_id) {
+        await calculateSchoolProgress(s.school_id, pool);
+        count++;
+      }
+    }
 
 // --- HELPER FUNCTION: Calculate School Progress ---
 // MOVED UP HERE FOR VISIBILITY but normally defined below
@@ -5072,70 +5172,99 @@ app.get('/api/school-resources/:uid', async (req, res) => {
 // --- 22. POST: Save School Resources ---
 app.post('/api/save-school-resources', async (req, res) => {
   const data = req.body;
-  console.log(`[Resources] Saving SchoolID: ${data.schoolId}`);
-  console.log(`[Resources] Buildable Space: ${data.res_buildable_space}`);
   try {
     const query = `
-            UPDATE school_profiles SET
-                res_toilets_male=$2, res_toilets_female=$3, res_toilets_pwd=$4, res_toilets_common=$25, 
-                res_water_source=$5,
-                res_sci_labs=$6, res_com_labs=$7, res_tvl_workshops=$8,
+            UPDATE school_profiles SET 
+                res_toilets_male=$2, res_toilets_female=$3, res_toilets_common=$4, res_toilets_pwd=$5,
+                res_water_source=$6, res_tvl_workshops=$7, res_electricity_source=$8, 
+                res_buildable_space=$9, sha_category=$10,
                 
-                res_ownership_type=$9, res_electricity_source=$10, res_buildable_space=$11,
-                sha_category=$26,
+                res_sci_labs=$11, res_com_labs=$12,
+                
+                res_ecart_func=$13, res_ecart_nonfunc=$14,
+                res_laptop_func=$15, res_laptop_nonfunc=$16,
+                res_tv_func=$17, res_tv_nonfunc=$18,
+                res_printer_func=$19, res_printer_nonfunc=$20,
+                res_desk_func=$21, res_desk_nonfunc=$22,
+                res_armchair_func=$23, res_armchair_nonfunc=$24,
+                res_toilet_func=$25, res_toilet_nonfunc=$26,
+                res_handwash_func=$27, res_handwash_nonfunc=$28,
+                
+                seats_kinder=$29, seats_grade_1=$30, seats_grade_2=$31, seats_grade_3=$32,
+                seats_grade_4=$33, seats_grade_5=$34, seats_grade_6=$35,
+                seats_grade_7=$36, seats_grade_8=$37, seats_grade_9=$38, seats_grade_10=$39,
+                seats_grade_11=$40, seats_grade_12=$41,
 
-                seats_kinder=$12, seats_grade_1=$13, seats_grade_2=$14, seats_grade_3=$15,
-                seats_grade_4=$16, seats_grade_5=$17, seats_grade_6=$18,
-                seats_grade_7=$19, seats_grade_8=$20, seats_grade_9=$21, seats_grade_10=$22,
-                seats_grade_11=$23, seats_grade_12=$24,
-
-                -- New Inventory Fields
-                res_ecart_func=$27, res_ecart_nonfunc=$28,
-                res_laptop_func=$29, res_laptop_nonfunc=$30,
-                res_tv_func=$31, res_tv_nonfunc=$32,
-                res_printer_func=$33, res_printer_nonfunc=$34,
-                res_desk_func=$35, res_desk_nonfunc=$36,
-                res_armchair_func=$37, res_armchair_nonfunc=$38,
-                res_toilet_func=$39, res_toilet_nonfunc=$40,
-                res_handwash_func=$41, res_handwash_nonfunc=$42,
+                has_buildable_space=$42::BOOLEAN,
 
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
-    const result = await pool.query(query, [
-      data.schoolId, // $1
 
-      data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, // $2-4
-      valueOrNull(data.res_water_source), // $5
+    const values = [
+      data.schoolId,
+      data.res_toilets_male, data.res_toilets_female, data.res_toilets_common, data.res_toilets_pwd,
+      data.res_water_source, data.res_tvl_workshops, data.res_electricity_source,
+      data.res_buildable_space, data.sha_category,
 
-      data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops, // $6-8
+      data.res_sci_labs, data.res_com_labs,
 
-      valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space), // $9-11
+      data.res_ecart_func, data.res_ecart_nonfunc,
+      data.res_laptop_func, data.res_laptop_nonfunc,
+      data.res_tv_func, data.res_tv_nonfunc,
+      data.res_printer_func, data.res_printer_nonfunc,
+      data.res_desk_func, data.res_desk_nonfunc,
+      data.res_armchair_func, data.res_armchair_nonfunc,
+      data.res_toilet_func, data.res_toilet_nonfunc,
+      data.res_handwash_func, data.res_handwash_nonfunc,
 
       data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
       data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
       data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-      data.seats_grade_11, data.seats_grade_12, // $12-24
+      data.seats_grade_11, data.seats_grade_12,
 
-      data.res_toilets_common, // $25
-      valueOrNull(data.sha_category), // $26
+      // $42
+      data.res_buildable_space === 'Yes'
+    ];
 
-      // New Inventory Values ($27-42)
-      data.res_ecart_func || 0, data.res_ecart_nonfunc || 0,
-      data.res_laptop_func || 0, data.res_laptop_nonfunc || 0,
-      data.res_tv_func || 0, data.res_tv_nonfunc || 0,
-      data.res_printer_func || 0, data.res_printer_nonfunc || 0,
-      data.res_desk_func || 0, data.res_desk_nonfunc || 0,
-      data.res_armchair_func || 0, data.res_armchair_nonfunc || 0,
-      data.res_toilet_func || 0, data.res_toilet_nonfunc || 0,
-      data.res_handwash_func || 0, data.res_handwash_nonfunc || 0
-    ]);
-    if (result.rowCount === 0) {
-      console.warn(`[Resources] ID ${data.schoolId} not found.`);
-      return res.status(404).json({ error: "School Profile not found" });
+    await pool.query(query, values);
+
+    // --- HANDLE BUILDABLE SPACES (Transactional) ---
+    if (data.res_buildable_space === 'Yes' && data.spaces && Array.isArray(data.spaces)) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // 1. Delete existing for school
+        await client.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
+
+        // 2. Insert new with stable space_number
+        for (let i = 0; i < data.spaces.length; i++) {
+          const space = data.spaces[i];
+          await client.query(`
+             INSERT INTO buildable_spaces (school_id, iern, space_number, latitude, longitude, length, width, total_area)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           `, [
+            data.schoolId,
+            data.iern || null,
+            i + 1, // space_number: 1, 2, 3...
+            space.lat, space.lng,
+            space.length, space.width, space.area
+          ]);
+        }
+        await client.query('COMMIT');
+      } catch (txErr) {
+        await client.query('ROLLBACK');
+        console.error("Buildable spaces transaction failed:", txErr);
+      } finally {
+        client.release();
+      }
+    } else if (data.res_buildable_space === 'No') {
+      // Clear if No
+      await pool.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
     }
-    console.log("[Resources] Success");
+
     res.json({ message: "Resources saved!" });
+
     // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
 
@@ -5143,42 +5272,102 @@ app.post('/api/save-school-resources', async (req, res) => {
     if (poolNew) {
       try {
         console.log("ðŸ”„ Dual-Write: Syncing School Resources...");
-        await poolNew.query(query, [
-          data.schoolId,
-          data.res_toilets_male, data.res_toilets_female, data.res_toilets_pwd, // $2-4
-          valueOrNull(data.res_water_source), // $5
+        await poolNew.query(query, values);
 
-          data.res_sci_labs, data.res_com_labs, data.res_tvl_workshops, // $6-8
+        // Sync Buildable Spaces
+        if (data.res_buildable_space === 'Yes' && data.spaces) {
+          await poolNew.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
+          for (let i = 0; i < data.spaces.length; i++) {
+            const space = data.spaces[i];
+            await poolNew.query(`
+                INSERT INTO buildable_spaces (school_id, iern, space_number, latitude, longitude, length, width, total_area)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                `, [data.schoolId, data.iern || null, i + 1, space.lat, space.lng, space.length, space.width, space.area]);
+          }
+        } else if (data.res_buildable_space === 'No') {
+          await poolNew.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
+        }
 
-          valueOrNull(data.res_ownership_type), valueOrNull(data.res_electricity_source), valueOrNull(data.res_buildable_space), // $9-11
-
-          data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
-          data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
-          data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-          data.seats_grade_11, data.seats_grade_12, // $12-24
-
-          data.res_toilets_common,
-          valueOrNull(data.sha_category),
-
-          // New Inventory Values ($27-42)
-          data.res_ecart_func || 0, data.res_ecart_nonfunc || 0,
-          data.res_laptop_func || 0, data.res_laptop_nonfunc || 0,
-          data.res_tv_func || 0, data.res_tv_nonfunc || 0,
-          data.res_printer_func || 0, data.res_printer_nonfunc || 0,
-          data.res_desk_func || 0, data.res_desk_nonfunc || 0,
-          data.res_armchair_func || 0, data.res_armchair_nonfunc || 0,
-          data.res_toilet_func || 0, data.res_toilet_nonfunc || 0,
-          data.res_handwash_func || 0, data.res_handwash_nonfunc || 0
-        ]);
         await calculateSchoolProgress(data.schoolId, poolNew);
         console.log("âœ… Dual-Write: School Resources Synced!");
       } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (School Resources):", dwErr.message);
+        console.error("â Œ Dual-Write Error (School Resources):", dwErr.message);
       }
     }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 22a. GET: Fetch Facility Repairs ---
+app.get('/api/facility-repairs/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM facility_repairs WHERE school_id = $1 ORDER BY created_at ASC', [schoolId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Facility Repairs Error:", err);
+    res.status(500).json({ error: "Failed to fetch facility repairs" });
+  }
+});
+
+// --- 22b. POST: Save Facility Repair (Single Item) ---
+app.post('/api/save-facility-repair', async (req, res) => {
+  const d = req.body;
+  try {
+    // Sanitize booleans
+    const toBool = (val) => val === true || val === 'true' || val === 1;
+
+    const query = `
+            INSERT INTO facility_repairs (
+                school_id, iern, building_no, room_no, remarks,
+                repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
+                repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING repair_id;
+        `;
+
+    const values = [
+      d.schoolId || d.iern, // Fallback
+      d.iern || d.schoolId,
+      d.building_no,
+      d.room_no,
+      d.remarks || '',
+      toBool(d.repair_roofing),
+      toBool(d.repair_ceiling_ext),
+      toBool(d.repair_ceiling_int),
+      toBool(d.repair_wall_ext),
+      toBool(d.repair_partition),
+      toBool(d.repair_door),
+      toBool(d.repair_windows),
+      toBool(d.repair_flooring),
+      toBool(d.repair_structural)
+    ];
+
+    const result = await pool.query(query, values);
+    res.json({ success: true, repair_id: result.rows[0].repair_id });
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      poolNew.query(query, values).catch(e => console.error("Dual-Write Repair Error:", e));
+    }
+
+  } catch (err) {
+    console.error("Save Repair Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- 22a. GET: Fetch Buildable Spaces ---
+app.get('/api/buildable-spaces/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM buildable_spaces WHERE school_id = $1', [schoolId]);
+    res.json(result.rows); // Returns array of spaces
+  } catch (err) {
+    console.error("Fetch Buildable Spaces Error:", err);
+    res.status(500).json({ error: "Failed to fetch buildable spaces" });
   }
 });
 
@@ -5223,13 +5412,15 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
+    const sanitize = (val) => (val === '' || val === null || val === undefined) ? 0 : val;
+
     await pool.query(query, [
       data.schoolId,
-      data.build_classrooms_total,
-      data.build_classrooms_new,
-      data.build_classrooms_good,
-      data.build_classrooms_repair,
-      data.build_classrooms_demolition
+      sanitize(data.build_classrooms_total),
+      sanitize(data.build_classrooms_new),
+      sanitize(data.build_classrooms_good),
+      sanitize(data.build_classrooms_repair),
+      sanitize(data.build_classrooms_demolition)
     ]);
     res.json({ message: "Facilities saved!" });
     // SNAPSHOT UPDATE (Primary)
@@ -5241,11 +5432,11 @@ app.post('/api/save-physical-facilities', async (req, res) => {
         console.log("ðŸ”„ Dual-Write: Syncing Physical Facilities...");
         await poolNew.query(query, [
           data.schoolId,
-          data.build_classrooms_total,
-          data.build_classrooms_new,
-          data.build_classrooms_good,
-          data.build_classrooms_repair,
-          data.build_classrooms_demolition
+          sanitize(data.build_classrooms_total),
+          sanitize(data.build_classrooms_new),
+          sanitize(data.build_classrooms_good),
+          sanitize(data.build_classrooms_repair),
+          sanitize(data.build_classrooms_demolition)
         ]);
         await calculateSchoolProgress(data.schoolId, poolNew);
         console.log("âœ… Dual-Write: Physical Facilities Synced!");
@@ -6886,6 +7077,70 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
   }
 });
 
+
+// --- POST: Save Facility Repair Assessment ---
+app.post('/api/save-facility-repair', async (req, res) => {
+  const data = req.body;
+  // Normalize building_no for consistent grouping
+  if (data.building_no) data.building_no = data.building_no.trim();
+  try {
+    const result = await pool.query(`
+      INSERT INTO facility_repairs (
+        school_id, iern, building_no, room_no,
+        repair_roofing, repair_ceiling_ext, repair_ceiling_int,
+        repair_wall_ext, repair_partition, repair_door,
+        repair_windows, repair_flooring, repair_structural,
+        remarks
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      RETURNING repair_id
+    `, [
+      data.schoolId, data.iern, data.building_no, data.room_no,
+      data.repair_roofing || false, data.repair_ceiling_ext || false, data.repair_ceiling_int || false,
+      data.repair_wall_ext || false, data.repair_partition || false, data.repair_door || false,
+      data.repair_windows || false, data.repair_flooring || false, data.repair_structural || false,
+      data.remarks || null
+    ]);
+
+    // --- DUAL WRITE: FACILITY REPAIRS ---
+    if (poolNew) {
+      poolNew.query(`
+        INSERT INTO facility_repairs (
+          school_id, iern, building_no, room_no,
+          repair_roofing, repair_ceiling_ext, repair_ceiling_int,
+          repair_wall_ext, repair_partition, repair_door,
+          repair_windows, repair_flooring, repair_structural,
+          remarks
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      `, [
+        data.schoolId, data.iern, data.building_no, data.room_no,
+        data.repair_roofing || false, data.repair_ceiling_ext || false, data.repair_ceiling_int || false,
+        data.repair_wall_ext || false, data.repair_partition || false, data.repair_door || false,
+        data.repair_windows || false, data.repair_flooring || false, data.repair_structural || false,
+        data.remarks || null
+      ]).catch(e => console.error("Dual-Write Facility Repair Err:", e.message));
+    }
+
+    res.json({ success: true, repair_id: result.rows[0].repair_id });
+  } catch (err) {
+    console.error("❌ Save Facility Repair Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- GET: Facility Repairs by IERN ---
+app.get('/api/facility-repairs/:iern', async (req, res) => {
+  const { iern } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM facility_repairs WHERE iern = $1 ORDER BY created_at DESC',
+      [iern]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Get Facility Repairs Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- SERVER LISTEN ---
 if (isMainModule || process.env.START_SERVER === 'true') {
