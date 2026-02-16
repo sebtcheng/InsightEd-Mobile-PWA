@@ -277,6 +277,23 @@ const initDB = async () => {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);`);
     console.log("✅ DB Init: Facility Repairs schema verified.");
 
+    // --- MIGRATION: ADD FACILITY DEMOLITIONS ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS facility_demolitions (
+        demolition_id SERIAL PRIMARY KEY,
+        school_id TEXT REFERENCES school_profiles(school_id),
+        iern TEXT,
+        building_no TEXT,
+        reason_age BOOLEAN DEFAULT FALSE,
+        reason_safety BOOLEAN DEFAULT FALSE,
+        reason_calamity BOOLEAN DEFAULT FALSE,
+        reason_upgrade BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);`);
+    console.log("✅ DB Init: Facility Demolitions schema verified.");
+
   } catch (err) {
     console.error("âŒ DB Init Error:", err);
   }
@@ -5375,6 +5392,57 @@ app.post('/api/save-facility-repair', async (req, res) => {
   }
 });
 
+// --- 22c. GET: Fetch Facility Demolitions ---
+app.get('/api/facility-demolitions/:iern', async (req, res) => {
+  const { iern } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM facility_demolitions WHERE iern = $1 OR school_id = $1 ORDER BY created_at ASC', [iern]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Facility Demolitions Error:", err);
+    res.status(500).json({ error: "Failed to fetch facility demolitions" });
+  }
+});
+
+// --- 22d. POST: Save Facility Demolition (Single Item) ---
+app.post('/api/save-facility-demolition', async (req, res) => {
+  const d = req.body;
+  try {
+    // Sanitize booleans
+    const toBool = (val) => val === true || val === 'true' || val === 1;
+
+    const query = `
+            INSERT INTO facility_demolitions (
+                school_id, iern, building_no,
+                reason_age, reason_safety, reason_calamity, reason_upgrade
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING demolition_id;
+        `;
+
+    const values = [
+      d.schoolId || d.iern, // Fallback
+      d.iern || d.schoolId,
+      d.building_no,
+      toBool(d.reason_age),
+      toBool(d.reason_safety),
+      toBool(d.reason_calamity),
+      toBool(d.reason_upgrade)
+    ];
+
+    const result = await pool.query(query, values);
+    res.json({ success: true, demolition_id: result.rows[0].demolition_id });
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      poolNew.query(query, values).catch(e => console.error("Dual-Write Demolition Error:", e));
+    }
+
+  } catch (err) {
+    console.error("Save Demolition Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- 22a. GET: Fetch Buildable Spaces ---
 app.get('/api/buildable-spaces/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
@@ -5414,11 +5482,18 @@ app.get('/api/physical-facilities/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- 25. POST: Save Physical Facilities ---
+// --- 25. POST: Save Physical Facilities (Unified Submission) ---
 app.post('/api/save-physical-facilities', async (req, res) => {
   const data = req.body;
+  const client = await pool.connect();
+  const sanitize = (val) => (val === '' || val === null || val === undefined) ? 0 : val;
+  const toBool = (val) => val === true || val === 'true' || val === 1;
+
   try {
-    const query = `
+    await client.query('BEGIN');
+
+    // 1. Update Main Profile
+    const queryProfile = `
             UPDATE school_profiles SET
                 build_classrooms_total=$2, 
                 build_classrooms_new=$3,
@@ -5428,9 +5503,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
-    const sanitize = (val) => (val === '' || val === null || val === undefined) ? 0 : val;
 
-    await pool.query(query, [
+    await client.query(queryProfile, [
       data.schoolId,
       sanitize(data.build_classrooms_total),
       sanitize(data.build_classrooms_new),
@@ -5438,31 +5512,123 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       sanitize(data.build_classrooms_repair),
       sanitize(data.build_classrooms_demolition)
     ]);
-    res.json({ message: "Facilities saved!" });
+
+    // 2. Handle Repairs (Delete All & Re-insert)
+    if (data.repairEntries && Array.isArray(data.repairEntries)) {
+      await client.query('DELETE FROM facility_repairs WHERE school_id = $1', [data.schoolId]);
+
+      for (const r of data.repairEntries) {
+        await client.query(`
+                INSERT INTO facility_repairs (
+                    school_id, iern, building_no, room_no, remarks,
+                    repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
+                    repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            `, [
+          data.schoolId, data.schoolId, // Use schoolId for both school_id and iern for consistency
+          r.building_no, r.room_no, r.remarks || '',
+          toBool(r.repair_roofing), toBool(r.repair_ceiling_ext), toBool(r.repair_ceiling_int),
+          toBool(r.repair_wall_ext), toBool(r.repair_partition), toBool(r.repair_door),
+          toBool(r.repair_windows), toBool(r.repair_flooring), toBool(r.repair_structural)
+        ]);
+      }
+    }
+
+    // 3. Handle Demolitions (Delete All & Re-insert)
+    if (data.demolitionEntries && Array.isArray(data.demolitionEntries)) {
+      await client.query('DELETE FROM facility_demolitions WHERE school_id = $1', [data.schoolId]);
+
+      for (const d of data.demolitionEntries) {
+        await client.query(`
+                INSERT INTO facility_demolitions (
+                    school_id, iern, building_no,
+                    reason_age, reason_safety, reason_calamity, reason_upgrade
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [
+          data.schoolId, data.schoolId,
+          d.building_no,
+          toBool(d.reason_age), toBool(d.reason_safety),
+          toBool(d.reason_calamity), toBool(d.reason_upgrade)
+        ]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: "Facilities and details saved!" });
+
     // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
 
-    // --- DUAL WRITE: PHYSICAL FACILITIES ---
+    // --- DUAL WRITE: PHYSICAL FACILITIES (Async, Best Effort) ---
     if (poolNew) {
-      try {
-        console.log("ðŸ”„ Dual-Write: Syncing Physical Facilities...");
-        await poolNew.query(query, [
-          data.schoolId,
-          sanitize(data.build_classrooms_total),
-          sanitize(data.build_classrooms_new),
-          sanitize(data.build_classrooms_good),
-          sanitize(data.build_classrooms_repair),
-          sanitize(data.build_classrooms_demolition)
-        ]);
-        await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("âœ… Dual-Write: Physical Facilities Synced!");
-      } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Physical Facilities):", dwErr.message);
-      }
+      (async () => {
+        const clientNew = await poolNew.connect();
+        try {
+          await clientNew.query('BEGIN');
+          console.log("🔄 Dual-Write: Syncing Physical Facilities...");
+
+          // DW 1. Update Profile
+          await clientNew.query(queryProfile, [
+            data.schoolId,
+            sanitize(data.build_classrooms_total),
+            sanitize(data.build_classrooms_new),
+            sanitize(data.build_classrooms_good),
+            sanitize(data.build_classrooms_repair),
+            sanitize(data.build_classrooms_demolition)
+          ]);
+
+          // DW 2. Repairs
+          if (data.repairEntries) {
+            await clientNew.query('DELETE FROM facility_repairs WHERE school_id = $1', [data.schoolId]);
+            for (const r of data.repairEntries) {
+              await clientNew.query(`
+                        INSERT INTO facility_repairs (
+                            school_id, iern, building_no, room_no, remarks,
+                            repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
+                            repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                    `, [
+                data.schoolId, data.schoolId, r.building_no, r.room_no, r.remarks || '',
+                toBool(r.repair_roofing), toBool(r.repair_ceiling_ext), toBool(r.repair_ceiling_int),
+                toBool(r.repair_wall_ext), toBool(r.repair_partition), toBool(r.repair_door),
+                toBool(r.repair_windows), toBool(r.repair_flooring), toBool(r.repair_structural)
+              ]);
+            }
+          }
+
+          // DW 3. Demolitions
+          if (data.demolitionEntries) {
+            await clientNew.query('DELETE FROM facility_demolitions WHERE school_id = $1', [data.schoolId]);
+            for (const d of data.demolitionEntries) {
+              await clientNew.query(`
+                        INSERT INTO facility_demolitions (
+                            school_id, iern, building_no,
+                            reason_age, reason_safety, reason_calamity, reason_upgrade
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    `, [
+                data.schoolId, data.schoolId, d.building_no,
+                toBool(d.reason_age), toBool(d.reason_safety), toBool(d.reason_calamity), toBool(d.reason_upgrade)
+              ]);
+            }
+          }
+
+          await clientNew.query('COMMIT');
+          await calculateSchoolProgress(data.schoolId, poolNew);
+          console.log("✅ Dual-Write: Physical Facilities Synced!");
+        } catch (dwErr) {
+          await clientNew.query('ROLLBACK');
+          console.error("❌ Dual-Write Error (Physical Facilities):", dwErr.message);
+        } finally {
+          clientNew.release();
+        }
+      })();
     }
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

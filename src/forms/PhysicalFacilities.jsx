@@ -39,6 +39,79 @@ const InputCard = ({ label, name, icon, color, value, onChange, disabled }) => (
     </div>
 );
 
+const DemolitionEntryModal = ({ isOpen, onClose, onSave, data, setData }) => {
+    if (!isOpen) return null;
+
+    const reasons = [
+        { key: 'reason_age', label: 'Age / Dilapidation' },
+        { key: 'reason_safety', label: 'Safety Hazard' },
+        { key: 'reason_calamity', label: 'Calamity Damage' },
+        { key: 'reason_upgrade', label: 'Site Upgrade / Repurposing' }
+    ];
+
+    const selectedCount = reasons.filter(r => data[r.key]).length;
+
+    const toggleReason = (key) => {
+        // if (!data[key] && selectedCount >= 2) return; // Prevent more than 2 (REMOVED LIMIT)
+        setData(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 className="font-bold text-lg text-slate-800">Add for Demolition</h3>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center transition-colors">✕</button>
+                </div>
+
+                <div className="p-6 overflow-y-auto">
+                    <div className="mb-4">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Building Number / Name</label>
+                        <input
+                            type="text"
+                            value={data.building_no}
+                            onChange={(e) => setData({ ...data, building_no: e.target.value })}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-red-100 focus:border-red-200 transition-all"
+                            placeholder="e.g. Building 1"
+                            autoFocus
+                        />
+                    </div>
+
+                    <div className="space-y-3">
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Select Reasons</label>
+                        {reasons.map(Reason => (
+                            <div
+                                key={Reason.key}
+                                onClick={() => toggleReason(Reason.key)}
+                                className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${data[Reason.key]
+                                    ? 'bg-red-50 border-red-200 shadow-sm'
+                                    : 'bg-white border-slate-100 hover:border-red-200'
+                                    }`}
+                            >
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${data[Reason.key] ? 'border-red-500 bg-red-500 text-white' : 'border-slate-300 bg-white'
+                                    }`}>
+                                    {data[Reason.key] && <FiCheckCircle size={12} />}
+                                </div>
+                                <span className={`text-sm font-bold ${data[Reason.key] ? 'text-red-700' : 'text-slate-600'}`}>{Reason.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="p-5 border-t border-slate-100 bg-slate-50/50">
+                    <button
+                        onClick={onSave}
+                        disabled={!data.building_no.trim() || selectedCount === 0}
+                        className="w-full py-3.5 bg-red-500 text-white font-bold rounded-xl shadow-lg shadow-red-500/20 hover:bg-red-600 transition-all disabled:opacity-50 disabled:shadow-none"
+                    >
+                        Add to List
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const PhysicalFacilities = ({ embedded }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -79,6 +152,17 @@ const PhysicalFacilities = ({ embedded }) => {
     const [buildingError, setBuildingError] = useState('');
     const [isRepairSubmitted, setIsRepairSubmitted] = useState(false);
     const [isLoadingRepairs, setIsLoadingRepairs] = useState(false);
+
+    // --- DEMOLITION DATA ---
+    const [demolitionData, setDemolitionData] = useState([]); // [{ id, building_no, reason_age... }]
+    const [isSavingDemolition, setIsSavingDemolition] = useState(false);
+    const [demolitionSuccessMsg, setDemolitionSuccessMsg] = useState('');
+    const [showDemolitionModal, setShowDemolitionModal] = useState(false);
+    const [demolitionModalData, setDemolitionModalData] = useState({
+        building_no: '', reason_age: false, reason_safety: false, reason_calamity: false, reason_upgrade: false
+    });
+    const [isDemolitionSubmitted, setIsDemolitionSubmitted] = useState(false);
+    const [isLoadingDemolitions, setIsLoadingDemolitions] = useState(false);
 
 
     const repairItems = [
@@ -253,6 +337,101 @@ const PhysicalFacilities = ({ embedded }) => {
         } catch (_) { }
     };
 
+    // --- DEMOLITION LOGIC ---
+    const addDemolition = () => {
+        setDemolitionModalData({
+            building_no: '', reason_age: false, reason_safety: false, reason_calamity: false, reason_upgrade: false
+        });
+        setShowDemolitionModal(true);
+    };
+
+    const saveDemolitionFromModal = () => {
+        setDemolitionData(prev => [...prev, { id: Date.now(), ...demolitionModalData }]);
+        setShowDemolitionModal(false);
+    };
+
+    const removeDemolition = (idx) => {
+        setDemolitionData(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const submitAllDemolitions = async () => {
+        const payloadList = demolitionData
+            .filter(d => !d.saved) // Only submit unsaved items
+            .map(d => ({
+                schoolId: schoolId || localStorage.getItem('schoolId'),
+                iern: schoolId || localStorage.getItem('schoolId'),
+                building_no: d.building_no,
+                reason_age: d.reason_age,
+                reason_safety: d.reason_safety,
+                reason_calamity: d.reason_calamity,
+                reason_upgrade: d.reason_upgrade
+            }));
+
+
+        if (payloadList.length === 0) return;
+
+        setIsSavingDemolition(true);
+        setDemolitionSuccessMsg('');
+        let savedCount = 0;
+
+        for (const payload of payloadList) {
+            try {
+                const res = await fetch('/api/save-facility-demolition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) savedCount++;
+            } catch (e) {
+                console.error("Demolition save failed:", e);
+            }
+        }
+
+        if (savedCount === payloadList.length) {
+            setDemolitionSuccessMsg(`All ${savedCount} demolition records submitted successfully!`);
+            setIsDemolitionSubmitted(true);
+        } else {
+            setDemolitionSuccessMsg(`Saved ${savedCount} out of ${payloadList.length} records.`);
+        }
+        setIsSavingDemolition(false);
+    };
+
+    // --- SYNC DEMOLITION COUNT ---
+    useEffect(() => {
+        const count = demolitionData.length;
+        // if (count !== (formData.build_classrooms_demolition || 0)) {
+        //     setFormData(prev => ({ ...prev, build_classrooms_demolition: count }));
+        // }
+        if (formData && count !== (formData.build_classrooms_demolition || 0)) {
+            setFormData(prev => ({ ...prev, build_classrooms_demolition: count }));
+        }
+    }, [demolitionData]);
+
+    // --- HYDRATE DEMOLITIONS ---
+    useEffect(() => {
+        const fetchDemolitions = async () => {
+            const iern = queryParams.get('schoolId') || localStorage.getItem('schoolId');
+            if (!iern) return;
+
+            setIsLoadingDemolitions(true);
+            try {
+                const res = await fetch(`/api/facility-demolitions/${iern}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.length > 0) {
+                        setDemolitionData(data.map((d, i) => ({ id: Date.now() + i, ...d, saved: true })));
+                        setIsDemolitionSubmitted(true);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch demolitions", e);
+            } finally {
+                setIsLoadingDemolitions(false);
+            }
+        };
+        fetchDemolitions();
+    }, [schoolIdParam]);
+
     // --- CHECK PENDING REPAIRS ON MOUNT ---
     useEffect(() => {
         const checkPending = async () => {
@@ -425,12 +604,12 @@ const PhysicalFacilities = ({ embedded }) => {
 
                     // STEP 3: BACKGROUND FETCH
                     if (!restored) {
-                        let fetchUrl = `/ api / physical - facilities / ${user.uid} `;
+                        let fetchUrl = `/api/physical-facilities/${user.uid}`;
                         const role = localStorage.getItem('userRole');
                         if (isAuditMode) {
-                            fetchUrl = `/ api / monitoring / school - detail / ${auditTargetId} `;
+                            fetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
                         } else if ((viewOnly || role === 'Central Office' || isDummy) && schoolIdParam) {
-                            fetchUrl = `/ api / monitoring / school - detail / ${schoolIdParam} `;
+                            fetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
                         // Only show loading if we didn't load from cache
@@ -535,27 +714,71 @@ const PhysicalFacilities = ({ embedded }) => {
         setFormData(prev => ({ ...prev, [name]: intValue }));
     };
 
-    // --- VALIDATION ---
-    const isFormValid = () => {
+    // --- VALIDATION AND UNIFIED SAVE ---
+    const [confirmationData, setConfirmationData] = useState(null);
+    const [showUnifiedConfirmModal, setShowUnifiedConfirmModal] = useState(false);
+
+    const validateAndConfirm = () => {
+        // 1. Basic Field Validation
         const isValidEntry = (value) => value !== '' && value !== null && value !== undefined;
         const fields = [
             'build_classrooms_new', 'build_classrooms_good',
             'build_classrooms_repair', 'build_classrooms_demolition'
         ];
-
         for (const f of fields) {
-            if (!isValidEntry(formData[f])) return false;
+            if (!isValidEntry(formData[f])) {
+                alert("Please fill in all classroom counts (use 0 if none).");
+                return;
+            }
         }
-        return true;
+
+        // 2. Cross-Verification (Count Mismatches)
+        const totalRoomsInRepairs = facilityData.reduce((sum, b) => sum + b.rooms.length, 0);
+        if (totalRoomsInRepairs !== formData.build_classrooms_repair) {
+            alert(`Mismatch: "Needs Repair" count (${formData.build_classrooms_repair}) does not match the total rooms listed in Repair Assessment (${totalRoomsInRepairs}).\n\nPlease ensure you have added all rooms needing repair.`);
+            return;
+        }
+
+        const totalDemolitions = demolitionData.length;
+        if (totalDemolitions !== formData.build_classrooms_demolition) {
+            alert(`Mismatch: "Needs Demolition" count (${formData.build_classrooms_demolition}) does not match the total buildings listed in Demolition Records (${totalDemolitions}).`);
+            return;
+        }
+
+        // 3. Prepare Confirmation Data
+        setConfirmationData({
+            new: formData.build_classrooms_new,
+            good: formData.build_classrooms_good,
+            repairs: totalRoomsInRepairs,
+            repairBuildings: facilityData.length,
+            demolitions: totalDemolitions
+        });
+        setShowSaveModal(false); // Close generic save modal if open
+        setShowUnifiedConfirmModal(true);
     };
 
-    const confirmSave = async () => {
-        setShowSaveModal(false);
+    const confirmUnifiedSave = async () => {
+        setShowUnifiedConfirmModal(false);
         setIsSaving(true);
+
+        // Prepare Master Payload
+        // Flatten repairs for backend
+        const repairEntries = [];
+        for (const building of facilityData) {
+            for (const room of building.rooms) {
+                repairEntries.push({
+                    building_no: building.building_no,
+                    ...room
+                });
+            }
+        }
+
         const payload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
             uid: auth.currentUser.uid,
-            ...formData
+            ...formData,
+            repairEntries,
+            demolitionEntries: demolitionData
         };
 
         try {
@@ -565,8 +788,23 @@ const PhysicalFacilities = ({ embedded }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+
             if (res.ok) {
                 setShowSuccessModal(true);
+
+                // Update Local State to "Saved/Read-Only" mode
+                const updatedFacilityData = facilityData.map(b => ({
+                    ...b,
+                    rooms: b.rooms.map(r => ({ ...r, saved: true }))
+                }));
+                setFacilityData(updatedFacilityData);
+
+                const updatedDemolitionData = demolitionData.map(d => ({ ...d, saved: true }));
+                setDemolitionData(updatedDemolitionData);
+
+                setIsRepairSubmitted(true);
+                setIsDemolitionSubmitted(true);
+
                 setOriginalData({ ...formData });
                 setIsLocked(true);
                 localStorage.setItem('physicalFacilitiesData', JSON.stringify(formData));
@@ -574,18 +812,15 @@ const PhysicalFacilities = ({ embedded }) => {
                 throw new Error("Save failed");
             }
         } catch (e) {
-            await addToOutbox({
-                type: 'PHYSICAL_FACILITIES',
-                label: 'Physical Facilities',
-                url: '/api/save-physical-facilities',
-                payload
-            });
-            setShowOfflineModal(true);
-            setIsLocked(true);
+            console.error(e);
+            alert("Save failed or offline. Please check connection.");
+            // Offline handling logic could be re-integrated here if needed, 
+            // but for now we focus on the unified online flow.
         } finally {
             setIsSaving(false);
         }
     };
+
 
 
 
@@ -646,7 +881,7 @@ const PhysicalFacilities = ({ embedded }) => {
                 <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
 
                 {/* --- FACILITY REPAIR ASSESSMENT SECTION --- */}
-                {!viewOnly && !isReadOnly && (
+                {!viewOnly && (
                     <div className="bg-white p-6 rounded-3xl shadow-xl shadow-orange-900/5 border border-orange-100 mt-6 relative overflow-hidden">
                         {isLoadingRepairs && (
                             <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
@@ -669,34 +904,36 @@ const PhysicalFacilities = ({ embedded }) => {
                         </div>
 
                         {/* Add Building Input */}
-                        <div className="mb-4">
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={newBuildingName}
-                                    onChange={(e) => { setNewBuildingName(e.target.value); setBuildingError(''); }}
-                                    placeholder="Building name or number"
-                                    disabled={isRepairSubmitted}
-                                    className={`flex-1 p-3 bg-slate-50 border rounded-xl text-sm font-semibold text-slate-700 focus:ring-4 outline-none transition-colors ${isDuplicateBuilding
-                                        ? 'border-red-400 focus:ring-red-100 bg-red-50'
-                                        : 'border-slate-200 focus:ring-orange-100'
-                                        } ${isRepairSubmitted ? 'opacity-50 cursor-not-allowed' : ''} `}
-                                    onKeyDown={(e) => e.key === 'Enter' && addBuilding()}
-                                />
-                                <button
-                                    onClick={addBuilding}
-                                    disabled={isDuplicateBuilding || !newBuildingName.trim() || isRepairSubmitted}
-                                    className="px-5 py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors text-sm shadow-md shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    + Add
-                                </button>
+                        {!isReadOnly && (
+                            <div className="mb-4">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newBuildingName}
+                                        onChange={(e) => { setNewBuildingName(e.target.value); setBuildingError(''); }}
+                                        placeholder="Building name or number"
+                                        disabled={isRepairSubmitted}
+                                        className={`flex-1 p-3 bg-slate-50 border rounded-xl text-sm font-semibold text-slate-700 focus:ring-4 outline-none transition-colors ${isDuplicateBuilding
+                                            ? 'border-red-400 focus:ring-red-100 bg-red-50'
+                                            : 'border-slate-200 focus:ring-orange-100'
+                                            } ${isRepairSubmitted ? 'opacity-50 cursor-not-allowed' : ''} `}
+                                        onKeyDown={(e) => e.key === 'Enter' && addBuilding()}
+                                    />
+                                    <button
+                                        onClick={addBuilding}
+                                        disabled={isDuplicateBuilding || !newBuildingName.trim() || isRepairSubmitted}
+                                        className="px-5 py-3 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors text-sm shadow-md shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        + Add
+                                    </button>
+                                </div>
+                                {(buildingError || isDuplicateBuilding) && (
+                                    <p className="text-red-500 text-xs font-semibold mt-1.5 flex items-center gap-1">
+                                        ⚠️ {buildingError || 'This building has already been added.'}
+                                    </p>
+                                )}
                             </div>
-                            {(buildingError || isDuplicateBuilding) && (
-                                <p className="text-red-500 text-xs font-semibold mt-1.5 flex items-center gap-1">
-                                    ⚠️ {buildingError || 'This building has already been added.'}
-                                </p>
-                            )}
-                        </div>
+                        )}
 
                         {/* Building Cards */}
                         {
@@ -704,7 +941,7 @@ const PhysicalFacilities = ({ embedded }) => {
                                 <div className="text-center py-8 text-slate-400 text-sm">
                                     <p className="text-3xl mb-2">🏢</p>
                                     <p className="font-medium">No buildings added yet.</p>
-                                    <p className="text-xs mt-1">Start by adding a building above.</p>
+                                    {!isReadOnly && <p className="text-xs mt-1">Start by adding a building above.</p>}
                                 </div>
                             )
                         }
@@ -729,7 +966,7 @@ const PhysicalFacilities = ({ embedded }) => {
                                                 </span>
                                             )}
                                         </div>
-                                        {!isRepairSubmitted && (
+                                        {!isRepairSubmitted && !isReadOnly && (
                                             <button
                                                 onClick={() => removeBuilding(bIdx)}
                                                 className="text-red-400 hover:text-red-600 text-xs font-bold transition-colors"
@@ -750,8 +987,8 @@ const PhysicalFacilities = ({ embedded }) => {
                                                 return (
                                                     <div
                                                         key={rIdx}
-                                                        onClick={() => !isRepairSubmitted && openEditRoom(bIdx, rIdx)}
-                                                        className={`group p-4 rounded-[1.25rem] border transition-all flex items-center justify-between active:scale-[0.98] ${isRepairSubmitted || isSaved
+                                                        onClick={() => !isRepairSubmitted && !isReadOnly && openEditRoom(bIdx, rIdx)}
+                                                        className={`group p-4 rounded-[1.25rem] border transition-all flex items-center justify-between active:scale-[0.98] ${isRepairSubmitted || isSaved || isReadOnly
                                                             ? 'bg-slate-50 border-slate-100'
                                                             : 'bg-white border-slate-100 hover:border-orange-200 hover:shadow-md cursor-pointer'
                                                             } `}
@@ -776,7 +1013,7 @@ const PhysicalFacilities = ({ embedded }) => {
                                                         </div>
 
                                                         <div className="flex items-center gap-2 shrink-0">
-                                                            {!isRepairSubmitted && !isSaved && (
+                                                            {!isRepairSubmitted && !isSaved && !isReadOnly && (
                                                                 <>
                                                                     <div className="w-8 h-8 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                                         <FiEdit size={14} />
@@ -789,7 +1026,7 @@ const PhysicalFacilities = ({ embedded }) => {
                                                                     </button>
                                                                 </>
                                                             )}
-                                                            {(isRepairSubmitted || isSaved) && (
+                                                            {(isRepairSubmitted || isSaved || isReadOnly) && (
                                                                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-300 flex items-center justify-center">
                                                                     <FiChevronRight size={18} />
                                                                 </div>
@@ -802,7 +1039,7 @@ const PhysicalFacilities = ({ embedded }) => {
                                     )}
 
                                     {/* Add Room Button */}
-                                    {!isRepairSubmitted && (
+                                    {!isRepairSubmitted && !isReadOnly && (
                                         <button
                                             onClick={() => openAddRoom(bIdx)}
                                             className="w-full py-2.5 border-2 border-dashed border-orange-200 text-orange-500 font-bold text-sm rounded-xl hover:bg-orange-50 transition-colors"
@@ -824,32 +1061,70 @@ const PhysicalFacilities = ({ embedded }) => {
                         }
 
                         {/* Submit / New Assessment Buttons */}
-                        {
-                            isRepairSubmitted ? (
+
+                    </div>
+                )}
+
+                {/* --- DEMOLITION RECORDS SECTION --- */}
+                {!viewOnly && (
+                    <div className="bg-white p-6 rounded-3xl shadow-xl shadow-red-900/5 border border-red-100 mt-6 relative overflow-hidden">
+                        {isLoadingDemolitions && (
+                            <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
+                                <div className="w-8 h-8 border-4 border-red-200 border-t-red-500 rounded-full animate-spin" />
+                                <p className="text-xs font-bold text-red-600 animate-pulse">Loading demolition records...</p>
+                            </div>
+                        )}
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="p-3 bg-red-100 rounded-2xl text-2xl">⚠️</div>
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-800">Demolition Records</h2>
+                                <p className="text-xs text-slate-400 font-medium">Buildings slated for demolition</p>
+                            </div>
+                        </div>
+
+                        {/* Add Button */}
+                        {!isReadOnly && (
+                            <div className="mb-4">
                                 <button
-                                    onClick={() => {
-                                        setIsRepairSubmitted(false);
-                                        setFacilityData([]);
-                                        setRepairSuccessMsg('');
-                                    }}
-                                    className="w-full mt-4 bg-slate-100 text-slate-600 font-bold py-3.5 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
+                                    onClick={addDemolition}
+                                    disabled={isDemolitionSubmitted}
+                                    className="w-full py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors text-sm shadow-md shadow-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    🔄 Start New Assessment
+                                    <FiPlus /> Add Building for Demolition
                                 </button>
-                            ) : facilityData.some(b => b.rooms.length > 0) && (
-                                <button
-                                    onClick={submitAllRepairs}
-                                    disabled={isSavingRepair}
-                                    className="w-full mt-4 bg-orange-500 text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-colors shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isSavingRepair ? (
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    ) : (
-                                        <>📤 Submit All Repairs ({facilityData.reduce((sum, b) => sum + b.rooms.length, 0)} rooms)</>
+                            </div>
+                        )}
+
+                        {/* List */}
+                        <div className="space-y-3">
+                            {demolitionData.map((item, idx) => (
+                                <div key={item.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 flex items-center justify-between">
+                                    <div>
+                                        <h4 className="font-bold text-slate-700">{item.building_no}</h4>
+                                        <div className="flex gap-2 mt-1">
+                                            {item.reason_age && <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">Age</span>}
+                                            {item.reason_safety && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-bold">Safety</span>}
+                                            {item.reason_calamity && <span className="text-[10px] bg-yellow-100 text-yellow-600 px-2 py-0.5 rounded-full font-bold">Calamity</span>}
+                                            {item.reason_upgrade && <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">Upgrade</span>}
+                                        </div>
+                                    </div>
+                                    {!isDemolitionSubmitted && !isReadOnly && (
+                                        <button onClick={() => removeDemolition(idx)} className="text-red-400 hover:text-red-600">
+                                            <FiTrash2 />
+                                        </button>
                                     )}
-                                </button>
-                            )
-                        }
+                                </div>
+                            ))}
+                            {demolitionData.length === 0 && (
+                                <div className="text-center py-8 text-slate-400 text-sm">
+                                    <p className="text-xl mb-2">🏚️</p>
+                                    <p>No buildings added.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Submit */}
+
                     </div>
                 )}
             </div>
@@ -898,6 +1173,14 @@ const PhysicalFacilities = ({ embedded }) => {
                 readOnly={isReadOnly || roomModalData.saved}
             />
 
+            <DemolitionEntryModal
+                isOpen={showDemolitionModal}
+                onClose={() => setShowDemolitionModal(false)}
+                onSave={saveDemolitionFromModal}
+                data={demolitionModalData}
+                setData={setDemolitionModalData}
+            />
+
             {/* Modals */}
             {
                 showEditModal && (
@@ -925,12 +1208,67 @@ const PhysicalFacilities = ({ embedded }) => {
                             <p className="text-slate-500 text-center text-sm mb-6">You are about to update the physical facilities record.</p>
                             <div className="flex gap-3">
                                 <button onClick={() => setShowSaveModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-                                <button onClick={confirmSave} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Save Changes</button>
+                                <button onClick={validateAndConfirm} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Validation Check</button>
                             </div>
                         </div>
                     </div>
                 )
             }
+
+            {/* --- UNIFIED CONFIRMATION MODAL --- */}
+            {showUnifiedConfirmModal && confirmationData && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[90] flex items-center justify-center p-4 animate-in fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-2xl">
+                                <FiAlertCircle />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-800">Confirm Submission</h3>
+                                <p className="text-sm text-slate-500">Please review your data before saving.</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-xl p-4 space-y-3 mb-6 border border-slate-100">
+                            <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">Summary of Changes</h4>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-600">New Classrooms:</span>
+                                <span className="font-bold text-slate-800">{confirmationData.new}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-600">Good Condition:</span>
+                                <span className="font-bold text-slate-800">{confirmationData.good}</span>
+                            </div>
+                            <div className="w-full h-px bg-slate-200 my-2"></div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-orange-600 font-bold">Needs Repair:</span>
+                                <span className="font-bold text-orange-700">{confirmationData.repairs} rooms</span>
+                            </div>
+                            <div className="text-xs text-right text-slate-400">across {confirmationData.repairBuildings} buildings</div>
+
+                            <div className="flex justify-between items-center text-sm mt-2">
+                                <span className="text-red-600 font-bold">Needs Demolition:</span>
+                                <span className="font-bold text-red-700">{confirmationData.demolitions} building{confirmationData.demolitions !== 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => setShowUnifiedConfirmModal(false)}
+                                className="py-3 text-slate-600 font-bold hover:bg-slate-50 rounded-xl transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmUnifiedSave}
+                                className="py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                            >
+                                {isSaving ? 'Saving...' : 'Confirm & Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {
                 showInfoModal && (
