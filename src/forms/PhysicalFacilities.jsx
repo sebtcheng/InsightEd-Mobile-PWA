@@ -166,21 +166,22 @@ const PhysicalFacilities = ({ embedded }) => {
 
 
     const repairItems = [
-        { key: 'repair_roofing', label: 'Roofing' },
-        { key: 'repair_ceiling_ext', label: 'Ceiling (Exterior)' },
-        { key: 'repair_ceiling_int', label: 'Ceiling (Interior)' },
-        { key: 'repair_wall_ext', label: 'Wall (Exterior)' },
-        { key: 'repair_partition', label: 'Partition' },
-        { key: 'repair_door', label: 'Door' },
-        { key: 'repair_windows', label: 'Windows' },
-        { key: 'repair_flooring', label: 'Flooring' },
-        { key: 'repair_structural', label: 'Beams / Columns' }
+        { key: 'repair_roofing', label: 'Roofing', group: 'Roof' },
+        { key: 'repair_purlins', label: 'Purlins', group: 'Roof' },
+        { key: 'repair_trusses', label: 'Trusses', group: 'Roof' },
+        { key: 'repair_ceiling_ext', label: 'Ceiling (Exterior)', group: 'Ceiling' },
+        { key: 'repair_ceiling_int', label: 'Ceiling (Interior)', group: 'Ceiling' },
+        { key: 'repair_wall_ext', label: 'Wall (Exterior)', group: 'Walls & Openings' },
+        { key: 'repair_partition', label: 'Partition', group: 'Walls & Openings' },
+        { key: 'repair_door', label: 'Door', group: 'Walls & Openings' },
+        { key: 'repair_windows', label: 'Windows', group: 'Walls & Openings' },
+        { key: 'repair_flooring', label: 'Flooring', group: 'Structural & Floor' },
+        { key: 'repair_structural', label: 'Beams / Columns', group: 'Structural & Floor' }
     ];
 
     const defaultRoomData = {
-        room_no: '', repair_roofing: false, repair_ceiling_ext: false, repair_ceiling_int: false,
-        repair_wall_ext: false, repair_partition: false, repair_door: false,
-        repair_windows: false, repair_flooring: false, repair_structural: false, remarks: ''
+        room_no: '',
+        items: [] // Will contain objects: { item_name, oms, condition, damage_ratio, recommended_action, demo_justification, remarks }
     };
 
     // --- BUILDING CRUD ---
@@ -214,23 +215,36 @@ const PhysicalFacilities = ({ embedded }) => {
 
     const [roomModalData, setRoomModalData] = useState({ ...defaultRoomData });
 
-    const openAddRoom = (bIdx) => {
+    // --- OPEN MODAL FOR EDITING ---
+    const openEditRoom = (bIdx, rIdx) => {
+        const room = facilityData[bIdx].rooms[rIdx];
+        setRoomModalData({
+            ...defaultRoomData, // Ensure defaults result in valid structure
+            items: [], // Reset items to empty array default
+            ...room, // Overwrite with room data (which should have .items)
+            // Legacy cleanup: remove old keys if present by not copying them explicitly? 
+            // Spreading room might bring old keys, but that's okay, we ignore them now.
+        });
+        setEditingRoomIdx(rIdx);
         setActiveBuildingIdx(bIdx);
-        setEditingRoomIdx(null);
-        setRoomModalData({ ...defaultRoomData });
         setShowRoomModal(true);
     };
 
-    const openEditRoom = (bIdx, rIdx) => {
+    // --- OPEN MODAL FOR ADDING NEW ROOM ---
+    const openAddRoom = (bIdx) => {
+        setRoomModalData({ ...defaultRoomData });
+        setEditingRoomIdx(null);
         setActiveBuildingIdx(bIdx);
-        setEditingRoomIdx(rIdx);
-        setRoomModalData({ ...facilityData[bIdx].rooms[rIdx] });
         setShowRoomModal(true);
     };
 
     const saveRoomFromModal = () => {
         if (!roomModalData.room_no.trim()) {
             alert('Please enter a Room Number.');
+            return;
+        }
+        if (!roomModalData.items || roomModalData.items.length === 0) {
+            alert('Please assess at least one item.');
             return;
         }
         setFacilityData(prev => {
@@ -260,27 +274,26 @@ const PhysicalFacilities = ({ embedded }) => {
 
     // --- SUBMIT ALL REPAIRS ---
     const submitAllRepairs = async () => {
-        // Flatten facilityData into individual room records
-        const flatRepairs = [];
+        // Group items by Room to prevent overwriting during save
+        const roomPayloads = [];
+
         for (const building of facilityData) {
             for (const room of building.rooms) {
-                // Skip already saved rooms to prevent duplicates
-                if (!room.saved) {
-                    flatRepairs.push({
+                if (!room.saved && room.items && room.items.length > 0) {
+                    roomPayloads.push({
                         schoolId: schoolId || localStorage.getItem('schoolId'),
                         iern: schoolId || localStorage.getItem('schoolId'),
                         building_no: building.building_no,
-                        ...room
+                        room_no: room.room_no,
+                        items: room.items,
+                        remarks: room.items[0]?.remarks || '' // Fallback if remarks are per-item now
                     });
                 }
             }
         }
-        if (flatRepairs.length === 0) {
-            if (facilityData.some(b => b.rooms.length > 0)) {
-                alert('All loaded assessments are already saved.');
-            } else {
-                alert('No room assessments to submit. Add at least one room.');
-            }
+
+        if (roomPayloads.length === 0) {
+            alert('No new assessments to submit.');
             return;
         }
 
@@ -289,7 +302,7 @@ const PhysicalFacilities = ({ embedded }) => {
         let savedCount = 0;
         let offlineCount = 0;
 
-        for (const payload of flatRepairs) {
+        for (const payload of roomPayloads) {
             try {
                 await addRepairToLocal(payload);
                 if (navigator.onLine) {
@@ -299,9 +312,6 @@ const PhysicalFacilities = ({ embedded }) => {
                         body: JSON.stringify(payload)
                     });
                     if (res.ok) {
-                        const localRepairs = await getLocalRepairs();
-                        const latest = localRepairs[localRepairs.length - 1];
-                        if (latest) await deleteLocalRepair(latest.local_id);
                         savedCount++;
                     } else {
                         throw new Error('Server error');
@@ -310,11 +320,8 @@ const PhysicalFacilities = ({ embedded }) => {
                     throw new Error('Offline');
                 }
             } catch (e) {
+                console.error("Save failed for room:", payload.room_no, e);
                 offlineCount++;
-                try {
-                    const registration = await navigator.serviceWorker.ready;
-                    await registration.sync.register('sync-facility-repairs');
-                } catch (_) { }
             }
         }
 
@@ -463,7 +470,6 @@ const PhysicalFacilities = ({ embedded }) => {
             setIsLoadingRepairs(true);
             try {
                 let data = [];
-                // 1. Try fetching from API
                 if (navigator.onLine) {
                     try {
                         const res = await fetch(`/api/facility-repairs/${iern}`);
@@ -475,32 +481,40 @@ const PhysicalFacilities = ({ embedded }) => {
                     }
                 }
 
-                // 2. Fallback to local IndexedDB (for pending repairs)
-                const local = await getLocalRepairs();
-                const localForSchool = local.filter(r => r.iern === iern || r.schoolId === iern);
-
-                // Combine data (avoid duplicates if possible, but regrouping will handle it)
-                const combined = [...data, ...localForSchool];
-
-                if (combined.length > 0) {
+                // Hydrate logic: Convert flat items list to Building -> Room -> Items
+                if (data.length > 0) {
                     const groups = {};
-                    combined.forEach((row, idx) => {
-                        const bKey = row.building_no;
+                    data.forEach((row, idx) => {
+                        const bKey = row.building_no || 'Unassigned';
                         if (!groups[bKey]) {
                             groups[bKey] = {
-                                id: Date.now() + idx, // Simple stable-ish ID for this session
+                                id: Date.now() + idx,
                                 building_no: bKey,
                                 rooms: []
                             };
                         }
-                        // Check if room already exists in this building group to avoid duplicates
-                        const exists = groups[bKey].rooms.some(r => r.room_no === row.room_no);
-                        if (!exists) {
-                            groups[bKey].rooms.push({
-                                ...row,
-                                saved: true // Automatic Read-Only for fetched/local records
-                            });
+
+                        // Find or create room
+                        let room = groups[bKey].rooms.find(r => r.room_no === row.room_no);
+                        if (!room) {
+                            room = {
+                                room_no: row.room_no,
+                                saved: false,
+                                items: []
+                            };
+                            groups[bKey].rooms.push(room);
                         }
+
+                        // Add item details
+                        room.items.push({
+                            item_name: row.item_name,
+                            oms: row.oms,
+                            condition: row.condition,
+                            damage_ratio: row.damage_ratio,
+                            recommended_action: row.recommended_action,
+                            demo_justification: row.demo_justification,
+                            remarks: row.remarks
+                        });
                     });
                     setFacilityData(Object.values(groups));
                 }
@@ -524,6 +538,7 @@ const PhysicalFacilities = ({ embedded }) => {
         }
     }, []);
     const [schoolId, setSchoolId] = useState(null);
+    const [iern, setIern] = useState(null); // Actual IERN from school profile
     const [formData, setFormData] = useState({});
     const [originalData, setOriginalData] = useState(null);
 
@@ -621,6 +636,7 @@ const PhysicalFacilities = ({ embedded }) => {
                         if (json.exists || (viewOnly && schoolIdParam) || isAuditMode) {
                             const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? json : json.data;
                             if (!schoolIdParam) setSchoolId(dbData.school_id || dbData.schoolId || storedSchoolId);
+                            if (dbData.iern) setIern(dbData.iern); // Load actual IERN from profile
 
                             if (dbData.school_id && !viewOnly) {
                                 localStorage.setItem('schoolId', dbData.school_id);
@@ -763,18 +779,25 @@ const PhysicalFacilities = ({ embedded }) => {
 
         // Prepare Master Payload
         // Flatten repairs for backend
+        // Flatten repairs for backend
         const repairEntries = [];
         for (const building of facilityData) {
             for (const room of building.rooms) {
-                repairEntries.push({
-                    building_no: building.building_no,
-                    ...room
-                });
+                if (room.items && room.items.length > 0) {
+                    room.items.forEach(item => {
+                        repairEntries.push({
+                            building_no: building.building_no,
+                            room_no: room.room_no,
+                            ...item
+                        });
+                    });
+                }
             }
         }
 
         const payload = {
             schoolId: schoolId || localStorage.getItem('schoolId'),
+            iern: iern || schoolId || localStorage.getItem('schoolId'), // Use actual IERN
             uid: auth.currentUser.uid,
             ...formData,
             repairEntries,
@@ -792,17 +815,8 @@ const PhysicalFacilities = ({ embedded }) => {
             if (res.ok) {
                 setShowSuccessModal(true);
 
-                // Update Local State to "Saved/Read-Only" mode
-                const updatedFacilityData = facilityData.map(b => ({
-                    ...b,
-                    rooms: b.rooms.map(r => ({ ...r, saved: true }))
-                }));
-                setFacilityData(updatedFacilityData);
-
-                const updatedDemolitionData = demolitionData.map(d => ({ ...d, saved: true }));
-                setDemolitionData(updatedDemolitionData);
-
-                setIsRepairSubmitted(true);
+                // Keep repairs editable — don't lock them after save
+                // setIsRepairSubmitted(true); // Removed: allow re-editing
                 setIsDemolitionSubmitted(true);
 
                 setOriginalData({ ...formData });
@@ -980,8 +994,8 @@ const PhysicalFacilities = ({ embedded }) => {
                                     {building.rooms.length > 0 && (
                                         <div className="space-y-3 mb-4">
                                             {building.rooms.map((room, rIdx) => {
-                                                const checkedCount = repairItems.filter(it => room[it.key]).length;
-                                                const checkedLabels = repairItems.filter(it => room[it.key]).map(it => it.label);
+                                                const checkedCount = room.items?.length || 0;
+                                                const checkedLabels = room.items?.map(it => it.item_name).join(', ') || 'No items checked';
                                                 const isSaved = room.saved;
 
                                                 return (
@@ -1002,13 +1016,22 @@ const PhysicalFacilities = ({ embedded }) => {
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className="text-xs text-orange-600 font-bold">
-                                                                {checkedCount > 0 ? checkedLabels.join(', ') : 'No items checked'}
+                                                            <p className="text-xs text-orange-600 font-bold truncate">
+                                                                {checkedCount > 0 ? checkedLabels : 'No items checked'}
                                                             </p>
                                                             {room.remarks && (
                                                                 <p className="text-[10px] text-slate-400 font-medium truncate mt-1 bg-slate-50 p-1.5 rounded-lg border border-slate-100/50">
                                                                     📝 {room.remarks}
                                                                 </p>
+                                                            )}
+                                                            {room.recommended_action && (
+                                                                <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${room.recommended_action === 'Routine Repair' ? 'bg-blue-100 text-blue-700' :
+                                                                    room.recommended_action === 'Major Repair / Rehabilitation' ? 'bg-orange-100 text-orange-700' :
+                                                                        room.recommended_action === 'Structural Retrofit' ? 'bg-purple-100 text-purple-700' :
+                                                                            'bg-red-100 text-red-700'
+                                                                    }`}>
+                                                                    {room.recommended_action}
+                                                                </span>
                                                             )}
                                                         </div>
 

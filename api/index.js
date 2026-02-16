@@ -5328,11 +5328,14 @@ app.post('/api/save-school-resources', async (req, res) => {
   }
 });
 
-// --- 22a. GET: Fetch Facility Repairs ---
+// --- 22a. GET: Fetch Facility Repairs (Updated to use new itemized table) ---
 app.get('/api/facility-repairs/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM facility_repairs WHERE school_id = $1 ORDER BY created_at ASC', [schoolId]);
+    const result = await pool.query(
+      'SELECT * FROM facility_repair_details WHERE school_id = $1 OR iern = $1 ORDER BY building_no, room_no, id ASC',
+      [schoolId]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch Facility Repairs Error:", err);
@@ -5340,52 +5343,9 @@ app.get('/api/facility-repairs/:schoolId', async (req, res) => {
   }
 });
 
-// --- 22b. POST: Save Facility Repair (Single Item) ---
-app.post('/api/save-facility-repair', async (req, res) => {
-  const d = req.body;
-  try {
-    // Sanitize booleans
-    const toBool = (val) => val === true || val === 'true' || val === 1;
-
-    const query = `
-            INSERT INTO facility_repairs (
-                school_id, iern, building_no, room_no, remarks,
-                repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
-                repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            RETURNING repair_id;
-        `;
-
-    const values = [
-      d.schoolId || d.iern, // Fallback
-      d.iern || d.schoolId,
-      d.building_no,
-      d.room_no,
-      d.remarks || '',
-      toBool(d.repair_roofing),
-      toBool(d.repair_ceiling_ext),
-      toBool(d.repair_ceiling_int),
-      toBool(d.repair_wall_ext),
-      toBool(d.repair_partition),
-      toBool(d.repair_door),
-      toBool(d.repair_windows),
-      toBool(d.repair_flooring),
-      toBool(d.repair_structural)
-    ];
-
-    const result = await pool.query(query, values);
-    res.json({ success: true, repair_id: result.rows[0].repair_id });
-
-    // --- DUAL WRITE ---
-    if (poolNew) {
-      poolNew.query(query, values).catch(e => console.error("Dual-Write Repair Error:", e));
-    }
-
-  } catch (err) {
-    console.error("Save Repair Error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// --- 22b. POST: Save Facility Repair (LEGACY - DISABLED, replaced by new itemized endpoint below) ---
+// Old endpoint removed — was inserting into dropped `facility_repairs` table.
+// New endpoint at bottom of file uses `facility_repair_details` table.
 
 // --- 22c. GET: Fetch Facility Demolitions ---
 app.get('/api/facility-demolitions/:iern', async (req, res) => {
@@ -5509,22 +5469,21 @@ app.post('/api/save-physical-facilities', async (req, res) => {
     ]);
 
     // 2. Handle Repairs (Delete All & Re-insert)
+    // 2. Handle Repairs (Delete All & Re-insert)
     if (data.repairEntries && Array.isArray(data.repairEntries)) {
-      await client.query('DELETE FROM facility_repairs WHERE school_id = $1', [data.schoolId]);
+      await client.query('DELETE FROM facility_repair_details WHERE school_id = $1', [data.schoolId]);
 
       for (const r of data.repairEntries) {
         await client.query(`
-                INSERT INTO facility_repairs (
-                    school_id, iern, building_no, room_no, remarks,
-                    repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
-                    repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                INSERT INTO facility_repair_details (
+                    school_id, iern, building_no, room_no, item_name,
+                    oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             `, [
-          data.schoolId, data.schoolId, // Use schoolId for both school_id and iern for consistency
-          r.building_no, r.room_no, r.remarks || '',
-          toBool(r.repair_roofing), toBool(r.repair_ceiling_ext), toBool(r.repair_ceiling_int),
-          toBool(r.repair_wall_ext), toBool(r.repair_partition), toBool(r.repair_door),
-          toBool(r.repair_windows), toBool(r.repair_flooring), toBool(r.repair_structural)
+          data.schoolId, data.iern || data.schoolId,
+          r.building_no, r.room_no, r.item_name,
+          r.oms || '', r.condition || '', r.damage_ratio || 0,
+          r.recommended_action || '', r.demo_justification || '', r.remarks || ''
         ]);
       }
     }
@@ -5574,19 +5533,19 @@ app.post('/api/save-physical-facilities', async (req, res) => {
 
           // DW 2. Repairs
           if (data.repairEntries) {
-            await clientNew.query('DELETE FROM facility_repairs WHERE school_id = $1', [data.schoolId]);
+            await clientNew.query('DELETE FROM facility_repair_details WHERE school_id = $1', [data.schoolId]);
+
             for (const r of data.repairEntries) {
               await clientNew.query(`
-                        INSERT INTO facility_repairs (
-                            school_id, iern, building_no, room_no, remarks,
-                            repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
-                            repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        INSERT INTO facility_repair_details (
+                            school_id, iern, building_no, room_no, item_name,
+                            oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     `, [
-                data.schoolId, data.schoolId, r.building_no, r.room_no, r.remarks || '',
-                toBool(r.repair_roofing), toBool(r.repair_ceiling_ext), toBool(r.repair_ceiling_int),
-                toBool(r.repair_wall_ext), toBool(r.repair_partition), toBool(r.repair_door),
-                toBool(r.repair_windows), toBool(r.repair_flooring), toBool(r.repair_structural)
+                data.schoolId, data.iern || data.schoolId,
+                r.building_no, r.room_no, r.item_name,
+                r.oms || '', r.condition || '', r.damage_ratio || 0,
+                r.recommended_action || '', r.demo_justification || '', r.remarks || ''
               ]);
             }
           }
@@ -6523,6 +6482,53 @@ console.log('Is Main Module?', isMainModule);
 console.log('Force Start Env?', process.env.START_SERVER);
 console.log('--------------------------');
 
+
+// --- TEMPORARY MIGRATION ENDPOINT (FACILITY REPAIRS) ---
+// --- MIGRATE REPAIR DETAILS SCHEMA ---
+app.get('/api/migrate-repair-details', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const results = [];
+
+    // 1. Drop old table
+    try {
+      await client.query('DROP TABLE IF EXISTS facility_repairs');
+      results.push("Dropped old facility_repairs table");
+    } catch (e) { results.push(`Failed drop: ${e.message}`); }
+
+    // 2. Create new table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS facility_repair_details (
+          id SERIAL PRIMARY KEY,
+          school_id VARCHAR(50), -- Added explicitly for consistency
+          iern VARCHAR(50),
+          building_no VARCHAR(100),
+          room_no VARCHAR(100),
+          item_name VARCHAR(100),
+          oms TEXT,
+          condition VARCHAR(50),
+          damage_ratio INTEGER,
+          recommended_action VARCHAR(100),
+          demo_justification TEXT,
+          remarks TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      // Add indexes
+      await client.query('CREATE INDEX IF NOT EXISTS idx_frd_iern ON facility_repair_details(iern)');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_frd_school_id ON facility_repair_details(school_id)');
+
+      results.push("Created facility_repair_details table");
+    } catch (e) { results.push(`Failed create: ${e.message}`); }
+
+    client.release();
+    res.json({ message: "Repair Details Migration finished", results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- TEMPORARY MIGRATION ENDPOINT (MOVED OUTSIDE FOR ACCESS) ---
 app.get('/api/migrate-schema', async (req, res) => {
   try {
@@ -7255,61 +7261,109 @@ app.put('/api/lgu/update-project/:id', async (req, res) => {
 });
 
 
-// --- POST: Save Facility Repair Assessment ---
+// --- POST: Save Facility Repair Assessment (ITEMIZED) ---
 app.post('/api/save-facility-repair', async (req, res) => {
   const data = req.body;
-  // Normalize building_no for consistent grouping
+  // data should look like: { schoolId, iern, building_no, room_no, items: [ { item_name, oms, condition... } ] }
+
   if (data.building_no) data.building_no = data.building_no.trim();
+  if (data.room_no) data.room_no = data.room_no.trim();
+
   try {
-    const result = await pool.query(`
-      INSERT INTO facility_repairs (
-        school_id, iern, building_no, room_no,
-        repair_roofing, repair_ceiling_ext, repair_ceiling_int,
-        repair_wall_ext, repair_partition, repair_door,
-        repair_windows, repair_flooring, repair_structural,
-        remarks
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-      RETURNING repair_id
-    `, [
-      data.schoolId, data.iern, data.building_no, data.room_no,
-      data.repair_roofing || false, data.repair_ceiling_ext || false, data.repair_ceiling_int || false,
-      data.repair_wall_ext || false, data.repair_partition || false, data.repair_door || false,
-      data.repair_windows || false, data.repair_flooring || false, data.repair_structural || false,
-      data.remarks || null
-    ]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    // --- DUAL WRITE: FACILITY REPAIRS ---
-    if (poolNew) {
-      poolNew.query(`
-        INSERT INTO facility_repairs (
-          school_id, iern, building_no, room_no,
-          repair_roofing, repair_ceiling_ext, repair_ceiling_int,
-          repair_wall_ext, repair_partition, repair_door,
-          repair_windows, repair_flooring, repair_structural,
-          remarks
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-      `, [
-        data.schoolId, data.iern, data.building_no, data.room_no,
-        data.repair_roofing || false, data.repair_ceiling_ext || false, data.repair_ceiling_int || false,
-        data.repair_wall_ext || false, data.repair_partition || false, data.repair_door || false,
-        data.repair_windows || false, data.repair_flooring || false, data.repair_structural || false,
-        data.remarks || null
-      ]).catch(e => console.error("Dual-Write Facility Repair Err:", e.message));
+      // 1. Delete existing items for this specific room
+      await client.query(`
+        DELETE FROM facility_repair_details 
+        WHERE school_id = $1 AND building_no = $2 AND room_no = $3
+      `, [data.schoolId, data.building_no, data.room_no]);
+
+      // 2. Insert new items
+      if (data.items && Array.isArray(data.items)) {
+        for (const item of data.items) {
+          await client.query(`
+            INSERT INTO facility_repair_details (
+              school_id, iern, building_no, room_no, item_name,
+              oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `, [
+            data.schoolId, data.iern || data.schoolId,
+            data.building_no, data.room_no,
+            item.item_name,
+            item.oms || '',
+            item.condition || '',
+            item.damage_ratio || 0,
+            item.recommended_action || '',
+            item.demo_justification || '',
+            item.remarks || ''
+          ]);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // --- DUAL WRITE (Best Effort) ---
+      if (poolNew) {
+        (async () => {
+          const cNew = await poolNew.connect();
+          try {
+            await cNew.query('BEGIN');
+            await cNew.query(`
+              DELETE FROM facility_repair_details 
+              WHERE school_id = $1 AND building_no = $2 AND room_no = $3
+            `, [data.schoolId, data.building_no, data.room_no]);
+
+            if (data.items && Array.isArray(data.items)) {
+              for (const item of data.items) {
+                await cNew.query(`
+                  INSERT INTO facility_repair_details (
+                    school_id, iern, building_no, room_no, item_name,
+                    oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                `, [
+                  data.schoolId, data.iern || data.schoolId,
+                  data.building_no, data.room_no,
+                  item.item_name,
+                  item.oms || '',
+                  item.condition || '',
+                  item.damage_ratio || 0,
+                  item.recommended_action || '',
+                  item.demo_justification || '',
+                  item.remarks || ''
+                ]);
+              }
+            }
+            await cNew.query('COMMIT');
+          } catch (e) {
+            await cNew.query('ROLLBACK');
+            console.error("Dual write failed for repair details", e);
+          } finally {
+            cNew.release();
+          }
+        })();
+      }
+
+      res.json({ success: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
     }
-
-    res.json({ success: true, repair_id: result.rows[0].repair_id });
   } catch (err) {
     console.error("❌ Save Facility Repair Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- GET: Facility Repairs by IERN ---
+// --- GET: Facility Repairs by IERN (ITEMIZED) ---
 app.get('/api/facility-repairs/:iern', async (req, res) => {
   const { iern } = req.params;
   try {
     const result = await pool.query(
-      'SELECT * FROM facility_repairs WHERE iern = $1 ORDER BY created_at DESC',
+      'SELECT * FROM facility_repair_details WHERE iern = $1 ORDER BY building_no, room_no, id ASC',
       [iern]
     );
     res.json(result.rows);
