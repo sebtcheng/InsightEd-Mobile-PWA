@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Icons 
-import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight } from "react-icons/tb";
+import { TbHomeEdit, TbCloudUpload, TbClipboardList, TbSchool, TbArrowsLeftRight, TbChartBar } from "react-icons/tb";
 import { LuCompass } from "react-icons/lu";
 import { FiSettings, FiCheckSquare } from "react-icons/fi"; // Changed to Gear icon
 
@@ -53,12 +53,14 @@ const BottomNav = ({ userRole }) => {
         'Regional Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'home' }, icon: TbHomeEdit },
             { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             // { label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Division Office': [
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'all' }, icon: TbHomeEdit },
             { label: 'Infrastructure', path: '/monitoring-dashboard', state: { activeTab: 'engineer' }, icon: TbClipboardList },
+            { label: 'Insights', path: '/monitoring-dashboard', state: { activeTab: 'insights' }, icon: TbChartBar },
             { label: 'Management', path: '/school-management', icon: TbSchool },
             //{ label: 'Validation', path: '/monitoring-dashboard', state: { activeTab: 'validation' }, icon: FiCheckSquare }, 
             { label: 'Settings', path: '/profile', icon: FiSettings },

@@ -5917,7 +5917,520 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
+        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion,
+        SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
+        SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
+        SUM(COALESCE(sp.grade_1, 0)) as grade_1,
+        SUM(COALESCE(sp.grade_2, 0)) as grade_2,
+        SUM(COALESCE(sp.grade_3, 0)) as grade_3,
+        SUM(COALESCE(sp.grade_4, 0)) as grade_4,
+        SUM(COALESCE(sp.grade_5, 0)) as grade_5,
+        SUM(COALESCE(sp.grade_6, 0)) as grade_6,
+        SUM(COALESCE(sp.grade_7, 0)) as grade_7,
+        SUM(COALESCE(sp.grade_8, 0)) as grade_8,
+        SUM(COALESCE(sp.grade_9, 0)) as grade_9,
+        SUM(COALESCE(sp.grade_10, 0)) as grade_10,
+        SUM(COALESCE(sp.grade_11, 0)) as grade_11,
+        SUM(COALESCE(sp.grade_12, 0)) as grade_12,
+
+        SUM(COALESCE(sp.classes_kinder, 0)) as classes_kinder,
+        SUM(COALESCE(sp.classes_grade_1, 0)) as classes_grade_1,
+        SUM(COALESCE(sp.classes_grade_2, 0)) as classes_grade_2,
+        SUM(COALESCE(sp.classes_grade_3, 0)) as classes_grade_3,
+        SUM(COALESCE(sp.classes_grade_4, 0)) as classes_grade_4,
+        SUM(COALESCE(sp.classes_grade_5, 0)) as classes_grade_5,
+        SUM(COALESCE(sp.classes_grade_6, 0)) as classes_grade_6,
+        SUM(COALESCE(sp.classes_grade_7, 0)) as classes_grade_7,
+        SUM(COALESCE(sp.classes_grade_8, 0)) as classes_grade_8,
+        SUM(COALESCE(sp.classes_grade_9, 0)) as classes_grade_9,
+        SUM(COALESCE(sp.classes_grade_10, 0)) as classes_grade_10,
+        SUM(COALESCE(sp.classes_grade_11, 0)) as classes_grade_11,
+        SUM(COALESCE(sp.classes_grade_12, 0)) as classes_grade_12,
+        
+        SUM(COALESCE(sp.aral_math_g1, 0)) as aral_math_g1,
+        SUM(COALESCE(sp.aral_read_g1, 0)) as aral_read_g1,
+        SUM(COALESCE(sp.aral_sci_g1, 0)) as aral_sci_g1,
+        SUM(COALESCE(sp.aral_math_g2, 0)) as aral_math_g2,
+        SUM(COALESCE(sp.aral_read_g2, 0)) as aral_read_g2,
+        SUM(COALESCE(sp.aral_sci_g2, 0)) as aral_sci_g2,
+        SUM(COALESCE(sp.aral_math_g3, 0)) as aral_math_g3,
+        SUM(COALESCE(sp.aral_read_g3, 0)) as aral_read_g3,
+        SUM(COALESCE(sp.aral_sci_g3, 0)) as aral_sci_g3,
+        SUM(COALESCE(sp.aral_math_g4, 0)) as aral_math_g4,
+        SUM(COALESCE(sp.aral_read_g4, 0)) as aral_read_g4,
+        SUM(COALESCE(sp.aral_sci_g4, 0)) as aral_sci_g4,
+        SUM(COALESCE(sp.aral_math_g5, 0)) as aral_math_g5,
+        SUM(COALESCE(sp.aral_read_g5, 0)) as aral_read_g5,
+        SUM(COALESCE(sp.aral_sci_g5, 0)) as aral_sci_g5,
+        SUM(COALESCE(sp.aral_math_g6, 0)) as aral_math_g6,
+        SUM(COALESCE(sp.aral_read_g6, 0)) as aral_read_g6,
+        SUM(COALESCE(sp.aral_sci_g6, 0)) as aral_sci_g6,
+
+        SUM(COALESCE(sp.cnt_less_kinder, 0)) as cnt_less_kinder,
+        SUM(COALESCE(sp.cnt_within_kinder, 0)) as cnt_within_kinder,
+        SUM(COALESCE(sp.cnt_above_kinder, 0)) as cnt_above_kinder,
+        
+        SUM(COALESCE(sp.cnt_less_g1, 0)) as cnt_less_g1,
+        SUM(COALESCE(sp.cnt_within_g1, 0)) as cnt_within_g1,
+        SUM(COALESCE(sp.cnt_above_g1, 0)) as cnt_above_g1,
+        
+        SUM(COALESCE(sp.cnt_less_g2, 0)) as cnt_less_g2,
+        SUM(COALESCE(sp.cnt_within_g2, 0)) as cnt_within_g2,
+        SUM(COALESCE(sp.cnt_above_g2, 0)) as cnt_above_g2,
+        
+        SUM(COALESCE(sp.cnt_less_g3, 0)) as cnt_less_g3,
+        SUM(COALESCE(sp.cnt_within_g3, 0)) as cnt_within_g3,
+        SUM(COALESCE(sp.cnt_above_g3, 0)) as cnt_above_g3,
+        
+        SUM(COALESCE(sp.cnt_less_g4, 0)) as cnt_less_g4,
+        SUM(COALESCE(sp.cnt_within_g4, 0)) as cnt_within_g4,
+        SUM(COALESCE(sp.cnt_above_g4, 0)) as cnt_above_g4,
+        
+        SUM(COALESCE(sp.cnt_less_g5, 0)) as cnt_less_g5,
+        SUM(COALESCE(sp.cnt_within_g5, 0)) as cnt_within_g5,
+        SUM(COALESCE(sp.cnt_above_g5, 0)) as cnt_above_g5,
+        
+        SUM(COALESCE(sp.cnt_less_g6, 0)) as cnt_less_g6,
+        SUM(COALESCE(sp.cnt_within_g6, 0)) as cnt_within_g6,
+        SUM(COALESCE(sp.cnt_above_g6, 0)) as cnt_above_g6,
+        
+        SUM(COALESCE(sp.cnt_less_g7, 0)) as cnt_less_g7,
+        SUM(COALESCE(sp.cnt_within_g7, 0)) as cnt_within_g7,
+        SUM(COALESCE(sp.cnt_above_g7, 0)) as cnt_above_g7,
+        
+        SUM(COALESCE(sp.cnt_less_g8, 0)) as cnt_less_g8,
+        SUM(COALESCE(sp.cnt_within_g8, 0)) as cnt_within_g8,
+        SUM(COALESCE(sp.cnt_above_g8, 0)) as cnt_above_g8,
+        
+        SUM(COALESCE(sp.cnt_less_g9, 0)) as cnt_less_g9,
+        SUM(COALESCE(sp.cnt_within_g9, 0)) as cnt_within_g9,
+        SUM(COALESCE(sp.cnt_above_g9, 0)) as cnt_above_g9,
+        
+        SUM(COALESCE(sp.cnt_less_g10, 0)) as cnt_less_g10,
+        SUM(COALESCE(sp.cnt_within_g10, 0)) as cnt_within_g10,
+        SUM(COALESCE(sp.cnt_above_g10, 0)) as cnt_above_g10,
+        
+        SUM(COALESCE(sp.cnt_less_g11, 0)) as cnt_less_g11,
+        SUM(COALESCE(sp.cnt_within_g11, 0)) as cnt_within_g11,
+        SUM(COALESCE(sp.cnt_above_g11, 0)) as cnt_above_g11,
+        
+        SUM(COALESCE(sp.cnt_less_g12, 0)) as cnt_less_g12,
+        SUM(COALESCE(sp.cnt_within_g12, 0)) as cnt_within_g12,
+        SUM(COALESCE(sp.cnt_above_g12, 0)) as cnt_above_g12,
+
+        -- SNED
+        SUM(COALESCE(sp.stat_sned_k, 0)) as stat_sned_k,
+        SUM(COALESCE(sp.stat_sned_g1, 0)) as stat_sned_g1,
+        SUM(COALESCE(sp.stat_sned_g2, 0)) as stat_sned_g2,
+        SUM(COALESCE(sp.stat_sned_g3, 0)) as stat_sned_g3,
+        SUM(COALESCE(sp.stat_sned_g4, 0)) as stat_sned_g4,
+        SUM(COALESCE(sp.stat_sned_g5, 0)) as stat_sned_g5,
+        SUM(COALESCE(sp.stat_sned_g6, 0)) as stat_sned_g6,
+        SUM(COALESCE(sp.stat_sned_g7, 0)) as stat_sned_g7,
+        SUM(COALESCE(sp.stat_sned_g8, 0)) as stat_sned_g8,
+        SUM(COALESCE(sp.stat_sned_g9, 0)) as stat_sned_g9,
+        SUM(COALESCE(sp.stat_sned_g10, 0)) as stat_sned_g10,
+        SUM(COALESCE(sp.stat_sned_g11, 0)) as stat_sned_g11,
+        SUM(COALESCE(sp.stat_sned_g12, 0)) as stat_sned_g12,
+
+        -- DISABILITY
+        SUM(COALESCE(sp.stat_disability_k, 0)) as stat_disability_k,
+        SUM(COALESCE(sp.stat_disability_g1, 0)) as stat_disability_g1,
+        SUM(COALESCE(sp.stat_disability_g2, 0)) as stat_disability_g2,
+        SUM(COALESCE(sp.stat_disability_g3, 0)) as stat_disability_g3,
+        SUM(COALESCE(sp.stat_disability_g4, 0)) as stat_disability_g4,
+        SUM(COALESCE(sp.stat_disability_g5, 0)) as stat_disability_g5,
+        SUM(COALESCE(sp.stat_disability_g6, 0)) as stat_disability_g6,
+        SUM(COALESCE(sp.stat_disability_g7, 0)) as stat_disability_g7,
+        SUM(COALESCE(sp.stat_disability_g8, 0)) as stat_disability_g8,
+        SUM(COALESCE(sp.stat_disability_g9, 0)) as stat_disability_g9,
+        SUM(COALESCE(sp.stat_disability_g10, 0)) as stat_disability_g10,
+        SUM(COALESCE(sp.stat_disability_g11, 0)) as stat_disability_g11,
+        SUM(COALESCE(sp.stat_disability_g12, 0)) as stat_disability_g12,
+
+        -- ALS
+        SUM(COALESCE(sp.stat_als_k, 0)) as stat_als_k,
+        SUM(COALESCE(sp.stat_als_g1, 0)) as stat_als_g1,
+        SUM(COALESCE(sp.stat_als_g2, 0)) as stat_als_g2,
+        SUM(COALESCE(sp.stat_als_g3, 0)) as stat_als_g3,
+        SUM(COALESCE(sp.stat_als_g4, 0)) as stat_als_g4,
+        SUM(COALESCE(sp.stat_als_g5, 0)) as stat_als_g5,
+        SUM(COALESCE(sp.stat_als_g6, 0)) as stat_als_g6,
+        SUM(COALESCE(sp.stat_als_g7, 0)) as stat_als_g7,
+        SUM(COALESCE(sp.stat_als_g8, 0)) as stat_als_g8,
+        SUM(COALESCE(sp.stat_als_g9, 0)) as stat_als_g9,
+        SUM(COALESCE(sp.stat_als_g10, 0)) as stat_als_g10,
+        SUM(COALESCE(sp.stat_als_g11, 0)) as stat_als_g11,
+        SUM(COALESCE(sp.stat_als_g12, 0)) as stat_als_g12,
+
+        -- MUSLIM
+        SUM(COALESCE(sp.stat_muslim_k, 0)) as stat_muslim_k,
+        SUM(COALESCE(sp.stat_muslim_g1, 0)) as stat_muslim_g1,
+        SUM(COALESCE(sp.stat_muslim_g2, 0)) as stat_muslim_g2,
+        SUM(COALESCE(sp.stat_muslim_g3, 0)) as stat_muslim_g3,
+        SUM(COALESCE(sp.stat_muslim_g4, 0)) as stat_muslim_g4,
+        SUM(COALESCE(sp.stat_muslim_g5, 0)) as stat_muslim_g5,
+        SUM(COALESCE(sp.stat_muslim_g6, 0)) as stat_muslim_g6,
+        SUM(COALESCE(sp.stat_muslim_g7, 0)) as stat_muslim_g7,
+        SUM(COALESCE(sp.stat_muslim_g8, 0)) as stat_muslim_g8,
+        SUM(COALESCE(sp.stat_muslim_g9, 0)) as stat_muslim_g9,
+        SUM(COALESCE(sp.stat_muslim_g10, 0)) as stat_muslim_g10,
+        SUM(COALESCE(sp.stat_muslim_g11, 0)) as stat_muslim_g11,
+        SUM(COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_g12,
+
+        -- IP
+        SUM(COALESCE(sp.stat_ip_k, 0)) as stat_ip_k,
+        SUM(COALESCE(sp.stat_ip_g1, 0)) as stat_ip_g1,
+        SUM(COALESCE(sp.stat_ip_g2, 0)) as stat_ip_g2,
+        SUM(COALESCE(sp.stat_ip_g3, 0)) as stat_ip_g3,
+        SUM(COALESCE(sp.stat_ip_g4, 0)) as stat_ip_g4,
+        SUM(COALESCE(sp.stat_ip_g5, 0)) as stat_ip_g5,
+        SUM(COALESCE(sp.stat_ip_g6, 0)) as stat_ip_g6,
+        SUM(COALESCE(sp.stat_ip_g7, 0)) as stat_ip_g7,
+        SUM(COALESCE(sp.stat_ip_g8, 0)) as stat_ip_g8,
+        SUM(COALESCE(sp.stat_ip_g9, 0)) as stat_ip_g9,
+        SUM(COALESCE(sp.stat_ip_g10, 0)) as stat_ip_g10,
+        SUM(COALESCE(sp.stat_ip_g11, 0)) as stat_ip_g11,
+        SUM(COALESCE(sp.stat_ip_g12, 0)) as stat_ip_g12,
+
+        -- DISPLACED
+        SUM(COALESCE(sp.stat_displaced_k, 0)) as stat_displaced_k,
+        SUM(COALESCE(sp.stat_displaced_g1, 0)) as stat_displaced_g1,
+        SUM(COALESCE(sp.stat_displaced_g2, 0)) as stat_displaced_g2,
+        SUM(COALESCE(sp.stat_displaced_g3, 0)) as stat_displaced_g3,
+        SUM(COALESCE(sp.stat_displaced_g4, 0)) as stat_displaced_g4,
+        SUM(COALESCE(sp.stat_displaced_g5, 0)) as stat_displaced_g5,
+        SUM(COALESCE(sp.stat_displaced_g6, 0)) as stat_displaced_g6,
+        SUM(COALESCE(sp.stat_displaced_g7, 0)) as stat_displaced_g7,
+        SUM(COALESCE(sp.stat_displaced_g8, 0)) as stat_displaced_g8,
+        SUM(COALESCE(sp.stat_displaced_g9, 0)) as stat_displaced_g9,
+        SUM(COALESCE(sp.stat_displaced_g10, 0)) as stat_displaced_g10,
+        SUM(COALESCE(sp.stat_displaced_g11, 0)) as stat_displaced_g11,
+        SUM(COALESCE(sp.stat_displaced_g12, 0)) as stat_displaced_g12,
+
+        -- REPETITION
+        SUM(COALESCE(sp.stat_repetition_k, 0)) as stat_repetition_k,
+        SUM(COALESCE(sp.stat_repetition_g1, 0)) as stat_repetition_g1,
+        SUM(COALESCE(sp.stat_repetition_g2, 0)) as stat_repetition_g2,
+        SUM(COALESCE(sp.stat_repetition_g3, 0)) as stat_repetition_g3,
+        SUM(COALESCE(sp.stat_repetition_g4, 0)) as stat_repetition_g4,
+        SUM(COALESCE(sp.stat_repetition_g5, 0)) as stat_repetition_g5,
+        SUM(COALESCE(sp.stat_repetition_g6, 0)) as stat_repetition_g6,
+        SUM(COALESCE(sp.stat_repetition_g7, 0)) as stat_repetition_g7,
+        SUM(COALESCE(sp.stat_repetition_g8, 0)) as stat_repetition_g8,
+        SUM(COALESCE(sp.stat_repetition_g9, 0)) as stat_repetition_g9,
+        SUM(COALESCE(sp.stat_repetition_g10, 0)) as stat_repetition_g10,
+        SUM(COALESCE(sp.stat_repetition_g11, 0)) as stat_repetition_g11,
+        SUM(COALESCE(sp.stat_repetition_g12, 0)) as stat_repetition_g12,
+
+        -- OVERAGE
+        SUM(COALESCE(sp.stat_overage_k, 0)) as stat_overage_k,
+        SUM(COALESCE(sp.stat_overage_g1, 0)) as stat_overage_g1,
+        SUM(COALESCE(sp.stat_overage_g2, 0)) as stat_overage_g2,
+        SUM(COALESCE(sp.stat_overage_g3, 0)) as stat_overage_g3,
+        SUM(COALESCE(sp.stat_overage_g4, 0)) as stat_overage_g4,
+        SUM(COALESCE(sp.stat_overage_g5, 0)) as stat_overage_g5,
+        SUM(COALESCE(sp.stat_overage_g6, 0)) as stat_overage_g6,
+        SUM(COALESCE(sp.stat_overage_g7, 0)) as stat_overage_g7,
+        SUM(COALESCE(sp.stat_overage_g8, 0)) as stat_overage_g8,
+        SUM(COALESCE(sp.stat_overage_g9, 0)) as stat_overage_g9,
+        SUM(COALESCE(sp.stat_overage_g10, 0)) as stat_overage_g10,
+        SUM(COALESCE(sp.stat_overage_g11, 0)) as stat_overage_g11,
+        SUM(COALESCE(sp.stat_overage_g12, 0)) as stat_overage_g12,
+
+        -- DROPOUT
+        SUM(COALESCE(sp.stat_dropout_k, 0)) as stat_dropout_k,
+        SUM(COALESCE(sp.stat_dropout_g1, 0)) as stat_dropout_g1,
+        SUM(COALESCE(sp.stat_dropout_g2, 0)) as stat_dropout_g2,
+        SUM(COALESCE(sp.stat_dropout_g3, 0)) as stat_dropout_g3,
+        SUM(COALESCE(sp.stat_dropout_g4, 0)) as stat_dropout_g4,
+        SUM(COALESCE(sp.stat_dropout_g5, 0)) as stat_dropout_g5,
+        SUM(COALESCE(sp.stat_dropout_g6, 0)) as stat_dropout_g6,
+        SUM(COALESCE(sp.stat_dropout_g7, 0)) as stat_dropout_g7,
+        SUM(COALESCE(sp.stat_dropout_g8, 0)) as stat_dropout_g8,
+        SUM(COALESCE(sp.stat_dropout_g9, 0)) as stat_dropout_g9,
+        SUM(COALESCE(sp.stat_dropout_g10, 0)) as stat_dropout_g10,
+        SUM(COALESCE(sp.stat_dropout_g11, 0)) as stat_dropout_g11,
+        SUM(COALESCE(sp.stat_dropout_g12, 0)) as stat_dropout_g12,
+
+        -- SHIFTING METRICS
+        SUM(CASE WHEN sp.shift_kinder = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_k,
+        SUM(CASE WHEN sp.shift_g1 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g1,
+        SUM(CASE WHEN sp.shift_g2 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g2,
+        SUM(CASE WHEN sp.shift_g3 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g3,
+        SUM(CASE WHEN sp.shift_g4 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g4,
+        SUM(CASE WHEN sp.shift_g5 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g5,
+        SUM(CASE WHEN sp.shift_g6 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g6,
+        SUM(CASE WHEN sp.shift_g7 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g7,
+        SUM(CASE WHEN sp.shift_g8 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g8,
+        SUM(CASE WHEN sp.shift_g9 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g9,
+        SUM(CASE WHEN sp.shift_g10 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g10,
+        SUM(CASE WHEN sp.shift_g11 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g11,
+        SUM(CASE WHEN sp.shift_g12 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g12,
+
+        -- LEARNING DELIVERY METRICS
+        SUM(CASE WHEN sp.mode_kinder = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_k,
+        SUM(CASE WHEN sp.mode_kinder LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_k,
+        SUM(CASE WHEN sp.mode_kinder = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_k,
+        SUM(CASE WHEN sp.mode_g1 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g1,
+        SUM(CASE WHEN sp.mode_g1 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g1,
+        SUM(CASE WHEN sp.mode_g1 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g1,
+        SUM(CASE WHEN sp.mode_g2 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g2,
+        SUM(CASE WHEN sp.mode_g2 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g2,
+        SUM(CASE WHEN sp.mode_g2 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g2,
+        SUM(CASE WHEN sp.mode_g3 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g3,
+        SUM(CASE WHEN sp.mode_g3 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g3,
+        SUM(CASE WHEN sp.mode_g3 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g3,
+        SUM(CASE WHEN sp.mode_g4 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g4,
+        SUM(CASE WHEN sp.mode_g4 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g4,
+        SUM(CASE WHEN sp.mode_g4 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g4,
+        SUM(CASE WHEN sp.mode_g5 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g5,
+        SUM(CASE WHEN sp.mode_g5 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g5,
+        SUM(CASE WHEN sp.mode_g5 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g5,
+        SUM(CASE WHEN sp.mode_g6 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g6,
+        SUM(CASE WHEN sp.mode_g6 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g6,
+        SUM(CASE WHEN sp.mode_g6 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g6,
+        SUM(CASE WHEN sp.mode_g7 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g7,
+        SUM(CASE WHEN sp.mode_g7 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g7,
+        SUM(CASE WHEN sp.mode_g7 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g7,
+        SUM(CASE WHEN sp.mode_g8 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g8,
+        SUM(CASE WHEN sp.mode_g8 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g8,
+        SUM(CASE WHEN sp.mode_g8 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g8,
+        SUM(CASE WHEN sp.mode_g9 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g9,
+        SUM(CASE WHEN sp.mode_g9 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g9,
+        SUM(CASE WHEN sp.mode_g9 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g9,
+        SUM(CASE WHEN sp.mode_g10 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g10,
+        SUM(CASE WHEN sp.mode_g10 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g10,
+        SUM(CASE WHEN sp.mode_g10 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g10,
+        SUM(CASE WHEN sp.mode_g11 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g11,
+        SUM(CASE WHEN sp.mode_g11 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g11,
+        SUM(CASE WHEN sp.mode_g11 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g11,
+        SUM(CASE WHEN sp.mode_g12 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g12,
+        SUM(CASE WHEN sp.mode_g12 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g12,
+        SUM(CASE WHEN sp.mode_g12 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g12,
+
+        -- EMERGENCY ADM METRICS
+        SUM(CASE WHEN sp.adm_mdl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_mdl,
+        SUM(CASE WHEN sp.adm_odl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_odl,
+        SUM(CASE WHEN sp.adm_tvi IS TRUE THEN 1 ELSE 0 END) as cnt_adm_tvi,
+        SUM(CASE WHEN sp.adm_blended IS TRUE THEN 1 ELSE 0 END) as cnt_adm_blended,
+
+        -- TEACHER METRICS (COUNT BY GRADE/LEVEL)
+        SUM(sp.teach_kinder) as cnt_teach_k,
+        SUM(sp.teach_g1) as cnt_teach_g1,
+        SUM(sp.teach_g2) as cnt_teach_g2,
+        SUM(sp.teach_g3) as cnt_teach_g3,
+        SUM(sp.teach_g4) as cnt_teach_g4,
+        SUM(sp.teach_g5) as cnt_teach_g5,
+        SUM(sp.teach_g6) as cnt_teach_g6,
+        SUM(sp.teach_g7) as cnt_teach_g7,
+        SUM(sp.teach_g8) as cnt_teach_g8,
+        SUM(sp.teach_g9) as cnt_teach_g9,
+        SUM(sp.teach_g10) as cnt_teach_g10,
+        SUM(sp.teach_g11) as cnt_teach_g11,
+        SUM(sp.teach_g12) as cnt_teach_g12,
+
+        -- MULTIGRADE TEACHERS
+        SUM(sp.teach_multi_1_2) as cnt_multi_1_2,
+        SUM(sp.teach_multi_3_4) as cnt_multi_3_4,
+        SUM(sp.teach_multi_5_6) as cnt_multi_5_6,
+
+        -- TEACHING EXPERIENCE
+        SUM(sp.teach_exp_0_1) as cnt_exp_0_1,
+        SUM(sp.teach_exp_2_5) as cnt_exp_2_5,
+        SUM(sp.teach_exp_6_10) as cnt_exp_6_10,
+        SUM(sp.teach_exp_11_15) as cnt_exp_11_15,
+        SUM(sp.teach_exp_16_20) as cnt_exp_16_20,
+        SUM(sp.teach_exp_21_25) as cnt_exp_21_25,
+        SUM(sp.teach_exp_26_30) as cnt_exp_26_30,
+        SUM(sp.teach_exp_31_35) as cnt_exp_31_35,
+        SUM(sp.teach_exp_36_40) as cnt_exp_36_40,
+        SUM(sp.teach_exp_40_45) as cnt_exp_40_45,
+
+        -- SPECIALIZATION (MAJORS)
+        SUM(sp.spec_math_major) as cnt_spec_math,
+        SUM(sp.spec_science_major) as cnt_spec_sci,
+        SUM(sp.spec_english_major) as cnt_spec_eng,
+        SUM(sp.spec_filipino_major) as cnt_spec_fil,
+        SUM(sp.spec_ap_major) as cnt_spec_ap,
+        SUM(sp.spec_mapeh_major) as cnt_spec_mapeh,
+        SUM(sp.spec_esp_major) as cnt_spec_esp,
+        SUM(sp.spec_tle_major) as cnt_spec_tle,
+        SUM(sp.spec_general_major) as cnt_spec_gen,
+        SUM(sp.spec_ece_major) as cnt_spec_ece,
+
+        -- CLASSROOMS (Condition)
+        SUM(sp.build_classrooms_new) as cnt_class_new,
+        SUM(sp.build_classrooms_good) as cnt_class_good,
+        SUM(sp.build_classrooms_repair) as cnt_class_repair,
+        SUM(sp.build_classrooms_demolition) as cnt_class_demolish,
+
+        -- EQUIPMENT & INVENTORY
+        SUM(sp.res_ecart_func) as cnt_equip_ecart_func,
+        SUM(sp.res_ecart_nonfunc) as cnt_equip_ecart_non,
+        SUM(sp.res_laptop_func) as cnt_equip_laptop_func,
+        SUM(sp.res_laptop_nonfunc) as cnt_equip_laptop_non,
+        SUM(sp.res_printer_func) as cnt_equip_printer_func,
+        SUM(sp.res_printer_nonfunc) as cnt_equip_printer_non,
+        SUM(sp.res_tv_func) as cnt_equip_tv_func,
+        SUM(sp.res_tv_nonfunc) as cnt_equip_tv_non,
+
+        -- SEATS (By Grade)
+        SUM(sp.seats_kinder) as cnt_seats_k,
+        SUM(sp.seats_grade_1) as cnt_seats_g1,
+        SUM(sp.seats_grade_2) as cnt_seats_g2,
+        SUM(sp.seats_grade_3) as cnt_seats_g3,
+        SUM(sp.seats_grade_4) as cnt_seats_g4,
+        SUM(sp.seats_grade_5) as cnt_seats_g5,
+        SUM(sp.seats_grade_6) as cnt_seats_g6,
+        SUM(sp.seats_grade_7) as cnt_seats_g7,
+        SUM(sp.seats_grade_8) as cnt_seats_g8,
+        SUM(sp.seats_grade_9) as cnt_seats_g9,
+        SUM(sp.seats_grade_10) as cnt_seats_g10,
+        SUM(sp.seats_grade_11) as cnt_seats_g11,
+        SUM(sp.seats_grade_12) as cnt_seats_g12,
+
+        -- TOILETS (Comfort Rooms)
+        SUM(sp.res_toilets_male) as cnt_toilet_male,
+        SUM(sp.res_toilets_female) as cnt_toilet_female,
+        SUM(sp.res_toilets_pwd) as cnt_toilet_pwd,
+        SUM(sp.res_toilets_common) as cnt_toilet_common,
+
+        -- SPECIALIZED ROOMS
+        SUM(sp.res_sci_labs) as cnt_room_sci,
+        SUM(sp.res_com_labs) as cnt_room_com,
+        SUM(sp.res_tvl_workshops) as cnt_room_tvl,
+
+        -- SITE & UTILITIES
+        -- Electricity
+        SUM(CASE WHEN sp.res_electricity_source = 'GRID SUPPLY' THEN 1 ELSE 0 END) as cnt_site_elec_grid,
+        SUM(CASE WHEN sp.res_electricity_source LIKE '%OFF-GRID%' THEN 1 ELSE 0 END) as cnt_site_elec_offgrid,
+        SUM(CASE WHEN sp.res_electricity_source = 'NO ELECTRICITY' THEN 1 ELSE 0 END) as cnt_site_elec_none,
+        
+        -- Water
+        SUM(CASE WHEN sp.res_water_source LIKE '%Piped%' THEN 1 ELSE 0 END) as cnt_site_water_piped,
+        SUM(CASE WHEN sp.res_water_source = 'Natural Resources' THEN 1 ELSE 0 END) as cnt_site_water_natural,
+        SUM(CASE WHEN sp.res_water_source = 'No Water Source' THEN 1 ELSE 0 END) as cnt_site_water_none,
+
+        -- Buildable Space
+        SUM(CASE WHEN sp.res_buildable_space = 'Yes' THEN 1 ELSE 0 END) as cnt_site_build_yes,
+        SUM(CASE WHEN sp.res_buildable_space = 'No' THEN 1 ELSE 0 END) as cnt_site_build_no,
+
+        -- SHA (Hardship)
+        SUM(CASE WHEN sp.sha_category LIKE '%HARDSHIP%' THEN 1 ELSE 0 END) as cnt_site_sha_hardship,
+        SUM(CASE WHEN sp.sha_category LIKE '%MULTIGRADE%' THEN 1 ELSE 0 END) as cnt_site_sha_multi,
+
+
+        -- HIERARCHICAL AGGREGATES
+        
+        -- SNED (Sum of Levels - Calculated from grades as requested)
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0)
+        ) as stat_sned_es,
+        
+        SUM(
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + 
+            COALESCE(sp.stat_sned_g9, 0) + COALESCE(sp.stat_sned_g10, 0)
+        ) as stat_sned_jhs,
+        
+        SUM(COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)) as stat_sned_shs,
+        
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0) + 
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + COALESCE(sp.stat_sned_g9, 0) + 
+            COALESCE(sp.stat_sned_g10, 0) + COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)
+        ) as stat_sned_total,
+
+        -- DISABILITY (Sum of Levels)
+        SUM(COALESCE(sp.stat_disability_es, 0)) as stat_disability_es,
+        SUM(COALESCE(sp.stat_disability_jhs, 0)) as stat_disability_jhs,
+        SUM(COALESCE(sp.stat_disability_shs, 0)) as stat_disability_shs,
+        SUM(COALESCE(sp.stat_disability_es, 0) + COALESCE(sp.stat_disability_jhs, 0) + COALESCE(sp.stat_disability_shs, 0)) as stat_disability_total,
+
+        -- ALS (Sum of Levels)
+        SUM(COALESCE(sp.stat_als_es, 0)) as stat_als_es,
+        SUM(COALESCE(sp.stat_als_jhs, 0)) as stat_als_jhs,
+        SUM(COALESCE(sp.stat_als_shs, 0)) as stat_als_shs,
+        SUM(COALESCE(sp.stat_als_es, 0) + COALESCE(sp.stat_als_jhs, 0) + COALESCE(sp.stat_als_shs, 0)) as stat_als_total,
+
+        -- MUSLIM (Sum of Grades, as aggregates missing)
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0)
+        ) as stat_muslim_es,
+        SUM(
+            COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + COALESCE(sp.stat_muslim_g9, 0) + 
+            COALESCE(sp.stat_muslim_g10, 0)
+        ) as stat_muslim_jhs,
+        SUM(COALESCE(sp.stat_muslim_g11, 0) + COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_shs,
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0) + COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + 
+            COALESCE(sp.stat_muslim_g9, 0) + COALESCE(sp.stat_muslim_g10, 0) + COALESCE(sp.stat_muslim_g11, 0) + 
+            COALESCE(sp.stat_muslim_g12, 0)
+        ) as stat_muslim_total,
+
+        -- IP (Existing Total)
+        SUM(COALESCE(sp.stat_ip_es, 0)) as stat_ip_es,
+        SUM(COALESCE(sp.stat_ip_jhs, 0)) as stat_ip_jhs,
+        SUM(COALESCE(sp.stat_ip_shs, 0)) as stat_ip_shs,
+        SUM(COALESCE(sp.stat_ip, 0)) as stat_ip_total,
+
+        -- DISPLACED (Existing Total)
+        SUM(COALESCE(sp.stat_displaced_es, 0)) as stat_displaced_es,
+        SUM(COALESCE(sp.stat_displaced_jhs, 0)) as stat_displaced_jhs,
+        SUM(COALESCE(sp.stat_displaced_shs, 0)) as stat_displaced_shs,
+        SUM(COALESCE(sp.stat_displaced, 0)) as stat_displaced_total,
+
+        -- REPETITION (Existing Total)
+        SUM(COALESCE(sp.stat_repetition_es, 0)) as stat_repetition_es,
+        SUM(COALESCE(sp.stat_repetition_jhs, 0)) as stat_repetition_jhs,
+        SUM(COALESCE(sp.stat_repetition_shs, 0)) as stat_repetition_shs,
+        SUM(COALESCE(sp.stat_repetition, 0)) as stat_repetition_total,
+
+        -- OVERAGE (Existing Total)
+        SUM(COALESCE(sp.stat_overage_es, 0)) as stat_overage_es,
+        SUM(COALESCE(sp.stat_overage_jhs, 0)) as stat_overage_jhs,
+        SUM(COALESCE(sp.stat_overage_shs, 0)) as stat_overage_shs,
+        SUM(COALESCE(sp.stat_overage, 0)) as stat_overage_total,
+
+        -- DROPOUT (Sum of Levels, missing Total)
+        SUM(COALESCE(sp.stat_dropout_es, 0)) as stat_dropout_es,
+        SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
+        SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
+        SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
@@ -5942,14 +6455,528 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        s.district,
-        COUNT(s.school_id) as total_schools,
+        s.district, 
+        COUNT(s.school_id) as total_schools, 
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') OR sp.school_head_validation = TRUE THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN sp.data_health_description = 'Critical' THEN 1 END) as critical_schools,
-        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
+        COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion,
+        SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
+        SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
+        SUM(COALESCE(sp.grade_1, 0)) as grade_1,
+        SUM(COALESCE(sp.grade_2, 0)) as grade_2,
+        SUM(COALESCE(sp.grade_3, 0)) as grade_3,
+        SUM(COALESCE(sp.grade_4, 0)) as grade_4,
+        SUM(COALESCE(sp.grade_5, 0)) as grade_5,
+        SUM(COALESCE(sp.grade_6, 0)) as grade_6,
+        SUM(COALESCE(sp.grade_7, 0)) as grade_7,
+        SUM(COALESCE(sp.grade_8, 0)) as grade_8,
+        SUM(COALESCE(sp.grade_9, 0)) as grade_9,
+        SUM(COALESCE(sp.grade_10, 0)) as grade_10,
+        SUM(COALESCE(sp.grade_11, 0)) as grade_11,
+        SUM(COALESCE(sp.grade_12, 0)) as grade_12,
+
+        SUM(COALESCE(sp.classes_kinder, 0)) as classes_kinder,
+        SUM(COALESCE(sp.classes_grade_1, 0)) as classes_grade_1,
+        SUM(COALESCE(sp.classes_grade_2, 0)) as classes_grade_2,
+        SUM(COALESCE(sp.classes_grade_3, 0)) as classes_grade_3,
+        SUM(COALESCE(sp.classes_grade_4, 0)) as classes_grade_4,
+        SUM(COALESCE(sp.classes_grade_5, 0)) as classes_grade_5,
+        SUM(COALESCE(sp.classes_grade_6, 0)) as classes_grade_6,
+        SUM(COALESCE(sp.classes_grade_7, 0)) as classes_grade_7,
+        SUM(COALESCE(sp.classes_grade_8, 0)) as classes_grade_8,
+        SUM(COALESCE(sp.classes_grade_9, 0)) as classes_grade_9,
+        SUM(COALESCE(sp.classes_grade_10, 0)) as classes_grade_10,
+        SUM(COALESCE(sp.classes_grade_11, 0)) as classes_grade_11,
+        SUM(COALESCE(sp.classes_grade_12, 0)) as classes_grade_12,
+        
+        SUM(COALESCE(sp.aral_math_g1, 0)) as aral_math_g1,
+        SUM(COALESCE(sp.aral_read_g1, 0)) as aral_read_g1,
+        SUM(COALESCE(sp.aral_sci_g1, 0)) as aral_sci_g1,
+        SUM(COALESCE(sp.aral_math_g2, 0)) as aral_math_g2,
+        SUM(COALESCE(sp.aral_read_g2, 0)) as aral_read_g2,
+        SUM(COALESCE(sp.aral_sci_g2, 0)) as aral_sci_g2,
+        SUM(COALESCE(sp.aral_math_g3, 0)) as aral_math_g3,
+        SUM(COALESCE(sp.aral_read_g3, 0)) as aral_read_g3,
+        SUM(COALESCE(sp.aral_sci_g3, 0)) as aral_sci_g3,
+        SUM(COALESCE(sp.aral_math_g4, 0)) as aral_math_g4,
+        SUM(COALESCE(sp.aral_read_g4, 0)) as aral_read_g4,
+        SUM(COALESCE(sp.aral_sci_g4, 0)) as aral_sci_g4,
+        SUM(COALESCE(sp.aral_math_g5, 0)) as aral_math_g5,
+        SUM(COALESCE(sp.aral_read_g5, 0)) as aral_read_g5,
+        SUM(COALESCE(sp.aral_sci_g5, 0)) as aral_sci_g5,
+        SUM(COALESCE(sp.aral_math_g6, 0)) as aral_math_g6,
+        SUM(COALESCE(sp.aral_read_g6, 0)) as aral_read_g6,
+        SUM(COALESCE(sp.aral_sci_g6, 0)) as aral_sci_g6,
+
+        SUM(COALESCE(sp.cnt_less_kinder, 0)) as cnt_less_kinder,
+        SUM(COALESCE(sp.cnt_within_kinder, 0)) as cnt_within_kinder,
+        SUM(COALESCE(sp.cnt_above_kinder, 0)) as cnt_above_kinder,
+        
+        SUM(COALESCE(sp.cnt_less_g1, 0)) as cnt_less_g1,
+        SUM(COALESCE(sp.cnt_within_g1, 0)) as cnt_within_g1,
+        SUM(COALESCE(sp.cnt_above_g1, 0)) as cnt_above_g1,
+        
+        SUM(COALESCE(sp.cnt_less_g2, 0)) as cnt_less_g2,
+        SUM(COALESCE(sp.cnt_within_g2, 0)) as cnt_within_g2,
+        SUM(COALESCE(sp.cnt_above_g2, 0)) as cnt_above_g2,
+        
+        SUM(COALESCE(sp.cnt_less_g3, 0)) as cnt_less_g3,
+        SUM(COALESCE(sp.cnt_within_g3, 0)) as cnt_within_g3,
+        SUM(COALESCE(sp.cnt_above_g3, 0)) as cnt_above_g3,
+        
+        SUM(COALESCE(sp.cnt_less_g4, 0)) as cnt_less_g4,
+        SUM(COALESCE(sp.cnt_within_g4, 0)) as cnt_within_g4,
+        SUM(COALESCE(sp.cnt_above_g4, 0)) as cnt_above_g4,
+        
+        SUM(COALESCE(sp.cnt_less_g5, 0)) as cnt_less_g5,
+        SUM(COALESCE(sp.cnt_within_g5, 0)) as cnt_within_g5,
+        SUM(COALESCE(sp.cnt_above_g5, 0)) as cnt_above_g5,
+        
+        SUM(COALESCE(sp.cnt_less_g6, 0)) as cnt_less_g6,
+        SUM(COALESCE(sp.cnt_within_g6, 0)) as cnt_within_g6,
+        SUM(COALESCE(sp.cnt_above_g6, 0)) as cnt_above_g6,
+        
+        SUM(COALESCE(sp.cnt_less_g7, 0)) as cnt_less_g7,
+        SUM(COALESCE(sp.cnt_within_g7, 0)) as cnt_within_g7,
+        SUM(COALESCE(sp.cnt_above_g7, 0)) as cnt_above_g7,
+        
+        SUM(COALESCE(sp.cnt_less_g8, 0)) as cnt_less_g8,
+        SUM(COALESCE(sp.cnt_within_g8, 0)) as cnt_within_g8,
+        SUM(COALESCE(sp.cnt_above_g8, 0)) as cnt_above_g8,
+        
+        SUM(COALESCE(sp.cnt_less_g9, 0)) as cnt_less_g9,
+        SUM(COALESCE(sp.cnt_within_g9, 0)) as cnt_within_g9,
+        SUM(COALESCE(sp.cnt_above_g9, 0)) as cnt_above_g9,
+        
+        SUM(COALESCE(sp.cnt_less_g10, 0)) as cnt_less_g10,
+        SUM(COALESCE(sp.cnt_within_g10, 0)) as cnt_within_g10,
+        SUM(COALESCE(sp.cnt_above_g10, 0)) as cnt_above_g10,
+        
+        SUM(COALESCE(sp.cnt_less_g11, 0)) as cnt_less_g11,
+        SUM(COALESCE(sp.cnt_within_g11, 0)) as cnt_within_g11,
+        SUM(COALESCE(sp.cnt_above_g11, 0)) as cnt_above_g11,
+        
+        SUM(COALESCE(sp.cnt_less_g12, 0)) as cnt_less_g12,
+        SUM(COALESCE(sp.cnt_within_g12, 0)) as cnt_within_g12,
+        SUM(COALESCE(sp.cnt_above_g12, 0)) as cnt_above_g12,
+
+        -- SNED
+        SUM(COALESCE(sp.stat_sned_k, 0)) as stat_sned_k,
+        SUM(COALESCE(sp.stat_sned_g1, 0)) as stat_sned_g1,
+        SUM(COALESCE(sp.stat_sned_g2, 0)) as stat_sned_g2,
+        SUM(COALESCE(sp.stat_sned_g3, 0)) as stat_sned_g3,
+        SUM(COALESCE(sp.stat_sned_g4, 0)) as stat_sned_g4,
+        SUM(COALESCE(sp.stat_sned_g5, 0)) as stat_sned_g5,
+        SUM(COALESCE(sp.stat_sned_g6, 0)) as stat_sned_g6,
+        SUM(COALESCE(sp.stat_sned_g7, 0)) as stat_sned_g7,
+        SUM(COALESCE(sp.stat_sned_g8, 0)) as stat_sned_g8,
+        SUM(COALESCE(sp.stat_sned_g9, 0)) as stat_sned_g9,
+        SUM(COALESCE(sp.stat_sned_g10, 0)) as stat_sned_g10,
+        SUM(COALESCE(sp.stat_sned_g11, 0)) as stat_sned_g11,
+        SUM(COALESCE(sp.stat_sned_g12, 0)) as stat_sned_g12,
+
+        -- DISABILITY
+        SUM(COALESCE(sp.stat_disability_k, 0)) as stat_disability_k,
+        SUM(COALESCE(sp.stat_disability_g1, 0)) as stat_disability_g1,
+        SUM(COALESCE(sp.stat_disability_g2, 0)) as stat_disability_g2,
+        SUM(COALESCE(sp.stat_disability_g3, 0)) as stat_disability_g3,
+        SUM(COALESCE(sp.stat_disability_g4, 0)) as stat_disability_g4,
+        SUM(COALESCE(sp.stat_disability_g5, 0)) as stat_disability_g5,
+        SUM(COALESCE(sp.stat_disability_g6, 0)) as stat_disability_g6,
+        SUM(COALESCE(sp.stat_disability_g7, 0)) as stat_disability_g7,
+        SUM(COALESCE(sp.stat_disability_g8, 0)) as stat_disability_g8,
+        SUM(COALESCE(sp.stat_disability_g9, 0)) as stat_disability_g9,
+        SUM(COALESCE(sp.stat_disability_g10, 0)) as stat_disability_g10,
+        SUM(COALESCE(sp.stat_disability_g11, 0)) as stat_disability_g11,
+        SUM(COALESCE(sp.stat_disability_g12, 0)) as stat_disability_g12,
+
+        -- ALS
+        SUM(COALESCE(sp.stat_als_k, 0)) as stat_als_k,
+        SUM(COALESCE(sp.stat_als_g1, 0)) as stat_als_g1,
+        SUM(COALESCE(sp.stat_als_g2, 0)) as stat_als_g2,
+        SUM(COALESCE(sp.stat_als_g3, 0)) as stat_als_g3,
+        SUM(COALESCE(sp.stat_als_g4, 0)) as stat_als_g4,
+        SUM(COALESCE(sp.stat_als_g5, 0)) as stat_als_g5,
+        SUM(COALESCE(sp.stat_als_g6, 0)) as stat_als_g6,
+        SUM(COALESCE(sp.stat_als_g7, 0)) as stat_als_g7,
+        SUM(COALESCE(sp.stat_als_g8, 0)) as stat_als_g8,
+        SUM(COALESCE(sp.stat_als_g9, 0)) as stat_als_g9,
+        SUM(COALESCE(sp.stat_als_g10, 0)) as stat_als_g10,
+        SUM(COALESCE(sp.stat_als_g11, 0)) as stat_als_g11,
+        SUM(COALESCE(sp.stat_als_g12, 0)) as stat_als_g12,
+
+        -- MUSLIM
+        SUM(COALESCE(sp.stat_muslim_k, 0)) as stat_muslim_k,
+        SUM(COALESCE(sp.stat_muslim_g1, 0)) as stat_muslim_g1,
+        SUM(COALESCE(sp.stat_muslim_g2, 0)) as stat_muslim_g2,
+        SUM(COALESCE(sp.stat_muslim_g3, 0)) as stat_muslim_g3,
+        SUM(COALESCE(sp.stat_muslim_g4, 0)) as stat_muslim_g4,
+        SUM(COALESCE(sp.stat_muslim_g5, 0)) as stat_muslim_g5,
+        SUM(COALESCE(sp.stat_muslim_g6, 0)) as stat_muslim_g6,
+        SUM(COALESCE(sp.stat_muslim_g7, 0)) as stat_muslim_g7,
+        SUM(COALESCE(sp.stat_muslim_g8, 0)) as stat_muslim_g8,
+        SUM(COALESCE(sp.stat_muslim_g9, 0)) as stat_muslim_g9,
+        SUM(COALESCE(sp.stat_muslim_g10, 0)) as stat_muslim_g10,
+        SUM(COALESCE(sp.stat_muslim_g11, 0)) as stat_muslim_g11,
+        SUM(COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_g12,
+
+        -- IP
+        SUM(COALESCE(sp.stat_ip_k, 0)) as stat_ip_k,
+        SUM(COALESCE(sp.stat_ip_g1, 0)) as stat_ip_g1,
+        SUM(COALESCE(sp.stat_ip_g2, 0)) as stat_ip_g2,
+        SUM(COALESCE(sp.stat_ip_g3, 0)) as stat_ip_g3,
+        SUM(COALESCE(sp.stat_ip_g4, 0)) as stat_ip_g4,
+        SUM(COALESCE(sp.stat_ip_g5, 0)) as stat_ip_g5,
+        SUM(COALESCE(sp.stat_ip_g6, 0)) as stat_ip_g6,
+        SUM(COALESCE(sp.stat_ip_g7, 0)) as stat_ip_g7,
+        SUM(COALESCE(sp.stat_ip_g8, 0)) as stat_ip_g8,
+        SUM(COALESCE(sp.stat_ip_g9, 0)) as stat_ip_g9,
+        SUM(COALESCE(sp.stat_ip_g10, 0)) as stat_ip_g10,
+        SUM(COALESCE(sp.stat_ip_g11, 0)) as stat_ip_g11,
+        SUM(COALESCE(sp.stat_ip_g12, 0)) as stat_ip_g12,
+
+        -- DISPLACED
+        SUM(COALESCE(sp.stat_displaced_k, 0)) as stat_displaced_k,
+        SUM(COALESCE(sp.stat_displaced_g1, 0)) as stat_displaced_g1,
+        SUM(COALESCE(sp.stat_displaced_g2, 0)) as stat_displaced_g2,
+        SUM(COALESCE(sp.stat_displaced_g3, 0)) as stat_displaced_g3,
+        SUM(COALESCE(sp.stat_displaced_g4, 0)) as stat_displaced_g4,
+        SUM(COALESCE(sp.stat_displaced_g5, 0)) as stat_displaced_g5,
+        SUM(COALESCE(sp.stat_displaced_g6, 0)) as stat_displaced_g6,
+        SUM(COALESCE(sp.stat_displaced_g7, 0)) as stat_displaced_g7,
+        SUM(COALESCE(sp.stat_displaced_g8, 0)) as stat_displaced_g8,
+        SUM(COALESCE(sp.stat_displaced_g9, 0)) as stat_displaced_g9,
+        SUM(COALESCE(sp.stat_displaced_g10, 0)) as stat_displaced_g10,
+        SUM(COALESCE(sp.stat_displaced_g11, 0)) as stat_displaced_g11,
+        SUM(COALESCE(sp.stat_displaced_g12, 0)) as stat_displaced_g12,
+
+        -- REPETITION
+        SUM(COALESCE(sp.stat_repetition_k, 0)) as stat_repetition_k,
+        SUM(COALESCE(sp.stat_repetition_g1, 0)) as stat_repetition_g1,
+        SUM(COALESCE(sp.stat_repetition_g2, 0)) as stat_repetition_g2,
+        SUM(COALESCE(sp.stat_repetition_g3, 0)) as stat_repetition_g3,
+        SUM(COALESCE(sp.stat_repetition_g4, 0)) as stat_repetition_g4,
+        SUM(COALESCE(sp.stat_repetition_g5, 0)) as stat_repetition_g5,
+        SUM(COALESCE(sp.stat_repetition_g6, 0)) as stat_repetition_g6,
+        SUM(COALESCE(sp.stat_repetition_g7, 0)) as stat_repetition_g7,
+        SUM(COALESCE(sp.stat_repetition_g8, 0)) as stat_repetition_g8,
+        SUM(COALESCE(sp.stat_repetition_g9, 0)) as stat_repetition_g9,
+        SUM(COALESCE(sp.stat_repetition_g10, 0)) as stat_repetition_g10,
+        SUM(COALESCE(sp.stat_repetition_g11, 0)) as stat_repetition_g11,
+        SUM(COALESCE(sp.stat_repetition_g12, 0)) as stat_repetition_g12,
+
+        -- OVERAGE
+        SUM(COALESCE(sp.stat_overage_k, 0)) as stat_overage_k,
+        SUM(COALESCE(sp.stat_overage_g1, 0)) as stat_overage_g1,
+        SUM(COALESCE(sp.stat_overage_g2, 0)) as stat_overage_g2,
+        SUM(COALESCE(sp.stat_overage_g3, 0)) as stat_overage_g3,
+        SUM(COALESCE(sp.stat_overage_g4, 0)) as stat_overage_g4,
+        SUM(COALESCE(sp.stat_overage_g5, 0)) as stat_overage_g5,
+        SUM(COALESCE(sp.stat_overage_g6, 0)) as stat_overage_g6,
+        SUM(COALESCE(sp.stat_overage_g7, 0)) as stat_overage_g7,
+        SUM(COALESCE(sp.stat_overage_g8, 0)) as stat_overage_g8,
+        SUM(COALESCE(sp.stat_overage_g9, 0)) as stat_overage_g9,
+        SUM(COALESCE(sp.stat_overage_g10, 0)) as stat_overage_g10,
+        SUM(COALESCE(sp.stat_overage_g11, 0)) as stat_overage_g11,
+        SUM(COALESCE(sp.stat_overage_g12, 0)) as stat_overage_g12,
+
+        -- DROPOUT
+        SUM(COALESCE(sp.stat_dropout_k, 0)) as stat_dropout_k,
+        SUM(COALESCE(sp.stat_dropout_g1, 0)) as stat_dropout_g1,
+        SUM(COALESCE(sp.stat_dropout_g2, 0)) as stat_dropout_g2,
+        SUM(COALESCE(sp.stat_dropout_g3, 0)) as stat_dropout_g3,
+        SUM(COALESCE(sp.stat_dropout_g4, 0)) as stat_dropout_g4,
+        SUM(COALESCE(sp.stat_dropout_g5, 0)) as stat_dropout_g5,
+        SUM(COALESCE(sp.stat_dropout_g6, 0)) as stat_dropout_g6,
+        SUM(COALESCE(sp.stat_dropout_g7, 0)) as stat_dropout_g7,
+        SUM(COALESCE(sp.stat_dropout_g8, 0)) as stat_dropout_g8,
+        SUM(COALESCE(sp.stat_dropout_g9, 0)) as stat_dropout_g9,
+        SUM(COALESCE(sp.stat_dropout_g10, 0)) as stat_dropout_g10,
+        SUM(COALESCE(sp.stat_dropout_g11, 0)) as stat_dropout_g11,
+        SUM(COALESCE(sp.stat_dropout_g12, 0)) as stat_dropout_g12,
+
+        -- SHIFTING METRICS
+        SUM(CASE WHEN sp.shift_kinder = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_k,
+        SUM(CASE WHEN sp.shift_g1 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g1,
+        SUM(CASE WHEN sp.shift_g2 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g2,
+        SUM(CASE WHEN sp.shift_g3 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g3,
+        SUM(CASE WHEN sp.shift_g4 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g4,
+        SUM(CASE WHEN sp.shift_g5 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g5,
+        SUM(CASE WHEN sp.shift_g6 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g6,
+        SUM(CASE WHEN sp.shift_g7 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g7,
+        SUM(CASE WHEN sp.shift_g8 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g8,
+        SUM(CASE WHEN sp.shift_g9 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g9,
+        SUM(CASE WHEN sp.shift_g10 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g10,
+        SUM(CASE WHEN sp.shift_g11 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g11,
+        SUM(CASE WHEN sp.shift_g12 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g12,
+
+        -- LEARNING DELIVERY METRICS
+        SUM(CASE WHEN sp.mode_kinder = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_k,
+        SUM(CASE WHEN sp.mode_kinder LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_k,
+        SUM(CASE WHEN sp.mode_kinder = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_k,
+        SUM(CASE WHEN sp.mode_g1 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g1,
+        SUM(CASE WHEN sp.mode_g1 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g1,
+        SUM(CASE WHEN sp.mode_g1 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g1,
+        SUM(CASE WHEN sp.mode_g2 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g2,
+        SUM(CASE WHEN sp.mode_g2 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g2,
+        SUM(CASE WHEN sp.mode_g2 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g2,
+        SUM(CASE WHEN sp.mode_g3 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g3,
+        SUM(CASE WHEN sp.mode_g3 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g3,
+        SUM(CASE WHEN sp.mode_g3 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g3,
+        SUM(CASE WHEN sp.mode_g4 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g4,
+        SUM(CASE WHEN sp.mode_g4 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g4,
+        SUM(CASE WHEN sp.mode_g4 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g4,
+        SUM(CASE WHEN sp.mode_g5 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g5,
+        SUM(CASE WHEN sp.mode_g5 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g5,
+        SUM(CASE WHEN sp.mode_g5 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g5,
+        SUM(CASE WHEN sp.mode_g6 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g6,
+        SUM(CASE WHEN sp.mode_g6 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g6,
+        SUM(CASE WHEN sp.mode_g6 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g6,
+        SUM(CASE WHEN sp.mode_g7 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g7,
+        SUM(CASE WHEN sp.mode_g7 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g7,
+        SUM(CASE WHEN sp.mode_g7 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g7,
+        SUM(CASE WHEN sp.mode_g8 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g8,
+        SUM(CASE WHEN sp.mode_g8 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g8,
+        SUM(CASE WHEN sp.mode_g8 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g8,
+        SUM(CASE WHEN sp.mode_g9 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g9,
+        SUM(CASE WHEN sp.mode_g9 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g9,
+        SUM(CASE WHEN sp.mode_g9 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g9,
+        SUM(CASE WHEN sp.mode_g10 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g10,
+        SUM(CASE WHEN sp.mode_g10 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g10,
+        SUM(CASE WHEN sp.mode_g10 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g10,
+        SUM(CASE WHEN sp.mode_g11 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g11,
+        SUM(CASE WHEN sp.mode_g11 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g11,
+        SUM(CASE WHEN sp.mode_g11 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g11,
+        SUM(CASE WHEN sp.mode_g12 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g12,
+        SUM(CASE WHEN sp.mode_g12 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g12,
+        SUM(CASE WHEN sp.mode_g12 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g12,
+
+        -- EMERGENCY ADM METRICS
+        SUM(CASE WHEN sp.adm_mdl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_mdl,
+        SUM(CASE WHEN sp.adm_odl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_odl,
+        SUM(CASE WHEN sp.adm_tvi IS TRUE THEN 1 ELSE 0 END) as cnt_adm_tvi,
+        SUM(CASE WHEN sp.adm_blended IS TRUE THEN 1 ELSE 0 END) as cnt_adm_blended,
+
+        -- TEACHER METRICS (COUNT BY GRADE/LEVEL)
+        SUM(sp.teach_kinder) as cnt_teach_k,
+        SUM(sp.teach_g1) as cnt_teach_g1,
+        SUM(sp.teach_g2) as cnt_teach_g2,
+        SUM(sp.teach_g3) as cnt_teach_g3,
+        SUM(sp.teach_g4) as cnt_teach_g4,
+        SUM(sp.teach_g5) as cnt_teach_g5,
+        SUM(sp.teach_g6) as cnt_teach_g6,
+        SUM(sp.teach_g7) as cnt_teach_g7,
+        SUM(sp.teach_g8) as cnt_teach_g8,
+        SUM(sp.teach_g9) as cnt_teach_g9,
+        SUM(sp.teach_g10) as cnt_teach_g10,
+        SUM(sp.teach_g11) as cnt_teach_g11,
+        SUM(sp.teach_g12) as cnt_teach_g12,
+
+        -- MULTIGRADE TEACHERS
+        SUM(sp.teach_multi_1_2) as cnt_multi_1_2,
+        SUM(sp.teach_multi_3_4) as cnt_multi_3_4,
+        SUM(sp.teach_multi_5_6) as cnt_multi_5_6,
+
+        -- TEACHING EXPERIENCE
+        SUM(sp.teach_exp_0_1) as cnt_exp_0_1,
+        SUM(sp.teach_exp_2_5) as cnt_exp_2_5,
+        SUM(sp.teach_exp_6_10) as cnt_exp_6_10,
+        SUM(sp.teach_exp_11_15) as cnt_exp_11_15,
+        SUM(sp.teach_exp_16_20) as cnt_exp_16_20,
+        SUM(sp.teach_exp_21_25) as cnt_exp_21_25,
+        SUM(sp.teach_exp_26_30) as cnt_exp_26_30,
+        SUM(sp.teach_exp_31_35) as cnt_exp_31_35,
+        SUM(sp.teach_exp_36_40) as cnt_exp_36_40,
+        SUM(sp.teach_exp_40_45) as cnt_exp_40_45,
+
+        -- SPECIALIZATION (MAJORS)
+        SUM(sp.spec_math_major) as cnt_spec_math,
+        SUM(sp.spec_science_major) as cnt_spec_sci,
+        SUM(sp.spec_english_major) as cnt_spec_eng,
+        SUM(sp.spec_filipino_major) as cnt_spec_fil,
+        SUM(sp.spec_ap_major) as cnt_spec_ap,
+        SUM(sp.spec_mapeh_major) as cnt_spec_mapeh,
+        SUM(sp.spec_esp_major) as cnt_spec_esp,
+        SUM(sp.spec_tle_major) as cnt_spec_tle,
+        SUM(sp.spec_general_major) as cnt_spec_gen,
+        SUM(sp.spec_ece_major) as cnt_spec_ece,
+
+        -- CLASSROOMS (Condition)
+        SUM(sp.build_classrooms_new) as cnt_class_new,
+        SUM(sp.build_classrooms_good) as cnt_class_good,
+        SUM(sp.build_classrooms_repair) as cnt_class_repair,
+        SUM(sp.build_classrooms_demolition) as cnt_class_demolish,
+
+        -- EQUIPMENT & INVENTORY
+        SUM(sp.res_ecart_func) as cnt_equip_ecart_func,
+        SUM(sp.res_ecart_nonfunc) as cnt_equip_ecart_non,
+        SUM(sp.res_laptop_func) as cnt_equip_laptop_func,
+        SUM(sp.res_laptop_nonfunc) as cnt_equip_laptop_non,
+        SUM(sp.res_printer_func) as cnt_equip_printer_func,
+        SUM(sp.res_printer_nonfunc) as cnt_equip_printer_non,
+        SUM(sp.res_tv_func) as cnt_equip_tv_func,
+        SUM(sp.res_tv_nonfunc) as cnt_equip_tv_non,
+
+        -- SEATS (By Grade)
+        SUM(sp.seats_kinder) as cnt_seats_k,
+        SUM(sp.seats_grade_1) as cnt_seats_g1,
+        SUM(sp.seats_grade_2) as cnt_seats_g2,
+        SUM(sp.seats_grade_3) as cnt_seats_g3,
+        SUM(sp.seats_grade_4) as cnt_seats_g4,
+        SUM(sp.seats_grade_5) as cnt_seats_g5,
+        SUM(sp.seats_grade_6) as cnt_seats_g6,
+        SUM(sp.seats_grade_7) as cnt_seats_g7,
+        SUM(sp.seats_grade_8) as cnt_seats_g8,
+        SUM(sp.seats_grade_9) as cnt_seats_g9,
+        SUM(sp.seats_grade_10) as cnt_seats_g10,
+        SUM(sp.seats_grade_11) as cnt_seats_g11,
+        SUM(sp.seats_grade_12) as cnt_seats_g12,
+
+        -- TOILETS (Comfort Rooms)
+        SUM(sp.res_toilets_male) as cnt_toilet_male,
+        SUM(sp.res_toilets_female) as cnt_toilet_female,
+        SUM(sp.res_toilets_pwd) as cnt_toilet_pwd,
+        SUM(sp.res_toilets_common) as cnt_toilet_common,
+
+        -- SPECIALIZED ROOMS
+        SUM(sp.res_sci_labs) as cnt_room_sci,
+        SUM(sp.res_com_labs) as cnt_room_com,
+        SUM(sp.res_tvl_workshops) as cnt_room_tvl,
+
+        -- SITE & UTILITIES
+        -- Electricity
+        SUM(CASE WHEN sp.res_electricity_source = 'GRID SUPPLY' THEN 1 ELSE 0 END) as cnt_site_elec_grid,
+        SUM(CASE WHEN sp.res_electricity_source LIKE '%OFF-GRID%' THEN 1 ELSE 0 END) as cnt_site_elec_offgrid,
+        SUM(CASE WHEN sp.res_electricity_source = 'NO ELECTRICITY' THEN 1 ELSE 0 END) as cnt_site_elec_none,
+        
+        -- Water
+        SUM(CASE WHEN sp.res_water_source LIKE '%Piped%' THEN 1 ELSE 0 END) as cnt_site_water_piped,
+        SUM(CASE WHEN sp.res_water_source = 'Natural Resources' THEN 1 ELSE 0 END) as cnt_site_water_natural,
+        SUM(CASE WHEN sp.res_water_source = 'No Water Source' THEN 1 ELSE 0 END) as cnt_site_water_none,
+
+        -- Buildable Space
+        SUM(CASE WHEN sp.res_buildable_space = 'Yes' THEN 1 ELSE 0 END) as cnt_site_build_yes,
+        SUM(CASE WHEN sp.res_buildable_space = 'No' THEN 1 ELSE 0 END) as cnt_site_build_no,
+
+        -- SHA (Hardship)
+        SUM(CASE WHEN sp.sha_category LIKE '%HARDSHIP%' THEN 1 ELSE 0 END) as cnt_site_sha_hardship,
+        SUM(CASE WHEN sp.sha_category LIKE '%MULTIGRADE%' THEN 1 ELSE 0 END) as cnt_site_sha_multi,
+
+
+        -- HIERARCHICAL AGGREGATES
+        
+        -- SNED (Sum of Levels - Calculated from grades as requested)
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0)
+        ) as stat_sned_es,
+        
+        SUM(
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + 
+            COALESCE(sp.stat_sned_g9, 0) + COALESCE(sp.stat_sned_g10, 0)
+        ) as stat_sned_jhs,
+        
+        SUM(COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)) as stat_sned_shs,
+        
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0) + 
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + COALESCE(sp.stat_sned_g9, 0) + 
+            COALESCE(sp.stat_sned_g10, 0) + COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)
+        ) as stat_sned_total,
+
+        -- DISABILITY (Sum of Levels)
+        SUM(COALESCE(sp.stat_disability_es, 0)) as stat_disability_es,
+        SUM(COALESCE(sp.stat_disability_jhs, 0)) as stat_disability_jhs,
+        SUM(COALESCE(sp.stat_disability_shs, 0)) as stat_disability_shs,
+        SUM(COALESCE(sp.stat_disability_es, 0) + COALESCE(sp.stat_disability_jhs, 0) + COALESCE(sp.stat_disability_shs, 0)) as stat_disability_total,
+
+        -- ALS (Sum of Levels)
+        SUM(COALESCE(sp.stat_als_es, 0)) as stat_als_es,
+        SUM(COALESCE(sp.stat_als_jhs, 0)) as stat_als_jhs,
+        SUM(COALESCE(sp.stat_als_shs, 0)) as stat_als_shs,
+        SUM(COALESCE(sp.stat_als_es, 0) + COALESCE(sp.stat_als_jhs, 0) + COALESCE(sp.stat_als_shs, 0)) as stat_als_total,
+
+        -- MUSLIM (Sum of Grades, as aggregates missing)
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0)
+        ) as stat_muslim_es,
+        SUM(
+            COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + COALESCE(sp.stat_muslim_g9, 0) + 
+            COALESCE(sp.stat_muslim_g10, 0)
+        ) as stat_muslim_jhs,
+        SUM(COALESCE(sp.stat_muslim_g11, 0) + COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_shs,
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0) + COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + 
+            COALESCE(sp.stat_muslim_g9, 0) + COALESCE(sp.stat_muslim_g10, 0) + COALESCE(sp.stat_muslim_g11, 0) + 
+            COALESCE(sp.stat_muslim_g12, 0)
+        ) as stat_muslim_total,
+
+        -- IP (Existing Total)
+        SUM(COALESCE(sp.stat_ip_es, 0)) as stat_ip_es,
+        SUM(COALESCE(sp.stat_ip_jhs, 0)) as stat_ip_jhs,
+        SUM(COALESCE(sp.stat_ip_shs, 0)) as stat_ip_shs,
+        SUM(COALESCE(sp.stat_ip, 0)) as stat_ip_total,
+
+        -- DISPLACED (Existing Total)
+        SUM(COALESCE(sp.stat_displaced_es, 0)) as stat_displaced_es,
+        SUM(COALESCE(sp.stat_displaced_jhs, 0)) as stat_displaced_jhs,
+        SUM(COALESCE(sp.stat_displaced_shs, 0)) as stat_displaced_shs,
+        SUM(COALESCE(sp.stat_displaced, 0)) as stat_displaced_total,
+
+        -- REPETITION (Existing Total)
+        SUM(COALESCE(sp.stat_repetition_es, 0)) as stat_repetition_es,
+        SUM(COALESCE(sp.stat_repetition_jhs, 0)) as stat_repetition_jhs,
+        SUM(COALESCE(sp.stat_repetition_shs, 0)) as stat_repetition_shs,
+        SUM(COALESCE(sp.stat_repetition, 0)) as stat_repetition_total,
+
+        -- OVERAGE (Existing Total)
+        SUM(COALESCE(sp.stat_overage_es, 0)) as stat_overage_es,
+        SUM(COALESCE(sp.stat_overage_jhs, 0)) as stat_overage_jhs,
+        SUM(COALESCE(sp.stat_overage_shs, 0)) as stat_overage_shs,
+        SUM(COALESCE(sp.stat_overage, 0)) as stat_overage_total,
+
+        -- DROPOUT (Sum of Levels, missing Total)
+        SUM(COALESCE(sp.stat_dropout_es, 0)) as stat_dropout_es,
+        SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
+        SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
+        SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE TRIM(s.region) = TRIM($1) AND TRIM(s.division) = TRIM($2)
       GROUP BY s.district
       ORDER BY s.district ASC
