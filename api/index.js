@@ -618,12 +618,7 @@ app.get('/api/debug/recalculate-all', async (req, res) => {
   }
 });
 
-    res.json({ success: true, message: `Recalculated ${count} schools.` });
-  } catch (err) {
-    console.error("❌ Recalculate Error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
+
 
 // --- HELPER FUNCTION: Calculate School Progress ---
 // MOVED UP HERE FOR VISIBILITY but normally defined below
