@@ -1005,6 +1005,30 @@ const startServer = async () => {
       console.error('âŒ Failed to migrate extra columns:', migErr.message);
     }
 
+    // --- MIGRATION: E-CART BATCHES TABLE ---
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecart_batches (
+          id SERIAL PRIMARY KEY,
+          school_id TEXT NOT NULL,
+          batch_no VARCHAR(100),
+          year_received INTEGER,
+          source_fund VARCHAR(100),
+          ecart_qty_laptops INTEGER DEFAULT 0,
+          ecart_condition_laptops VARCHAR(50),
+          ecart_has_smart_tv BOOLEAN DEFAULT false,
+          ecart_tv_size VARCHAR(50),
+          ecart_condition_tv VARCHAR(50),
+          ecart_condition_charging VARCHAR(50),
+          ecart_condition_cabinet VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('âœ… ecart_batches table ready');
+    } catch (ecartErr) {
+      console.error('âŒ Failed to create ecart_batches table:', ecartErr.message);
+    }
+
     // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
     try {
       await client.query(`
@@ -5197,6 +5221,21 @@ app.get('/api/school-resources/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- 21b. GET: Fetch e-Cart Batches ---
+app.get('/api/ecart-batches/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM ecart_batches WHERE school_id = $1 ORDER BY id ASC',
+      [schoolId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Fetch e-Cart Batches Error:', err);
+    res.status(500).json({ error: 'Failed to fetch e-Cart batches' });
+  }
+});
+
 // --- 22. POST: Save School Resources ---
 app.post('/api/save-school-resources', async (req, res) => {
   const data = req.body;
@@ -5291,6 +5330,46 @@ app.post('/api/save-school-resources', async (req, res) => {
       await pool.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
     }
 
+    // --- HANDLE E-CART BATCHES (Delete & Re-insert) ---
+    if (data.ecartBatches && Array.isArray(data.ecartBatches) && data.ecartBatches.length > 0) {
+      const ecClient = await pool.connect();
+      try {
+        await ecClient.query('BEGIN');
+        await ecClient.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+        for (const b of data.ecartBatches) {
+          await ecClient.query(`
+            INSERT INTO ecart_batches (
+              school_id, batch_no, year_received, source_fund,
+              ecart_qty_laptops, ecart_condition_laptops,
+              ecart_has_smart_tv, ecart_tv_size, ecart_condition_tv,
+              ecart_condition_charging, ecart_condition_cabinet
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          `, [
+            data.schoolId,
+            b.batch_no || null,
+            b.year_received ? parseInt(b.year_received) : null,
+            b.source_fund || null,
+            parseInt(b.ecart_qty_laptops) || 0,
+            b.ecart_condition_laptops || null,
+            b.ecart_has_smart_tv === true || b.ecart_has_smart_tv === 'true',
+            b.ecart_tv_size || null,
+            b.ecart_condition_tv || null,
+            b.ecart_condition_charging || null,
+            b.ecart_condition_cabinet || null
+          ]);
+        }
+        await ecClient.query('COMMIT');
+      } catch (ecErr) {
+        await ecClient.query('ROLLBACK');
+        console.error('e-Cart batches transaction failed:', ecErr);
+      } finally {
+        ecClient.release();
+      }
+    } else {
+      // If array is empty or missing, clear existing rows
+      await pool.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+    }
+
     res.json({ message: "Resources saved!" });
 
     // SNAPSHOT UPDATE (Primary)
@@ -5314,6 +5393,35 @@ app.post('/api/save-school-resources', async (req, res) => {
           }
         } else if (data.res_buildable_space === 'No') {
           await poolNew.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
+        }
+
+        // Sync e-Cart Batches
+        if (data.ecartBatches && Array.isArray(data.ecartBatches) && data.ecartBatches.length > 0) {
+          await poolNew.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+          for (const b of data.ecartBatches) {
+            await poolNew.query(`
+              INSERT INTO ecart_batches (
+                school_id, batch_no, year_received, source_fund,
+                ecart_qty_laptops, ecart_condition_laptops,
+                ecart_has_smart_tv, ecart_tv_size, ecart_condition_tv,
+                ecart_condition_charging, ecart_condition_cabinet
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            `, [
+              data.schoolId,
+              b.batch_no || null,
+              b.year_received ? parseInt(b.year_received) : null,
+              b.source_fund || null,
+              parseInt(b.ecart_qty_laptops) || 0,
+              b.ecart_condition_laptops || null,
+              b.ecart_has_smart_tv === true || b.ecart_has_smart_tv === 'true',
+              b.ecart_tv_size || null,
+              b.ecart_condition_tv || null,
+              b.ecart_condition_charging || null,
+              b.ecart_condition_cabinet || null
+            ]);
+          }
+        } else {
+          await poolNew.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
         }
 
         await calculateSchoolProgress(data.schoolId, poolNew);
