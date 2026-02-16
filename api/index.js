@@ -594,6 +594,12 @@ app.get('/api/debug/recalculate-all', async (req, res) => {
         count++;
       }
     }
+    res.json({ success: true, count });
+  } catch (err) {
+    console.error("Recalculate Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- HELPER FUNCTION: Calculate School Progress ---
 // MOVED UP HERE FOR VISIBILITY but normally defined below
@@ -751,9 +757,10 @@ const initOtpTable_OLD = async () => {
 
 // --- DATABASE CONNECTION ---
 // Auto-connect and initialize
-const old_db_init_disabled = async () => {
+const startServer = async () => {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
     isDbConnected = true;
     console.log('âœ… Connected to Postgres Database successfully!');
     await initOtpTable();
@@ -805,21 +812,22 @@ const old_db_init_disabled = async () => {
       }
 
     } catch (err) {
-
-      // --- MIGRATION: ADD CURRICULAR OFFERING ---
-      try {
-        await client.query(`
+      console.error("Init Error:", err);
+    }
+    // --- MIGRATION: ADD CURRICULAR OFFERING ---
+    try {
+      await client.query(`
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
         `);
-        console.log('âœ… Checked/Added curricular_offering column to school_profiles');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate curricular_offering:', migErr.message);
-      }
+      console.log('âœ… Checked/Added curricular_offering column to school_profiles');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate curricular_offering:', migErr.message);
+    }
 
-      // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
-      try {
-        await client.query(`
+    // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
+    try {
+      await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 uid TEXT PRIMARY KEY,
                 email TEXT,
@@ -837,10 +845,10 @@ const old_db_init_disabled = async () => {
                 disabled BOOLEAN DEFAULT FALSE
             );
         `);
-        // --- 1e. FORGOT PASSWORD (CUSTOM) ---
+      // --- 1e. FORGOT PASSWORD (CUSTOM) ---
 
-        // If table exists, ensure columns exist
-        await client.query(`
+      // If table exists, ensure columns exist
+      await client.query(`
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS first_name TEXT,
             ADD COLUMN IF NOT EXISTS last_name TEXT,
@@ -853,25 +861,25 @@ const old_db_init_disabled = async () => {
             ADD COLUMN IF NOT EXISTS position TEXT,
             ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
-        console.log('âœ… Checked/Extended users table schema');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate users table:', migErr.message);
-      }
-      // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
-      try {
-        await client.query(`
+      console.log('âœ… Checked/Extended users table schema');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate users table:', migErr.message);
+    }
+    // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS sha_category TEXT;
       `);
-        console.log('âœ… Checked/Added new School Resources columns');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate resources columns:', migErr.message);
-      }
+      console.log('âœ… Checked/Added new School Resources columns');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate resources columns:', migErr.message);
+    }
 
-      // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
-      try {
-        await client.query(`
+    // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         -- Site & Utils
         ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
@@ -973,14 +981,14 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
       `);
-        console.log('âœ… Checked/Added ALL missing School Resources & Class Analysis columns');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate extra columns:', migErr.message);
-      }
+      console.log('âœ… Checked/Added ALL missing School Resources & Class Analysis columns');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate extra columns:', migErr.message);
+    }
 
-      // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
-      try {
-        await client.query(`
+    // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS spec_english_major INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_english_teaching INTEGER DEFAULT 0,
@@ -1019,15 +1027,15 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS spec_others_major INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
       `);
-        console.log('âœ… Checked/Added Teacher Specialization columns');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate specialization columns:', migErr.message);
-      }
+      console.log('âœ… Checked/Added Teacher Specialization columns');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate specialization columns:', migErr.message);
+    }
 
-      // --- MIGRATION: ADD IPC COLUMN TO ENGINEER FORM ---
-      try {
-        // First ensure the table exists (it should, but safety first)
-        await client.query(`
+    // --- MIGRATION: ADD IPC COLUMN TO ENGINEER FORM ---
+    try {
+      // First ensure the table exists (it should, but safety first)
+      await client.query(`
             CREATE TABLE IF NOT EXISTS engineer_form (
                 project_id SERIAL PRIMARY KEY,
                 school_name TEXT,
@@ -1052,36 +1060,36 @@ const old_db_init_disabled = async () => {
             );
         `);
 
-        await client.query(`
+      await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
         `);
-        console.log('âœ… Checked/Added IPC column to engineer_form');
+      console.log('âœ… Checked/Added IPC column to engineer_form');
 
-        // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
-        await client.query(`
+      // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
+      await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS latitude TEXT,
             ADD COLUMN IF NOT EXISTS longitude TEXT;
         `);
-        console.log('âœ… Checked/Added Latitude & Longitude to engineer_form');
+      console.log('âœ… Checked/Added Latitude & Longitude to engineer_form');
 
-        // --- MIGRATION: ADD CONSTRUCTION DETAILS TO ENGINEER FORM ---
-        await client.query(`
+      // --- MIGRATION: ADD CONSTRUCTION DETAILS TO ENGINEER FORM ---
+      await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
             ADD COLUMN IF NOT EXISTS project_category TEXT,
             ADD COLUMN IF NOT EXISTS scope_of_work TEXT;
         `);
-        console.log('âœ… Checked/Added Construction Details to engineer_form');
+      console.log('âœ… Checked/Added Construction Details to engineer_form');
 
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate engineer_form columns:', migErr.message);
-      }
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate engineer_form columns:', migErr.message);
+    }
 
-      // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
-      try {
-        await client.query(`
+    // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         -- ARAL (Grades 1-6)
         ADD COLUMN IF NOT EXISTS aral_math_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g1 INTEGER DEFAULT 0,
@@ -1104,35 +1112,35 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
       `);
-        console.log('âœ… Checked/Added ARAL and Teaching Experience columns');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate ARAL/Exp columns:', migErr.message);
-      }
+      console.log('âœ… Checked/Added ARAL and Teaching Experience columns');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate ARAL/Exp columns:', migErr.message);
+    }
 
-      // --- MIGRATION: UPDATE PROJECT HISTORY SCHEMA ---
-      try {
-        // 1. Add engineer_name column
-        await client.query(`
+    // --- MIGRATION: UPDATE PROJECT HISTORY SCHEMA ---
+    try {
+      // 1. Add engineer_name column
+      await client.query(`
           ALTER TABLE engineer_form 
           ADD COLUMN IF NOT EXISTS engineer_name TEXT;
         `);
-        console.log('âœ… Checked/Added engineer_name and created_at columns');
+      console.log('âœ… Checked/Added engineer_name and created_at columns');
 
-        // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
-        await client.query(`
+      // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
+      await client.query(`
           ALTER TABLE engineer_form 
           DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 
         `);
-        console.log('âœ… Dropped UNIQUE constraint on IPC (if existed)');
+      console.log('âœ… Dropped UNIQUE constraint on IPC (if existed)');
 
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate history schema:', migErr.message);
-      }
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate history schema:', migErr.message);
+    }
 
 
-      // --- MIGRATION: DETAILED ENROLLMENT COLUMNS ---
-      try {
-        await client.query(`
+    // --- MIGRATION: DETAILED ENROLLMENT COLUMNS ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         -- Elementary
         ADD COLUMN IF NOT EXISTS grade_kinder INTEGER DEFAULT 0,
@@ -1181,25 +1189,25 @@ const old_db_init_disabled = async () => {
         ADD COLUMN IF NOT EXISTS grade_11 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS grade_12 INTEGER DEFAULT 0;
       `);
-        console.log('âœ… Checked/Added Detailed Enrollment columns');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate enrollment columns:', migErr.message);
-      }
+      console.log('âœ… Checked/Added Detailed Enrollment columns');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate enrollment columns:', migErr.message);
+    }
 
-      // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
-      try {
-        await client.query(`
+    // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
+    try {
+      await client.query(`
         ALTER TABLE school_profiles 
         ALTER COLUMN res_buildable_space TYPE TEXT;
       `);
-        console.log('âœ… Ensured res_buildable_space is TEXT');
-      } catch (migErr) {
-        console.log('â„¹ï¸  res_buildable_space type check skipped/validated');
-      }
+      console.log('âœ… Ensured res_buildable_space is TEXT');
+    } catch (migErr) {
+      console.log('â„¹ï¸  res_buildable_space type check skipped/validated');
+    }
 
-      // --- MIGRATION: SYSTEM SETTINGS TABLE ---
-      try {
-        await client.query(`
+    // --- MIGRATION: SYSTEM SETTINGS TABLE ---
+    try {
+      await client.query(`
           CREATE TABLE IF NOT EXISTS system_settings (
             setting_key TEXT PRIMARY KEY,
             setting_value TEXT,
@@ -1207,26 +1215,26 @@ const old_db_init_disabled = async () => {
             updated_by TEXT
           );
         `);
-        console.log('âœ… Checked/Created system_settings table');
-      } catch (tableErr) {
-        console.error('âŒ Failed to init system_settings table:', tableErr.message);
-      }
+      console.log('âœ… Checked/Created system_settings table');
+    } catch (tableErr) {
+      console.error('âŒ Failed to init system_settings table:', tableErr.message);
+    }
 
-      // --- MIGRATION: ADD DISABLED COLUMN TO USERS ---
-      try {
-        await client.query(`
+    // --- MIGRATION: ADD DISABLED COLUMN TO USERS ---
+    try {
+      await client.query(`
           ALTER TABLE users 
           ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
         `);
-        console.log('âœ… Checked/Added disabled column to users table');
-        /* ... (previous migrations omitted) ... */
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate disabled column:', migErr.message);
-      }
+      console.log('âœ… Checked/Added disabled column to users table');
+      /* ... (previous migrations omitted) ... */
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate disabled column:', migErr.message);
+    }
 
-      // --- MIGRATION: MONITORING SNAPSHOT COLUMNS ---
-      try {
-        await client.query(`
+    // --- MIGRATION: MONITORING SNAPSHOT COLUMNS ---
+    try {
+      await client.query(`
           ALTER TABLE school_profiles 
           ADD COLUMN IF NOT EXISTS forms_completed_count INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC DEFAULT 0,
@@ -1241,19 +1249,20 @@ const old_db_init_disabled = async () => {
           ADD COLUMN IF NOT EXISTS f9_shifting INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS f10_stats INTEGER DEFAULT 0;
         `);
-        console.log('âœ… Checked/Added Monitoring Granular Snapshot columns');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate snapshot columns:', migErr.message);
-      }
-
-
-    } finally {
-      client.release();
+      console.log('âœ… Checked/Added Monitoring Granular Snapshot columns');
+    } catch (migErr) {
+      console.error('âŒ Failed to migrate snapshot columns:', migErr.message);
     }
+
+
   } catch (err) {
     console.error('âŒ FATAL: Could not connect to Postgres DB:', err.message);
     console.warn('âš ï¸  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
     isDbConnected = false;
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 }; // End of OLD DB Init
 
@@ -7143,6 +7152,8 @@ app.get('/api/facility-repairs/:iern', async (req, res) => {
 });
 
 // --- SERVER LISTEN ---
+// --- SERVER LISTEN ---
+// const isMainModule = process.argv[1] === fileURLToPath(import.meta.url); // Removed duplicate
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
   const server = app.listen(PORT, () => {
@@ -7159,6 +7170,8 @@ if (isMainModule || process.env.START_SERVER === 'true') {
     }
   });
 }
+
+
 
 export default app;
 
