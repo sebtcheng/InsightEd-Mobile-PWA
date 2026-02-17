@@ -275,6 +275,23 @@ const initDB = async () => {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_repairs_iern ON facility_repairs(iern);`);
     console.log("✅ DB Init: Facility Repairs schema verified.");
 
+    // --- MIGRATION: ADD FACILITY DEMOLITIONS ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS facility_demolitions (
+        demolition_id SERIAL PRIMARY KEY,
+        school_id TEXT REFERENCES school_profiles(school_id),
+        iern TEXT,
+        building_no TEXT,
+        reason_age BOOLEAN DEFAULT FALSE,
+        reason_safety BOOLEAN DEFAULT FALSE,
+        reason_calamity BOOLEAN DEFAULT FALSE,
+        reason_upgrade BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);`);
+    console.log("✅ DB Init: Facility Demolitions schema verified.");
+
   } catch (err) {
     console.error("âŒ DB Init Error:", err);
   }
@@ -1387,6 +1404,30 @@ const startServer = async () => {
       console.log('âœ… Checked/Added ALL missing School Resources & Class Analysis columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate extra columns:', migErr.message);
+    }
+
+    // --- MIGRATION: E-CART BATCHES TABLE ---
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecart_batches (
+          id SERIAL PRIMARY KEY,
+          school_id TEXT NOT NULL,
+          batch_no VARCHAR(100),
+          year_received INTEGER,
+          source_fund VARCHAR(100),
+          ecart_qty_laptops INTEGER DEFAULT 0,
+          ecart_condition_laptops VARCHAR(50),
+          ecart_has_smart_tv BOOLEAN DEFAULT false,
+          ecart_tv_size VARCHAR(50),
+          ecart_condition_tv VARCHAR(50),
+          ecart_condition_charging VARCHAR(50),
+          ecart_condition_cabinet VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('âœ… ecart_batches table ready');
+    } catch (ecartErr) {
+      console.error('âŒ Failed to create ecart_batches table:', ecartErr.message);
     }
 
     // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
@@ -5581,6 +5622,21 @@ app.get('/api/school-resources/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- 21b. GET: Fetch e-Cart Batches ---
+app.get('/api/ecart-batches/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM ecart_batches WHERE school_id = $1 ORDER BY id ASC',
+      [schoolId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Fetch e-Cart Batches Error:', err);
+    res.status(500).json({ error: 'Failed to fetch e-Cart batches' });
+  }
+});
+
 // --- 22. POST: Save School Resources ---
 app.post('/api/save-school-resources', async (req, res) => {
   const data = req.body;
@@ -5675,6 +5731,46 @@ app.post('/api/save-school-resources', async (req, res) => {
       await pool.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
     }
 
+    // --- HANDLE E-CART BATCHES (Delete & Re-insert) ---
+    if (data.ecartBatches && Array.isArray(data.ecartBatches) && data.ecartBatches.length > 0) {
+      const ecClient = await pool.connect();
+      try {
+        await ecClient.query('BEGIN');
+        await ecClient.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+        for (const b of data.ecartBatches) {
+          await ecClient.query(`
+            INSERT INTO ecart_batches (
+              school_id, batch_no, year_received, source_fund,
+              ecart_qty_laptops, ecart_condition_laptops,
+              ecart_has_smart_tv, ecart_tv_size, ecart_condition_tv,
+              ecart_condition_charging, ecart_condition_cabinet
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          `, [
+            data.schoolId,
+            b.batch_no || null,
+            b.year_received ? parseInt(b.year_received) : null,
+            b.source_fund || null,
+            parseInt(b.ecart_qty_laptops) || 0,
+            b.ecart_condition_laptops || null,
+            b.ecart_has_smart_tv === true || b.ecart_has_smart_tv === 'true',
+            b.ecart_tv_size || null,
+            b.ecart_condition_tv || null,
+            b.ecart_condition_charging || null,
+            b.ecart_condition_cabinet || null
+          ]);
+        }
+        await ecClient.query('COMMIT');
+      } catch (ecErr) {
+        await ecClient.query('ROLLBACK');
+        console.error('e-Cart batches transaction failed:', ecErr);
+      } finally {
+        ecClient.release();
+      }
+    } else {
+      // If array is empty or missing, clear existing rows
+      await pool.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+    }
+
     res.json({ message: "Resources saved!" });
 
     // SNAPSHOT UPDATE (Primary)
@@ -5700,6 +5796,35 @@ app.post('/api/save-school-resources', async (req, res) => {
           await poolNew.query('DELETE FROM buildable_spaces WHERE school_id = $1', [data.schoolId]);
         }
 
+        // Sync e-Cart Batches
+        if (data.ecartBatches && Array.isArray(data.ecartBatches) && data.ecartBatches.length > 0) {
+          await poolNew.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+          for (const b of data.ecartBatches) {
+            await poolNew.query(`
+              INSERT INTO ecart_batches (
+                school_id, batch_no, year_received, source_fund,
+                ecart_qty_laptops, ecart_condition_laptops,
+                ecart_has_smart_tv, ecart_tv_size, ecart_condition_tv,
+                ecart_condition_charging, ecart_condition_cabinet
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            `, [
+              data.schoolId,
+              b.batch_no || null,
+              b.year_received ? parseInt(b.year_received) : null,
+              b.source_fund || null,
+              parseInt(b.ecart_qty_laptops) || 0,
+              b.ecart_condition_laptops || null,
+              b.ecart_has_smart_tv === true || b.ecart_has_smart_tv === 'true',
+              b.ecart_tv_size || null,
+              b.ecart_condition_tv || null,
+              b.ecart_condition_charging || null,
+              b.ecart_condition_cabinet || null
+            ]);
+          }
+        } else {
+          await poolNew.query('DELETE FROM ecart_batches WHERE school_id = $1', [data.schoolId]);
+        }
+
         await calculateSchoolProgress(data.schoolId, poolNew);
         console.log("âœ… Dual-Write: School Resources Synced!");
       } catch (dwErr) {
@@ -5712,11 +5837,14 @@ app.post('/api/save-school-resources', async (req, res) => {
   }
 });
 
-// --- 22a. GET: Fetch Facility Repairs ---
+// --- 22a. GET: Fetch Facility Repairs (Updated to use new itemized table) ---
 app.get('/api/facility-repairs/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM facility_repairs WHERE school_id = $1 ORDER BY created_at ASC', [schoolId]);
+    const result = await pool.query(
+      'SELECT * FROM facility_repair_details WHERE school_id = $1 OR iern = $1 ORDER BY building_no, room_no, id ASC',
+      [schoolId]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch Facility Repairs Error:", err);
@@ -5724,49 +5852,57 @@ app.get('/api/facility-repairs/:schoolId', async (req, res) => {
   }
 });
 
-// --- 22b. POST: Save Facility Repair (Single Item) ---
-app.post('/api/save-facility-repair', async (req, res) => {
+// --- 22b. POST: Save Facility Repair (LEGACY - DISABLED, replaced by new itemized endpoint below) ---
+// Old endpoint removed — was inserting into dropped `facility_repairs` table.
+// New endpoint at bottom of file uses `facility_repair_details` table.
+
+// --- 22c. GET: Fetch Facility Demolitions ---
+app.get('/api/facility-demolitions/:iern', async (req, res) => {
+  const { iern } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM facility_demolitions WHERE iern = $1 OR school_id = $1 ORDER BY created_at ASC', [iern]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Facility Demolitions Error:", err);
+    res.status(500).json({ error: "Failed to fetch facility demolitions" });
+  }
+});
+
+// --- 22d. POST: Save Facility Demolition (Single Item) ---
+app.post('/api/save-facility-demolition', async (req, res) => {
   const d = req.body;
   try {
     // Sanitize booleans
     const toBool = (val) => val === true || val === 'true' || val === 1;
 
     const query = `
-            INSERT INTO facility_repairs (
-                school_id, iern, building_no, room_no, remarks,
-                repair_roofing, repair_ceiling_ext, repair_ceiling_int, repair_wall_ext, 
-                repair_partition, repair_door, repair_windows, repair_flooring, repair_structural
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            RETURNING repair_id;
+            INSERT INTO facility_demolitions (
+                school_id, iern, building_no,
+                reason_age, reason_safety, reason_calamity, reason_upgrade
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING demolition_id;
         `;
 
     const values = [
       d.schoolId || d.iern, // Fallback
       d.iern || d.schoolId,
       d.building_no,
-      d.room_no,
-      d.remarks || '',
-      toBool(d.repair_roofing),
-      toBool(d.repair_ceiling_ext),
-      toBool(d.repair_ceiling_int),
-      toBool(d.repair_wall_ext),
-      toBool(d.repair_partition),
-      toBool(d.repair_door),
-      toBool(d.repair_windows),
-      toBool(d.repair_flooring),
-      toBool(d.repair_structural)
+      toBool(d.reason_age),
+      toBool(d.reason_safety),
+      toBool(d.reason_calamity),
+      toBool(d.reason_upgrade)
     ];
 
     const result = await pool.query(query, values);
-    res.json({ success: true, repair_id: result.rows[0].repair_id });
+    res.json({ success: true, demolition_id: result.rows[0].demolition_id });
 
     // --- DUAL WRITE ---
     if (poolNew) {
-      poolNew.query(query, values).catch(e => console.error("Dual-Write Repair Error:", e));
+      poolNew.query(query, values).catch(e => console.error("Dual-Write Demolition Error:", e));
     }
 
   } catch (err) {
-    console.error("Save Repair Error:", err);
+    console.error("Save Demolition Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -5810,11 +5946,18 @@ app.get('/api/physical-facilities/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- 25. POST: Save Physical Facilities ---
+// --- 25. POST: Save Physical Facilities (Unified Submission) ---
 app.post('/api/save-physical-facilities', async (req, res) => {
   const data = req.body;
+  const client = await pool.connect();
+  const sanitize = (val) => (val === '' || val === null || val === undefined) ? 0 : val;
+  const toBool = (val) => val === true || val === 'true' || val === 1;
+
   try {
-    const query = `
+    await client.query('BEGIN');
+
+    // 1. Update Main Profile
+    const queryProfile = `
             UPDATE school_profiles SET
                 build_classrooms_total=$2, 
                 build_classrooms_new=$3,
@@ -5824,9 +5967,8 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
         `;
-    const sanitize = (val) => (val === '' || val === null || val === undefined) ? 0 : val;
 
-    await pool.query(query, [
+    await client.query(queryProfile, [
       data.schoolId,
       sanitize(data.build_classrooms_total),
       sanitize(data.build_classrooms_new),
@@ -5834,31 +5976,122 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       sanitize(data.build_classrooms_repair),
       sanitize(data.build_classrooms_demolition)
     ]);
-    res.json({ message: "Facilities saved!" });
+
+    // 2. Handle Repairs (Delete All & Re-insert)
+    // 2. Handle Repairs (Delete All & Re-insert)
+    if (data.repairEntries && Array.isArray(data.repairEntries)) {
+      await client.query('DELETE FROM facility_repair_details WHERE school_id = $1', [data.schoolId]);
+
+      for (const r of data.repairEntries) {
+        await client.query(`
+                INSERT INTO facility_repair_details (
+                    school_id, iern, building_no, room_no, item_name,
+                    oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `, [
+          data.schoolId, data.iern || data.schoolId,
+          r.building_no, r.room_no, r.item_name,
+          r.oms || '', r.condition || '', r.damage_ratio || 0,
+          r.recommended_action || '', r.demo_justification || '', r.remarks || ''
+        ]);
+      }
+    }
+
+    // 3. Handle Demolitions (Delete All & Re-insert)
+    if (data.demolitionEntries && Array.isArray(data.demolitionEntries)) {
+      await client.query('DELETE FROM facility_demolitions WHERE school_id = $1', [data.schoolId]);
+
+      for (const d of data.demolitionEntries) {
+        await client.query(`
+                INSERT INTO facility_demolitions (
+                    school_id, iern, building_no,
+                    reason_age, reason_safety, reason_calamity, reason_upgrade
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [
+          data.schoolId, data.schoolId,
+          d.building_no,
+          toBool(d.reason_age), toBool(d.reason_safety),
+          toBool(d.reason_calamity), toBool(d.reason_upgrade)
+        ]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: "Facilities and details saved!" });
+
     // SNAPSHOT UPDATE (Primary)
     await calculateSchoolProgress(data.schoolId, pool);
 
-    // --- DUAL WRITE: PHYSICAL FACILITIES ---
+    // --- DUAL WRITE: PHYSICAL FACILITIES (Async, Best Effort) ---
     if (poolNew) {
-      try {
-        console.log("ðŸ”„ Dual-Write: Syncing Physical Facilities...");
-        await poolNew.query(query, [
-          data.schoolId,
-          sanitize(data.build_classrooms_total),
-          sanitize(data.build_classrooms_new),
-          sanitize(data.build_classrooms_good),
-          sanitize(data.build_classrooms_repair),
-          sanitize(data.build_classrooms_demolition)
-        ]);
-        await calculateSchoolProgress(data.schoolId, poolNew);
-        console.log("âœ… Dual-Write: Physical Facilities Synced!");
-      } catch (dwErr) {
-        console.error("âŒ Dual-Write Error (Physical Facilities):", dwErr.message);
-      }
+      (async () => {
+        const clientNew = await poolNew.connect();
+        try {
+          await clientNew.query('BEGIN');
+          console.log("🔄 Dual-Write: Syncing Physical Facilities...");
+
+          // DW 1. Update Profile
+          await clientNew.query(queryProfile, [
+            data.schoolId,
+            sanitize(data.build_classrooms_total),
+            sanitize(data.build_classrooms_new),
+            sanitize(data.build_classrooms_good),
+            sanitize(data.build_classrooms_repair),
+            sanitize(data.build_classrooms_demolition)
+          ]);
+
+          // DW 2. Repairs
+          if (data.repairEntries) {
+            await clientNew.query('DELETE FROM facility_repair_details WHERE school_id = $1', [data.schoolId]);
+
+            for (const r of data.repairEntries) {
+              await clientNew.query(`
+                        INSERT INTO facility_repair_details (
+                            school_id, iern, building_no, room_no, item_name,
+                            oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    `, [
+                data.schoolId, data.iern || data.schoolId,
+                r.building_no, r.room_no, r.item_name,
+                r.oms || '', r.condition || '', r.damage_ratio || 0,
+                r.recommended_action || '', r.demo_justification || '', r.remarks || ''
+              ]);
+            }
+          }
+
+          // DW 3. Demolitions
+          if (data.demolitionEntries) {
+            await clientNew.query('DELETE FROM facility_demolitions WHERE school_id = $1', [data.schoolId]);
+            for (const d of data.demolitionEntries) {
+              await clientNew.query(`
+                        INSERT INTO facility_demolitions (
+                            school_id, iern, building_no,
+                            reason_age, reason_safety, reason_calamity, reason_upgrade
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    `, [
+                data.schoolId, data.schoolId, d.building_no,
+                toBool(d.reason_age), toBool(d.reason_safety), toBool(d.reason_calamity), toBool(d.reason_upgrade)
+              ]);
+            }
+          }
+
+          await clientNew.query('COMMIT');
+          await calculateSchoolProgress(data.schoolId, poolNew);
+          console.log("✅ Dual-Write: Physical Facilities Synced!");
+        } catch (dwErr) {
+          await clientNew.query('ROLLBACK');
+          console.error("❌ Dual-Write Error (Physical Facilities):", dwErr.message);
+        } finally {
+          clientNew.release();
+        }
+      })();
     }
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -6152,7 +6385,520 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
-        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
+        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion,
+        SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
+        SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
+        SUM(COALESCE(sp.grade_1, 0)) as grade_1,
+        SUM(COALESCE(sp.grade_2, 0)) as grade_2,
+        SUM(COALESCE(sp.grade_3, 0)) as grade_3,
+        SUM(COALESCE(sp.grade_4, 0)) as grade_4,
+        SUM(COALESCE(sp.grade_5, 0)) as grade_5,
+        SUM(COALESCE(sp.grade_6, 0)) as grade_6,
+        SUM(COALESCE(sp.grade_7, 0)) as grade_7,
+        SUM(COALESCE(sp.grade_8, 0)) as grade_8,
+        SUM(COALESCE(sp.grade_9, 0)) as grade_9,
+        SUM(COALESCE(sp.grade_10, 0)) as grade_10,
+        SUM(COALESCE(sp.grade_11, 0)) as grade_11,
+        SUM(COALESCE(sp.grade_12, 0)) as grade_12,
+
+        SUM(COALESCE(sp.classes_kinder, 0)) as classes_kinder,
+        SUM(COALESCE(sp.classes_grade_1, 0)) as classes_grade_1,
+        SUM(COALESCE(sp.classes_grade_2, 0)) as classes_grade_2,
+        SUM(COALESCE(sp.classes_grade_3, 0)) as classes_grade_3,
+        SUM(COALESCE(sp.classes_grade_4, 0)) as classes_grade_4,
+        SUM(COALESCE(sp.classes_grade_5, 0)) as classes_grade_5,
+        SUM(COALESCE(sp.classes_grade_6, 0)) as classes_grade_6,
+        SUM(COALESCE(sp.classes_grade_7, 0)) as classes_grade_7,
+        SUM(COALESCE(sp.classes_grade_8, 0)) as classes_grade_8,
+        SUM(COALESCE(sp.classes_grade_9, 0)) as classes_grade_9,
+        SUM(COALESCE(sp.classes_grade_10, 0)) as classes_grade_10,
+        SUM(COALESCE(sp.classes_grade_11, 0)) as classes_grade_11,
+        SUM(COALESCE(sp.classes_grade_12, 0)) as classes_grade_12,
+        
+        SUM(COALESCE(sp.aral_math_g1, 0)) as aral_math_g1,
+        SUM(COALESCE(sp.aral_read_g1, 0)) as aral_read_g1,
+        SUM(COALESCE(sp.aral_sci_g1, 0)) as aral_sci_g1,
+        SUM(COALESCE(sp.aral_math_g2, 0)) as aral_math_g2,
+        SUM(COALESCE(sp.aral_read_g2, 0)) as aral_read_g2,
+        SUM(COALESCE(sp.aral_sci_g2, 0)) as aral_sci_g2,
+        SUM(COALESCE(sp.aral_math_g3, 0)) as aral_math_g3,
+        SUM(COALESCE(sp.aral_read_g3, 0)) as aral_read_g3,
+        SUM(COALESCE(sp.aral_sci_g3, 0)) as aral_sci_g3,
+        SUM(COALESCE(sp.aral_math_g4, 0)) as aral_math_g4,
+        SUM(COALESCE(sp.aral_read_g4, 0)) as aral_read_g4,
+        SUM(COALESCE(sp.aral_sci_g4, 0)) as aral_sci_g4,
+        SUM(COALESCE(sp.aral_math_g5, 0)) as aral_math_g5,
+        SUM(COALESCE(sp.aral_read_g5, 0)) as aral_read_g5,
+        SUM(COALESCE(sp.aral_sci_g5, 0)) as aral_sci_g5,
+        SUM(COALESCE(sp.aral_math_g6, 0)) as aral_math_g6,
+        SUM(COALESCE(sp.aral_read_g6, 0)) as aral_read_g6,
+        SUM(COALESCE(sp.aral_sci_g6, 0)) as aral_sci_g6,
+
+        SUM(COALESCE(sp.cnt_less_kinder, 0)) as cnt_less_kinder,
+        SUM(COALESCE(sp.cnt_within_kinder, 0)) as cnt_within_kinder,
+        SUM(COALESCE(sp.cnt_above_kinder, 0)) as cnt_above_kinder,
+        
+        SUM(COALESCE(sp.cnt_less_g1, 0)) as cnt_less_g1,
+        SUM(COALESCE(sp.cnt_within_g1, 0)) as cnt_within_g1,
+        SUM(COALESCE(sp.cnt_above_g1, 0)) as cnt_above_g1,
+        
+        SUM(COALESCE(sp.cnt_less_g2, 0)) as cnt_less_g2,
+        SUM(COALESCE(sp.cnt_within_g2, 0)) as cnt_within_g2,
+        SUM(COALESCE(sp.cnt_above_g2, 0)) as cnt_above_g2,
+        
+        SUM(COALESCE(sp.cnt_less_g3, 0)) as cnt_less_g3,
+        SUM(COALESCE(sp.cnt_within_g3, 0)) as cnt_within_g3,
+        SUM(COALESCE(sp.cnt_above_g3, 0)) as cnt_above_g3,
+        
+        SUM(COALESCE(sp.cnt_less_g4, 0)) as cnt_less_g4,
+        SUM(COALESCE(sp.cnt_within_g4, 0)) as cnt_within_g4,
+        SUM(COALESCE(sp.cnt_above_g4, 0)) as cnt_above_g4,
+        
+        SUM(COALESCE(sp.cnt_less_g5, 0)) as cnt_less_g5,
+        SUM(COALESCE(sp.cnt_within_g5, 0)) as cnt_within_g5,
+        SUM(COALESCE(sp.cnt_above_g5, 0)) as cnt_above_g5,
+        
+        SUM(COALESCE(sp.cnt_less_g6, 0)) as cnt_less_g6,
+        SUM(COALESCE(sp.cnt_within_g6, 0)) as cnt_within_g6,
+        SUM(COALESCE(sp.cnt_above_g6, 0)) as cnt_above_g6,
+        
+        SUM(COALESCE(sp.cnt_less_g7, 0)) as cnt_less_g7,
+        SUM(COALESCE(sp.cnt_within_g7, 0)) as cnt_within_g7,
+        SUM(COALESCE(sp.cnt_above_g7, 0)) as cnt_above_g7,
+        
+        SUM(COALESCE(sp.cnt_less_g8, 0)) as cnt_less_g8,
+        SUM(COALESCE(sp.cnt_within_g8, 0)) as cnt_within_g8,
+        SUM(COALESCE(sp.cnt_above_g8, 0)) as cnt_above_g8,
+        
+        SUM(COALESCE(sp.cnt_less_g9, 0)) as cnt_less_g9,
+        SUM(COALESCE(sp.cnt_within_g9, 0)) as cnt_within_g9,
+        SUM(COALESCE(sp.cnt_above_g9, 0)) as cnt_above_g9,
+        
+        SUM(COALESCE(sp.cnt_less_g10, 0)) as cnt_less_g10,
+        SUM(COALESCE(sp.cnt_within_g10, 0)) as cnt_within_g10,
+        SUM(COALESCE(sp.cnt_above_g10, 0)) as cnt_above_g10,
+        
+        SUM(COALESCE(sp.cnt_less_g11, 0)) as cnt_less_g11,
+        SUM(COALESCE(sp.cnt_within_g11, 0)) as cnt_within_g11,
+        SUM(COALESCE(sp.cnt_above_g11, 0)) as cnt_above_g11,
+        
+        SUM(COALESCE(sp.cnt_less_g12, 0)) as cnt_less_g12,
+        SUM(COALESCE(sp.cnt_within_g12, 0)) as cnt_within_g12,
+        SUM(COALESCE(sp.cnt_above_g12, 0)) as cnt_above_g12,
+
+        -- SNED
+        SUM(COALESCE(sp.stat_sned_k, 0)) as stat_sned_k,
+        SUM(COALESCE(sp.stat_sned_g1, 0)) as stat_sned_g1,
+        SUM(COALESCE(sp.stat_sned_g2, 0)) as stat_sned_g2,
+        SUM(COALESCE(sp.stat_sned_g3, 0)) as stat_sned_g3,
+        SUM(COALESCE(sp.stat_sned_g4, 0)) as stat_sned_g4,
+        SUM(COALESCE(sp.stat_sned_g5, 0)) as stat_sned_g5,
+        SUM(COALESCE(sp.stat_sned_g6, 0)) as stat_sned_g6,
+        SUM(COALESCE(sp.stat_sned_g7, 0)) as stat_sned_g7,
+        SUM(COALESCE(sp.stat_sned_g8, 0)) as stat_sned_g8,
+        SUM(COALESCE(sp.stat_sned_g9, 0)) as stat_sned_g9,
+        SUM(COALESCE(sp.stat_sned_g10, 0)) as stat_sned_g10,
+        SUM(COALESCE(sp.stat_sned_g11, 0)) as stat_sned_g11,
+        SUM(COALESCE(sp.stat_sned_g12, 0)) as stat_sned_g12,
+
+        -- DISABILITY
+        SUM(COALESCE(sp.stat_disability_k, 0)) as stat_disability_k,
+        SUM(COALESCE(sp.stat_disability_g1, 0)) as stat_disability_g1,
+        SUM(COALESCE(sp.stat_disability_g2, 0)) as stat_disability_g2,
+        SUM(COALESCE(sp.stat_disability_g3, 0)) as stat_disability_g3,
+        SUM(COALESCE(sp.stat_disability_g4, 0)) as stat_disability_g4,
+        SUM(COALESCE(sp.stat_disability_g5, 0)) as stat_disability_g5,
+        SUM(COALESCE(sp.stat_disability_g6, 0)) as stat_disability_g6,
+        SUM(COALESCE(sp.stat_disability_g7, 0)) as stat_disability_g7,
+        SUM(COALESCE(sp.stat_disability_g8, 0)) as stat_disability_g8,
+        SUM(COALESCE(sp.stat_disability_g9, 0)) as stat_disability_g9,
+        SUM(COALESCE(sp.stat_disability_g10, 0)) as stat_disability_g10,
+        SUM(COALESCE(sp.stat_disability_g11, 0)) as stat_disability_g11,
+        SUM(COALESCE(sp.stat_disability_g12, 0)) as stat_disability_g12,
+
+        -- ALS
+        SUM(COALESCE(sp.stat_als_k, 0)) as stat_als_k,
+        SUM(COALESCE(sp.stat_als_g1, 0)) as stat_als_g1,
+        SUM(COALESCE(sp.stat_als_g2, 0)) as stat_als_g2,
+        SUM(COALESCE(sp.stat_als_g3, 0)) as stat_als_g3,
+        SUM(COALESCE(sp.stat_als_g4, 0)) as stat_als_g4,
+        SUM(COALESCE(sp.stat_als_g5, 0)) as stat_als_g5,
+        SUM(COALESCE(sp.stat_als_g6, 0)) as stat_als_g6,
+        SUM(COALESCE(sp.stat_als_g7, 0)) as stat_als_g7,
+        SUM(COALESCE(sp.stat_als_g8, 0)) as stat_als_g8,
+        SUM(COALESCE(sp.stat_als_g9, 0)) as stat_als_g9,
+        SUM(COALESCE(sp.stat_als_g10, 0)) as stat_als_g10,
+        SUM(COALESCE(sp.stat_als_g11, 0)) as stat_als_g11,
+        SUM(COALESCE(sp.stat_als_g12, 0)) as stat_als_g12,
+
+        -- MUSLIM
+        SUM(COALESCE(sp.stat_muslim_k, 0)) as stat_muslim_k,
+        SUM(COALESCE(sp.stat_muslim_g1, 0)) as stat_muslim_g1,
+        SUM(COALESCE(sp.stat_muslim_g2, 0)) as stat_muslim_g2,
+        SUM(COALESCE(sp.stat_muslim_g3, 0)) as stat_muslim_g3,
+        SUM(COALESCE(sp.stat_muslim_g4, 0)) as stat_muslim_g4,
+        SUM(COALESCE(sp.stat_muslim_g5, 0)) as stat_muslim_g5,
+        SUM(COALESCE(sp.stat_muslim_g6, 0)) as stat_muslim_g6,
+        SUM(COALESCE(sp.stat_muslim_g7, 0)) as stat_muslim_g7,
+        SUM(COALESCE(sp.stat_muslim_g8, 0)) as stat_muslim_g8,
+        SUM(COALESCE(sp.stat_muslim_g9, 0)) as stat_muslim_g9,
+        SUM(COALESCE(sp.stat_muslim_g10, 0)) as stat_muslim_g10,
+        SUM(COALESCE(sp.stat_muslim_g11, 0)) as stat_muslim_g11,
+        SUM(COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_g12,
+
+        -- IP
+        SUM(COALESCE(sp.stat_ip_k, 0)) as stat_ip_k,
+        SUM(COALESCE(sp.stat_ip_g1, 0)) as stat_ip_g1,
+        SUM(COALESCE(sp.stat_ip_g2, 0)) as stat_ip_g2,
+        SUM(COALESCE(sp.stat_ip_g3, 0)) as stat_ip_g3,
+        SUM(COALESCE(sp.stat_ip_g4, 0)) as stat_ip_g4,
+        SUM(COALESCE(sp.stat_ip_g5, 0)) as stat_ip_g5,
+        SUM(COALESCE(sp.stat_ip_g6, 0)) as stat_ip_g6,
+        SUM(COALESCE(sp.stat_ip_g7, 0)) as stat_ip_g7,
+        SUM(COALESCE(sp.stat_ip_g8, 0)) as stat_ip_g8,
+        SUM(COALESCE(sp.stat_ip_g9, 0)) as stat_ip_g9,
+        SUM(COALESCE(sp.stat_ip_g10, 0)) as stat_ip_g10,
+        SUM(COALESCE(sp.stat_ip_g11, 0)) as stat_ip_g11,
+        SUM(COALESCE(sp.stat_ip_g12, 0)) as stat_ip_g12,
+
+        -- DISPLACED
+        SUM(COALESCE(sp.stat_displaced_k, 0)) as stat_displaced_k,
+        SUM(COALESCE(sp.stat_displaced_g1, 0)) as stat_displaced_g1,
+        SUM(COALESCE(sp.stat_displaced_g2, 0)) as stat_displaced_g2,
+        SUM(COALESCE(sp.stat_displaced_g3, 0)) as stat_displaced_g3,
+        SUM(COALESCE(sp.stat_displaced_g4, 0)) as stat_displaced_g4,
+        SUM(COALESCE(sp.stat_displaced_g5, 0)) as stat_displaced_g5,
+        SUM(COALESCE(sp.stat_displaced_g6, 0)) as stat_displaced_g6,
+        SUM(COALESCE(sp.stat_displaced_g7, 0)) as stat_displaced_g7,
+        SUM(COALESCE(sp.stat_displaced_g8, 0)) as stat_displaced_g8,
+        SUM(COALESCE(sp.stat_displaced_g9, 0)) as stat_displaced_g9,
+        SUM(COALESCE(sp.stat_displaced_g10, 0)) as stat_displaced_g10,
+        SUM(COALESCE(sp.stat_displaced_g11, 0)) as stat_displaced_g11,
+        SUM(COALESCE(sp.stat_displaced_g12, 0)) as stat_displaced_g12,
+
+        -- REPETITION
+        SUM(COALESCE(sp.stat_repetition_k, 0)) as stat_repetition_k,
+        SUM(COALESCE(sp.stat_repetition_g1, 0)) as stat_repetition_g1,
+        SUM(COALESCE(sp.stat_repetition_g2, 0)) as stat_repetition_g2,
+        SUM(COALESCE(sp.stat_repetition_g3, 0)) as stat_repetition_g3,
+        SUM(COALESCE(sp.stat_repetition_g4, 0)) as stat_repetition_g4,
+        SUM(COALESCE(sp.stat_repetition_g5, 0)) as stat_repetition_g5,
+        SUM(COALESCE(sp.stat_repetition_g6, 0)) as stat_repetition_g6,
+        SUM(COALESCE(sp.stat_repetition_g7, 0)) as stat_repetition_g7,
+        SUM(COALESCE(sp.stat_repetition_g8, 0)) as stat_repetition_g8,
+        SUM(COALESCE(sp.stat_repetition_g9, 0)) as stat_repetition_g9,
+        SUM(COALESCE(sp.stat_repetition_g10, 0)) as stat_repetition_g10,
+        SUM(COALESCE(sp.stat_repetition_g11, 0)) as stat_repetition_g11,
+        SUM(COALESCE(sp.stat_repetition_g12, 0)) as stat_repetition_g12,
+
+        -- OVERAGE
+        SUM(COALESCE(sp.stat_overage_k, 0)) as stat_overage_k,
+        SUM(COALESCE(sp.stat_overage_g1, 0)) as stat_overage_g1,
+        SUM(COALESCE(sp.stat_overage_g2, 0)) as stat_overage_g2,
+        SUM(COALESCE(sp.stat_overage_g3, 0)) as stat_overage_g3,
+        SUM(COALESCE(sp.stat_overage_g4, 0)) as stat_overage_g4,
+        SUM(COALESCE(sp.stat_overage_g5, 0)) as stat_overage_g5,
+        SUM(COALESCE(sp.stat_overage_g6, 0)) as stat_overage_g6,
+        SUM(COALESCE(sp.stat_overage_g7, 0)) as stat_overage_g7,
+        SUM(COALESCE(sp.stat_overage_g8, 0)) as stat_overage_g8,
+        SUM(COALESCE(sp.stat_overage_g9, 0)) as stat_overage_g9,
+        SUM(COALESCE(sp.stat_overage_g10, 0)) as stat_overage_g10,
+        SUM(COALESCE(sp.stat_overage_g11, 0)) as stat_overage_g11,
+        SUM(COALESCE(sp.stat_overage_g12, 0)) as stat_overage_g12,
+
+        -- DROPOUT
+        SUM(COALESCE(sp.stat_dropout_k, 0)) as stat_dropout_k,
+        SUM(COALESCE(sp.stat_dropout_g1, 0)) as stat_dropout_g1,
+        SUM(COALESCE(sp.stat_dropout_g2, 0)) as stat_dropout_g2,
+        SUM(COALESCE(sp.stat_dropout_g3, 0)) as stat_dropout_g3,
+        SUM(COALESCE(sp.stat_dropout_g4, 0)) as stat_dropout_g4,
+        SUM(COALESCE(sp.stat_dropout_g5, 0)) as stat_dropout_g5,
+        SUM(COALESCE(sp.stat_dropout_g6, 0)) as stat_dropout_g6,
+        SUM(COALESCE(sp.stat_dropout_g7, 0)) as stat_dropout_g7,
+        SUM(COALESCE(sp.stat_dropout_g8, 0)) as stat_dropout_g8,
+        SUM(COALESCE(sp.stat_dropout_g9, 0)) as stat_dropout_g9,
+        SUM(COALESCE(sp.stat_dropout_g10, 0)) as stat_dropout_g10,
+        SUM(COALESCE(sp.stat_dropout_g11, 0)) as stat_dropout_g11,
+        SUM(COALESCE(sp.stat_dropout_g12, 0)) as stat_dropout_g12,
+
+        -- SHIFTING METRICS
+        SUM(CASE WHEN sp.shift_kinder = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_k,
+        SUM(CASE WHEN sp.shift_g1 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g1,
+        SUM(CASE WHEN sp.shift_g2 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g2,
+        SUM(CASE WHEN sp.shift_g3 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g3,
+        SUM(CASE WHEN sp.shift_g4 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g4,
+        SUM(CASE WHEN sp.shift_g5 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g5,
+        SUM(CASE WHEN sp.shift_g6 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g6,
+        SUM(CASE WHEN sp.shift_g7 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g7,
+        SUM(CASE WHEN sp.shift_g8 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g8,
+        SUM(CASE WHEN sp.shift_g9 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g9,
+        SUM(CASE WHEN sp.shift_g10 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g10,
+        SUM(CASE WHEN sp.shift_g11 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g11,
+        SUM(CASE WHEN sp.shift_g12 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g12,
+
+        -- LEARNING DELIVERY METRICS
+        SUM(CASE WHEN sp.mode_kinder = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_k,
+        SUM(CASE WHEN sp.mode_kinder LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_k,
+        SUM(CASE WHEN sp.mode_kinder = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_k,
+        SUM(CASE WHEN sp.mode_g1 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g1,
+        SUM(CASE WHEN sp.mode_g1 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g1,
+        SUM(CASE WHEN sp.mode_g1 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g1,
+        SUM(CASE WHEN sp.mode_g2 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g2,
+        SUM(CASE WHEN sp.mode_g2 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g2,
+        SUM(CASE WHEN sp.mode_g2 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g2,
+        SUM(CASE WHEN sp.mode_g3 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g3,
+        SUM(CASE WHEN sp.mode_g3 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g3,
+        SUM(CASE WHEN sp.mode_g3 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g3,
+        SUM(CASE WHEN sp.mode_g4 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g4,
+        SUM(CASE WHEN sp.mode_g4 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g4,
+        SUM(CASE WHEN sp.mode_g4 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g4,
+        SUM(CASE WHEN sp.mode_g5 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g5,
+        SUM(CASE WHEN sp.mode_g5 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g5,
+        SUM(CASE WHEN sp.mode_g5 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g5,
+        SUM(CASE WHEN sp.mode_g6 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g6,
+        SUM(CASE WHEN sp.mode_g6 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g6,
+        SUM(CASE WHEN sp.mode_g6 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g6,
+        SUM(CASE WHEN sp.mode_g7 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g7,
+        SUM(CASE WHEN sp.mode_g7 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g7,
+        SUM(CASE WHEN sp.mode_g7 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g7,
+        SUM(CASE WHEN sp.mode_g8 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g8,
+        SUM(CASE WHEN sp.mode_g8 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g8,
+        SUM(CASE WHEN sp.mode_g8 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g8,
+        SUM(CASE WHEN sp.mode_g9 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g9,
+        SUM(CASE WHEN sp.mode_g9 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g9,
+        SUM(CASE WHEN sp.mode_g9 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g9,
+        SUM(CASE WHEN sp.mode_g10 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g10,
+        SUM(CASE WHEN sp.mode_g10 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g10,
+        SUM(CASE WHEN sp.mode_g10 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g10,
+        SUM(CASE WHEN sp.mode_g11 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g11,
+        SUM(CASE WHEN sp.mode_g11 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g11,
+        SUM(CASE WHEN sp.mode_g11 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g11,
+        SUM(CASE WHEN sp.mode_g12 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g12,
+        SUM(CASE WHEN sp.mode_g12 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g12,
+        SUM(CASE WHEN sp.mode_g12 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g12,
+
+        -- EMERGENCY ADM METRICS
+        SUM(CASE WHEN sp.adm_mdl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_mdl,
+        SUM(CASE WHEN sp.adm_odl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_odl,
+        SUM(CASE WHEN sp.adm_tvi IS TRUE THEN 1 ELSE 0 END) as cnt_adm_tvi,
+        SUM(CASE WHEN sp.adm_blended IS TRUE THEN 1 ELSE 0 END) as cnt_adm_blended,
+
+        -- TEACHER METRICS (COUNT BY GRADE/LEVEL)
+        SUM(sp.teach_kinder) as cnt_teach_k,
+        SUM(sp.teach_g1) as cnt_teach_g1,
+        SUM(sp.teach_g2) as cnt_teach_g2,
+        SUM(sp.teach_g3) as cnt_teach_g3,
+        SUM(sp.teach_g4) as cnt_teach_g4,
+        SUM(sp.teach_g5) as cnt_teach_g5,
+        SUM(sp.teach_g6) as cnt_teach_g6,
+        SUM(sp.teach_g7) as cnt_teach_g7,
+        SUM(sp.teach_g8) as cnt_teach_g8,
+        SUM(sp.teach_g9) as cnt_teach_g9,
+        SUM(sp.teach_g10) as cnt_teach_g10,
+        SUM(sp.teach_g11) as cnt_teach_g11,
+        SUM(sp.teach_g12) as cnt_teach_g12,
+
+        -- MULTIGRADE TEACHERS
+        SUM(sp.teach_multi_1_2) as cnt_multi_1_2,
+        SUM(sp.teach_multi_3_4) as cnt_multi_3_4,
+        SUM(sp.teach_multi_5_6) as cnt_multi_5_6,
+
+        -- TEACHING EXPERIENCE
+        SUM(sp.teach_exp_0_1) as cnt_exp_0_1,
+        SUM(sp.teach_exp_2_5) as cnt_exp_2_5,
+        SUM(sp.teach_exp_6_10) as cnt_exp_6_10,
+        SUM(sp.teach_exp_11_15) as cnt_exp_11_15,
+        SUM(sp.teach_exp_16_20) as cnt_exp_16_20,
+        SUM(sp.teach_exp_21_25) as cnt_exp_21_25,
+        SUM(sp.teach_exp_26_30) as cnt_exp_26_30,
+        SUM(sp.teach_exp_31_35) as cnt_exp_31_35,
+        SUM(sp.teach_exp_36_40) as cnt_exp_36_40,
+        SUM(sp.teach_exp_40_45) as cnt_exp_40_45,
+
+        -- SPECIALIZATION (MAJORS)
+        SUM(sp.spec_math_major) as cnt_spec_math,
+        SUM(sp.spec_science_major) as cnt_spec_sci,
+        SUM(sp.spec_english_major) as cnt_spec_eng,
+        SUM(sp.spec_filipino_major) as cnt_spec_fil,
+        SUM(sp.spec_ap_major) as cnt_spec_ap,
+        SUM(sp.spec_mapeh_major) as cnt_spec_mapeh,
+        SUM(sp.spec_esp_major) as cnt_spec_esp,
+        SUM(sp.spec_tle_major) as cnt_spec_tle,
+        SUM(sp.spec_general_major) as cnt_spec_gen,
+        SUM(sp.spec_ece_major) as cnt_spec_ece,
+
+        -- CLASSROOMS (Condition)
+        SUM(sp.build_classrooms_new) as cnt_class_new,
+        SUM(sp.build_classrooms_good) as cnt_class_good,
+        SUM(sp.build_classrooms_repair) as cnt_class_repair,
+        SUM(sp.build_classrooms_demolition) as cnt_class_demolish,
+
+        -- EQUIPMENT & INVENTORY
+        SUM(sp.res_ecart_func) as cnt_equip_ecart_func,
+        SUM(sp.res_ecart_nonfunc) as cnt_equip_ecart_non,
+        SUM(sp.res_laptop_func) as cnt_equip_laptop_func,
+        SUM(sp.res_laptop_nonfunc) as cnt_equip_laptop_non,
+        SUM(sp.res_printer_func) as cnt_equip_printer_func,
+        SUM(sp.res_printer_nonfunc) as cnt_equip_printer_non,
+        SUM(sp.res_tv_func) as cnt_equip_tv_func,
+        SUM(sp.res_tv_nonfunc) as cnt_equip_tv_non,
+
+        -- SEATS (By Grade)
+        SUM(sp.seats_kinder) as cnt_seats_k,
+        SUM(sp.seats_grade_1) as cnt_seats_g1,
+        SUM(sp.seats_grade_2) as cnt_seats_g2,
+        SUM(sp.seats_grade_3) as cnt_seats_g3,
+        SUM(sp.seats_grade_4) as cnt_seats_g4,
+        SUM(sp.seats_grade_5) as cnt_seats_g5,
+        SUM(sp.seats_grade_6) as cnt_seats_g6,
+        SUM(sp.seats_grade_7) as cnt_seats_g7,
+        SUM(sp.seats_grade_8) as cnt_seats_g8,
+        SUM(sp.seats_grade_9) as cnt_seats_g9,
+        SUM(sp.seats_grade_10) as cnt_seats_g10,
+        SUM(sp.seats_grade_11) as cnt_seats_g11,
+        SUM(sp.seats_grade_12) as cnt_seats_g12,
+
+        -- TOILETS (Comfort Rooms)
+        SUM(sp.res_toilets_male) as cnt_toilet_male,
+        SUM(sp.res_toilets_female) as cnt_toilet_female,
+        SUM(sp.res_toilets_pwd) as cnt_toilet_pwd,
+        SUM(sp.res_toilets_common) as cnt_toilet_common,
+
+        -- SPECIALIZED ROOMS
+        SUM(sp.res_sci_labs) as cnt_room_sci,
+        SUM(sp.res_com_labs) as cnt_room_com,
+        SUM(sp.res_tvl_workshops) as cnt_room_tvl,
+
+        -- SITE & UTILITIES
+        -- Electricity
+        SUM(CASE WHEN sp.res_electricity_source = 'GRID SUPPLY' THEN 1 ELSE 0 END) as cnt_site_elec_grid,
+        SUM(CASE WHEN sp.res_electricity_source LIKE '%OFF-GRID%' THEN 1 ELSE 0 END) as cnt_site_elec_offgrid,
+        SUM(CASE WHEN sp.res_electricity_source = 'NO ELECTRICITY' THEN 1 ELSE 0 END) as cnt_site_elec_none,
+        
+        -- Water
+        SUM(CASE WHEN sp.res_water_source LIKE '%Piped%' THEN 1 ELSE 0 END) as cnt_site_water_piped,
+        SUM(CASE WHEN sp.res_water_source = 'Natural Resources' THEN 1 ELSE 0 END) as cnt_site_water_natural,
+        SUM(CASE WHEN sp.res_water_source = 'No Water Source' THEN 1 ELSE 0 END) as cnt_site_water_none,
+
+        -- Buildable Space
+        SUM(CASE WHEN sp.res_buildable_space = 'Yes' THEN 1 ELSE 0 END) as cnt_site_build_yes,
+        SUM(CASE WHEN sp.res_buildable_space = 'No' THEN 1 ELSE 0 END) as cnt_site_build_no,
+
+        -- SHA (Hardship)
+        SUM(CASE WHEN sp.sha_category LIKE '%HARDSHIP%' THEN 1 ELSE 0 END) as cnt_site_sha_hardship,
+        SUM(CASE WHEN sp.sha_category LIKE '%MULTIGRADE%' THEN 1 ELSE 0 END) as cnt_site_sha_multi,
+
+
+        -- HIERARCHICAL AGGREGATES
+        
+        -- SNED (Sum of Levels - Calculated from grades as requested)
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0)
+        ) as stat_sned_es,
+        
+        SUM(
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + 
+            COALESCE(sp.stat_sned_g9, 0) + COALESCE(sp.stat_sned_g10, 0)
+        ) as stat_sned_jhs,
+        
+        SUM(COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)) as stat_sned_shs,
+        
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0) + 
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + COALESCE(sp.stat_sned_g9, 0) + 
+            COALESCE(sp.stat_sned_g10, 0) + COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)
+        ) as stat_sned_total,
+
+        -- DISABILITY (Sum of Levels)
+        SUM(COALESCE(sp.stat_disability_es, 0)) as stat_disability_es,
+        SUM(COALESCE(sp.stat_disability_jhs, 0)) as stat_disability_jhs,
+        SUM(COALESCE(sp.stat_disability_shs, 0)) as stat_disability_shs,
+        SUM(COALESCE(sp.stat_disability_es, 0) + COALESCE(sp.stat_disability_jhs, 0) + COALESCE(sp.stat_disability_shs, 0)) as stat_disability_total,
+
+        -- ALS (Sum of Levels)
+        SUM(COALESCE(sp.stat_als_es, 0)) as stat_als_es,
+        SUM(COALESCE(sp.stat_als_jhs, 0)) as stat_als_jhs,
+        SUM(COALESCE(sp.stat_als_shs, 0)) as stat_als_shs,
+        SUM(COALESCE(sp.stat_als_es, 0) + COALESCE(sp.stat_als_jhs, 0) + COALESCE(sp.stat_als_shs, 0)) as stat_als_total,
+
+        -- MUSLIM (Sum of Grades, as aggregates missing)
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0)
+        ) as stat_muslim_es,
+        SUM(
+            COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + COALESCE(sp.stat_muslim_g9, 0) + 
+            COALESCE(sp.stat_muslim_g10, 0)
+        ) as stat_muslim_jhs,
+        SUM(COALESCE(sp.stat_muslim_g11, 0) + COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_shs,
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0) + COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + 
+            COALESCE(sp.stat_muslim_g9, 0) + COALESCE(sp.stat_muslim_g10, 0) + COALESCE(sp.stat_muslim_g11, 0) + 
+            COALESCE(sp.stat_muslim_g12, 0)
+        ) as stat_muslim_total,
+
+        -- IP (Existing Total)
+        SUM(COALESCE(sp.stat_ip_es, 0)) as stat_ip_es,
+        SUM(COALESCE(sp.stat_ip_jhs, 0)) as stat_ip_jhs,
+        SUM(COALESCE(sp.stat_ip_shs, 0)) as stat_ip_shs,
+        SUM(COALESCE(sp.stat_ip, 0)) as stat_ip_total,
+
+        -- DISPLACED (Existing Total)
+        SUM(COALESCE(sp.stat_displaced_es, 0)) as stat_displaced_es,
+        SUM(COALESCE(sp.stat_displaced_jhs, 0)) as stat_displaced_jhs,
+        SUM(COALESCE(sp.stat_displaced_shs, 0)) as stat_displaced_shs,
+        SUM(COALESCE(sp.stat_displaced, 0)) as stat_displaced_total,
+
+        -- REPETITION (Existing Total)
+        SUM(COALESCE(sp.stat_repetition_es, 0)) as stat_repetition_es,
+        SUM(COALESCE(sp.stat_repetition_jhs, 0)) as stat_repetition_jhs,
+        SUM(COALESCE(sp.stat_repetition_shs, 0)) as stat_repetition_shs,
+        SUM(COALESCE(sp.stat_repetition, 0)) as stat_repetition_total,
+
+        -- OVERAGE (Existing Total)
+        SUM(COALESCE(sp.stat_overage_es, 0)) as stat_overage_es,
+        SUM(COALESCE(sp.stat_overage_jhs, 0)) as stat_overage_jhs,
+        SUM(COALESCE(sp.stat_overage_shs, 0)) as stat_overage_shs,
+        SUM(COALESCE(sp.stat_overage, 0)) as stat_overage_total,
+
+        -- DROPOUT (Sum of Levels, missing Total)
+        SUM(COALESCE(sp.stat_dropout_es, 0)) as stat_dropout_es,
+        SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
+        SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
+        SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
@@ -6177,14 +6923,528 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        s.district,
-        COUNT(s.school_id) as total_schools,
+        s.district, 
+        COUNT(s.school_id) as total_schools, 
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
-        COUNT(CASE WHEN sp.data_health_description IN ('Excellent', 'Good', 'Fair') OR sp.school_head_validation = TRUE THEN 1 END) as validated_schools,
-        COUNT(CASE WHEN sp.data_health_description = 'Critical' THEN 1 END) as critical_schools,
-        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion
+        COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
+        COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END) as for_validation_schools,
+        ROUND(COALESCE(AVG(sp.completion_percentage), 0), 1) as avg_completion,
+        SUM(COALESCE(sp.total_enrollment, 0)) as total_enrollment,
+        SUM(COALESCE(sp.grade_kinder, 0)) as grade_kinder,
+        SUM(COALESCE(sp.grade_1, 0)) as grade_1,
+        SUM(COALESCE(sp.grade_2, 0)) as grade_2,
+        SUM(COALESCE(sp.grade_3, 0)) as grade_3,
+        SUM(COALESCE(sp.grade_4, 0)) as grade_4,
+        SUM(COALESCE(sp.grade_5, 0)) as grade_5,
+        SUM(COALESCE(sp.grade_6, 0)) as grade_6,
+        SUM(COALESCE(sp.grade_7, 0)) as grade_7,
+        SUM(COALESCE(sp.grade_8, 0)) as grade_8,
+        SUM(COALESCE(sp.grade_9, 0)) as grade_9,
+        SUM(COALESCE(sp.grade_10, 0)) as grade_10,
+        SUM(COALESCE(sp.grade_11, 0)) as grade_11,
+        SUM(COALESCE(sp.grade_12, 0)) as grade_12,
+
+        SUM(COALESCE(sp.classes_kinder, 0)) as classes_kinder,
+        SUM(COALESCE(sp.classes_grade_1, 0)) as classes_grade_1,
+        SUM(COALESCE(sp.classes_grade_2, 0)) as classes_grade_2,
+        SUM(COALESCE(sp.classes_grade_3, 0)) as classes_grade_3,
+        SUM(COALESCE(sp.classes_grade_4, 0)) as classes_grade_4,
+        SUM(COALESCE(sp.classes_grade_5, 0)) as classes_grade_5,
+        SUM(COALESCE(sp.classes_grade_6, 0)) as classes_grade_6,
+        SUM(COALESCE(sp.classes_grade_7, 0)) as classes_grade_7,
+        SUM(COALESCE(sp.classes_grade_8, 0)) as classes_grade_8,
+        SUM(COALESCE(sp.classes_grade_9, 0)) as classes_grade_9,
+        SUM(COALESCE(sp.classes_grade_10, 0)) as classes_grade_10,
+        SUM(COALESCE(sp.classes_grade_11, 0)) as classes_grade_11,
+        SUM(COALESCE(sp.classes_grade_12, 0)) as classes_grade_12,
+        
+        SUM(COALESCE(sp.aral_math_g1, 0)) as aral_math_g1,
+        SUM(COALESCE(sp.aral_read_g1, 0)) as aral_read_g1,
+        SUM(COALESCE(sp.aral_sci_g1, 0)) as aral_sci_g1,
+        SUM(COALESCE(sp.aral_math_g2, 0)) as aral_math_g2,
+        SUM(COALESCE(sp.aral_read_g2, 0)) as aral_read_g2,
+        SUM(COALESCE(sp.aral_sci_g2, 0)) as aral_sci_g2,
+        SUM(COALESCE(sp.aral_math_g3, 0)) as aral_math_g3,
+        SUM(COALESCE(sp.aral_read_g3, 0)) as aral_read_g3,
+        SUM(COALESCE(sp.aral_sci_g3, 0)) as aral_sci_g3,
+        SUM(COALESCE(sp.aral_math_g4, 0)) as aral_math_g4,
+        SUM(COALESCE(sp.aral_read_g4, 0)) as aral_read_g4,
+        SUM(COALESCE(sp.aral_sci_g4, 0)) as aral_sci_g4,
+        SUM(COALESCE(sp.aral_math_g5, 0)) as aral_math_g5,
+        SUM(COALESCE(sp.aral_read_g5, 0)) as aral_read_g5,
+        SUM(COALESCE(sp.aral_sci_g5, 0)) as aral_sci_g5,
+        SUM(COALESCE(sp.aral_math_g6, 0)) as aral_math_g6,
+        SUM(COALESCE(sp.aral_read_g6, 0)) as aral_read_g6,
+        SUM(COALESCE(sp.aral_sci_g6, 0)) as aral_sci_g6,
+
+        SUM(COALESCE(sp.cnt_less_kinder, 0)) as cnt_less_kinder,
+        SUM(COALESCE(sp.cnt_within_kinder, 0)) as cnt_within_kinder,
+        SUM(COALESCE(sp.cnt_above_kinder, 0)) as cnt_above_kinder,
+        
+        SUM(COALESCE(sp.cnt_less_g1, 0)) as cnt_less_g1,
+        SUM(COALESCE(sp.cnt_within_g1, 0)) as cnt_within_g1,
+        SUM(COALESCE(sp.cnt_above_g1, 0)) as cnt_above_g1,
+        
+        SUM(COALESCE(sp.cnt_less_g2, 0)) as cnt_less_g2,
+        SUM(COALESCE(sp.cnt_within_g2, 0)) as cnt_within_g2,
+        SUM(COALESCE(sp.cnt_above_g2, 0)) as cnt_above_g2,
+        
+        SUM(COALESCE(sp.cnt_less_g3, 0)) as cnt_less_g3,
+        SUM(COALESCE(sp.cnt_within_g3, 0)) as cnt_within_g3,
+        SUM(COALESCE(sp.cnt_above_g3, 0)) as cnt_above_g3,
+        
+        SUM(COALESCE(sp.cnt_less_g4, 0)) as cnt_less_g4,
+        SUM(COALESCE(sp.cnt_within_g4, 0)) as cnt_within_g4,
+        SUM(COALESCE(sp.cnt_above_g4, 0)) as cnt_above_g4,
+        
+        SUM(COALESCE(sp.cnt_less_g5, 0)) as cnt_less_g5,
+        SUM(COALESCE(sp.cnt_within_g5, 0)) as cnt_within_g5,
+        SUM(COALESCE(sp.cnt_above_g5, 0)) as cnt_above_g5,
+        
+        SUM(COALESCE(sp.cnt_less_g6, 0)) as cnt_less_g6,
+        SUM(COALESCE(sp.cnt_within_g6, 0)) as cnt_within_g6,
+        SUM(COALESCE(sp.cnt_above_g6, 0)) as cnt_above_g6,
+        
+        SUM(COALESCE(sp.cnt_less_g7, 0)) as cnt_less_g7,
+        SUM(COALESCE(sp.cnt_within_g7, 0)) as cnt_within_g7,
+        SUM(COALESCE(sp.cnt_above_g7, 0)) as cnt_above_g7,
+        
+        SUM(COALESCE(sp.cnt_less_g8, 0)) as cnt_less_g8,
+        SUM(COALESCE(sp.cnt_within_g8, 0)) as cnt_within_g8,
+        SUM(COALESCE(sp.cnt_above_g8, 0)) as cnt_above_g8,
+        
+        SUM(COALESCE(sp.cnt_less_g9, 0)) as cnt_less_g9,
+        SUM(COALESCE(sp.cnt_within_g9, 0)) as cnt_within_g9,
+        SUM(COALESCE(sp.cnt_above_g9, 0)) as cnt_above_g9,
+        
+        SUM(COALESCE(sp.cnt_less_g10, 0)) as cnt_less_g10,
+        SUM(COALESCE(sp.cnt_within_g10, 0)) as cnt_within_g10,
+        SUM(COALESCE(sp.cnt_above_g10, 0)) as cnt_above_g10,
+        
+        SUM(COALESCE(sp.cnt_less_g11, 0)) as cnt_less_g11,
+        SUM(COALESCE(sp.cnt_within_g11, 0)) as cnt_within_g11,
+        SUM(COALESCE(sp.cnt_above_g11, 0)) as cnt_above_g11,
+        
+        SUM(COALESCE(sp.cnt_less_g12, 0)) as cnt_less_g12,
+        SUM(COALESCE(sp.cnt_within_g12, 0)) as cnt_within_g12,
+        SUM(COALESCE(sp.cnt_above_g12, 0)) as cnt_above_g12,
+
+        -- SNED
+        SUM(COALESCE(sp.stat_sned_k, 0)) as stat_sned_k,
+        SUM(COALESCE(sp.stat_sned_g1, 0)) as stat_sned_g1,
+        SUM(COALESCE(sp.stat_sned_g2, 0)) as stat_sned_g2,
+        SUM(COALESCE(sp.stat_sned_g3, 0)) as stat_sned_g3,
+        SUM(COALESCE(sp.stat_sned_g4, 0)) as stat_sned_g4,
+        SUM(COALESCE(sp.stat_sned_g5, 0)) as stat_sned_g5,
+        SUM(COALESCE(sp.stat_sned_g6, 0)) as stat_sned_g6,
+        SUM(COALESCE(sp.stat_sned_g7, 0)) as stat_sned_g7,
+        SUM(COALESCE(sp.stat_sned_g8, 0)) as stat_sned_g8,
+        SUM(COALESCE(sp.stat_sned_g9, 0)) as stat_sned_g9,
+        SUM(COALESCE(sp.stat_sned_g10, 0)) as stat_sned_g10,
+        SUM(COALESCE(sp.stat_sned_g11, 0)) as stat_sned_g11,
+        SUM(COALESCE(sp.stat_sned_g12, 0)) as stat_sned_g12,
+
+        -- DISABILITY
+        SUM(COALESCE(sp.stat_disability_k, 0)) as stat_disability_k,
+        SUM(COALESCE(sp.stat_disability_g1, 0)) as stat_disability_g1,
+        SUM(COALESCE(sp.stat_disability_g2, 0)) as stat_disability_g2,
+        SUM(COALESCE(sp.stat_disability_g3, 0)) as stat_disability_g3,
+        SUM(COALESCE(sp.stat_disability_g4, 0)) as stat_disability_g4,
+        SUM(COALESCE(sp.stat_disability_g5, 0)) as stat_disability_g5,
+        SUM(COALESCE(sp.stat_disability_g6, 0)) as stat_disability_g6,
+        SUM(COALESCE(sp.stat_disability_g7, 0)) as stat_disability_g7,
+        SUM(COALESCE(sp.stat_disability_g8, 0)) as stat_disability_g8,
+        SUM(COALESCE(sp.stat_disability_g9, 0)) as stat_disability_g9,
+        SUM(COALESCE(sp.stat_disability_g10, 0)) as stat_disability_g10,
+        SUM(COALESCE(sp.stat_disability_g11, 0)) as stat_disability_g11,
+        SUM(COALESCE(sp.stat_disability_g12, 0)) as stat_disability_g12,
+
+        -- ALS
+        SUM(COALESCE(sp.stat_als_k, 0)) as stat_als_k,
+        SUM(COALESCE(sp.stat_als_g1, 0)) as stat_als_g1,
+        SUM(COALESCE(sp.stat_als_g2, 0)) as stat_als_g2,
+        SUM(COALESCE(sp.stat_als_g3, 0)) as stat_als_g3,
+        SUM(COALESCE(sp.stat_als_g4, 0)) as stat_als_g4,
+        SUM(COALESCE(sp.stat_als_g5, 0)) as stat_als_g5,
+        SUM(COALESCE(sp.stat_als_g6, 0)) as stat_als_g6,
+        SUM(COALESCE(sp.stat_als_g7, 0)) as stat_als_g7,
+        SUM(COALESCE(sp.stat_als_g8, 0)) as stat_als_g8,
+        SUM(COALESCE(sp.stat_als_g9, 0)) as stat_als_g9,
+        SUM(COALESCE(sp.stat_als_g10, 0)) as stat_als_g10,
+        SUM(COALESCE(sp.stat_als_g11, 0)) as stat_als_g11,
+        SUM(COALESCE(sp.stat_als_g12, 0)) as stat_als_g12,
+
+        -- MUSLIM
+        SUM(COALESCE(sp.stat_muslim_k, 0)) as stat_muslim_k,
+        SUM(COALESCE(sp.stat_muslim_g1, 0)) as stat_muslim_g1,
+        SUM(COALESCE(sp.stat_muslim_g2, 0)) as stat_muslim_g2,
+        SUM(COALESCE(sp.stat_muslim_g3, 0)) as stat_muslim_g3,
+        SUM(COALESCE(sp.stat_muslim_g4, 0)) as stat_muslim_g4,
+        SUM(COALESCE(sp.stat_muslim_g5, 0)) as stat_muslim_g5,
+        SUM(COALESCE(sp.stat_muslim_g6, 0)) as stat_muslim_g6,
+        SUM(COALESCE(sp.stat_muslim_g7, 0)) as stat_muslim_g7,
+        SUM(COALESCE(sp.stat_muslim_g8, 0)) as stat_muslim_g8,
+        SUM(COALESCE(sp.stat_muslim_g9, 0)) as stat_muslim_g9,
+        SUM(COALESCE(sp.stat_muslim_g10, 0)) as stat_muslim_g10,
+        SUM(COALESCE(sp.stat_muslim_g11, 0)) as stat_muslim_g11,
+        SUM(COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_g12,
+
+        -- IP
+        SUM(COALESCE(sp.stat_ip_k, 0)) as stat_ip_k,
+        SUM(COALESCE(sp.stat_ip_g1, 0)) as stat_ip_g1,
+        SUM(COALESCE(sp.stat_ip_g2, 0)) as stat_ip_g2,
+        SUM(COALESCE(sp.stat_ip_g3, 0)) as stat_ip_g3,
+        SUM(COALESCE(sp.stat_ip_g4, 0)) as stat_ip_g4,
+        SUM(COALESCE(sp.stat_ip_g5, 0)) as stat_ip_g5,
+        SUM(COALESCE(sp.stat_ip_g6, 0)) as stat_ip_g6,
+        SUM(COALESCE(sp.stat_ip_g7, 0)) as stat_ip_g7,
+        SUM(COALESCE(sp.stat_ip_g8, 0)) as stat_ip_g8,
+        SUM(COALESCE(sp.stat_ip_g9, 0)) as stat_ip_g9,
+        SUM(COALESCE(sp.stat_ip_g10, 0)) as stat_ip_g10,
+        SUM(COALESCE(sp.stat_ip_g11, 0)) as stat_ip_g11,
+        SUM(COALESCE(sp.stat_ip_g12, 0)) as stat_ip_g12,
+
+        -- DISPLACED
+        SUM(COALESCE(sp.stat_displaced_k, 0)) as stat_displaced_k,
+        SUM(COALESCE(sp.stat_displaced_g1, 0)) as stat_displaced_g1,
+        SUM(COALESCE(sp.stat_displaced_g2, 0)) as stat_displaced_g2,
+        SUM(COALESCE(sp.stat_displaced_g3, 0)) as stat_displaced_g3,
+        SUM(COALESCE(sp.stat_displaced_g4, 0)) as stat_displaced_g4,
+        SUM(COALESCE(sp.stat_displaced_g5, 0)) as stat_displaced_g5,
+        SUM(COALESCE(sp.stat_displaced_g6, 0)) as stat_displaced_g6,
+        SUM(COALESCE(sp.stat_displaced_g7, 0)) as stat_displaced_g7,
+        SUM(COALESCE(sp.stat_displaced_g8, 0)) as stat_displaced_g8,
+        SUM(COALESCE(sp.stat_displaced_g9, 0)) as stat_displaced_g9,
+        SUM(COALESCE(sp.stat_displaced_g10, 0)) as stat_displaced_g10,
+        SUM(COALESCE(sp.stat_displaced_g11, 0)) as stat_displaced_g11,
+        SUM(COALESCE(sp.stat_displaced_g12, 0)) as stat_displaced_g12,
+
+        -- REPETITION
+        SUM(COALESCE(sp.stat_repetition_k, 0)) as stat_repetition_k,
+        SUM(COALESCE(sp.stat_repetition_g1, 0)) as stat_repetition_g1,
+        SUM(COALESCE(sp.stat_repetition_g2, 0)) as stat_repetition_g2,
+        SUM(COALESCE(sp.stat_repetition_g3, 0)) as stat_repetition_g3,
+        SUM(COALESCE(sp.stat_repetition_g4, 0)) as stat_repetition_g4,
+        SUM(COALESCE(sp.stat_repetition_g5, 0)) as stat_repetition_g5,
+        SUM(COALESCE(sp.stat_repetition_g6, 0)) as stat_repetition_g6,
+        SUM(COALESCE(sp.stat_repetition_g7, 0)) as stat_repetition_g7,
+        SUM(COALESCE(sp.stat_repetition_g8, 0)) as stat_repetition_g8,
+        SUM(COALESCE(sp.stat_repetition_g9, 0)) as stat_repetition_g9,
+        SUM(COALESCE(sp.stat_repetition_g10, 0)) as stat_repetition_g10,
+        SUM(COALESCE(sp.stat_repetition_g11, 0)) as stat_repetition_g11,
+        SUM(COALESCE(sp.stat_repetition_g12, 0)) as stat_repetition_g12,
+
+        -- OVERAGE
+        SUM(COALESCE(sp.stat_overage_k, 0)) as stat_overage_k,
+        SUM(COALESCE(sp.stat_overage_g1, 0)) as stat_overage_g1,
+        SUM(COALESCE(sp.stat_overage_g2, 0)) as stat_overage_g2,
+        SUM(COALESCE(sp.stat_overage_g3, 0)) as stat_overage_g3,
+        SUM(COALESCE(sp.stat_overage_g4, 0)) as stat_overage_g4,
+        SUM(COALESCE(sp.stat_overage_g5, 0)) as stat_overage_g5,
+        SUM(COALESCE(sp.stat_overage_g6, 0)) as stat_overage_g6,
+        SUM(COALESCE(sp.stat_overage_g7, 0)) as stat_overage_g7,
+        SUM(COALESCE(sp.stat_overage_g8, 0)) as stat_overage_g8,
+        SUM(COALESCE(sp.stat_overage_g9, 0)) as stat_overage_g9,
+        SUM(COALESCE(sp.stat_overage_g10, 0)) as stat_overage_g10,
+        SUM(COALESCE(sp.stat_overage_g11, 0)) as stat_overage_g11,
+        SUM(COALESCE(sp.stat_overage_g12, 0)) as stat_overage_g12,
+
+        -- DROPOUT
+        SUM(COALESCE(sp.stat_dropout_k, 0)) as stat_dropout_k,
+        SUM(COALESCE(sp.stat_dropout_g1, 0)) as stat_dropout_g1,
+        SUM(COALESCE(sp.stat_dropout_g2, 0)) as stat_dropout_g2,
+        SUM(COALESCE(sp.stat_dropout_g3, 0)) as stat_dropout_g3,
+        SUM(COALESCE(sp.stat_dropout_g4, 0)) as stat_dropout_g4,
+        SUM(COALESCE(sp.stat_dropout_g5, 0)) as stat_dropout_g5,
+        SUM(COALESCE(sp.stat_dropout_g6, 0)) as stat_dropout_g6,
+        SUM(COALESCE(sp.stat_dropout_g7, 0)) as stat_dropout_g7,
+        SUM(COALESCE(sp.stat_dropout_g8, 0)) as stat_dropout_g8,
+        SUM(COALESCE(sp.stat_dropout_g9, 0)) as stat_dropout_g9,
+        SUM(COALESCE(sp.stat_dropout_g10, 0)) as stat_dropout_g10,
+        SUM(COALESCE(sp.stat_dropout_g11, 0)) as stat_dropout_g11,
+        SUM(COALESCE(sp.stat_dropout_g12, 0)) as stat_dropout_g12,
+
+        -- SHIFTING METRICS
+        SUM(CASE WHEN sp.shift_kinder = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_k,
+        SUM(CASE WHEN sp.shift_kinder = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_k,
+        SUM(CASE WHEN sp.shift_g1 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g1,
+        SUM(CASE WHEN sp.shift_g1 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g1,
+        SUM(CASE WHEN sp.shift_g2 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g2,
+        SUM(CASE WHEN sp.shift_g2 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g2,
+        SUM(CASE WHEN sp.shift_g3 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g3,
+        SUM(CASE WHEN sp.shift_g3 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g3,
+        SUM(CASE WHEN sp.shift_g4 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g4,
+        SUM(CASE WHEN sp.shift_g4 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g4,
+        SUM(CASE WHEN sp.shift_g5 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g5,
+        SUM(CASE WHEN sp.shift_g5 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g5,
+        SUM(CASE WHEN sp.shift_g6 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g6,
+        SUM(CASE WHEN sp.shift_g6 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g6,
+        SUM(CASE WHEN sp.shift_g7 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g7,
+        SUM(CASE WHEN sp.shift_g7 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g7,
+        SUM(CASE WHEN sp.shift_g8 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g8,
+        SUM(CASE WHEN sp.shift_g8 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g8,
+        SUM(CASE WHEN sp.shift_g9 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g9,
+        SUM(CASE WHEN sp.shift_g9 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g9,
+        SUM(CASE WHEN sp.shift_g10 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g10,
+        SUM(CASE WHEN sp.shift_g10 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g10,
+        SUM(CASE WHEN sp.shift_g11 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g11,
+        SUM(CASE WHEN sp.shift_g11 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g11,
+        SUM(CASE WHEN sp.shift_g12 = 'Single Shift' THEN 1 ELSE 0 END) as cnt_shift_single_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Double Shift' THEN 1 ELSE 0 END) as cnt_shift_double_g12,
+        SUM(CASE WHEN sp.shift_g12 = 'Triple Shift' THEN 1 ELSE 0 END) as cnt_shift_triple_g12,
+
+        -- LEARNING DELIVERY METRICS
+        SUM(CASE WHEN sp.mode_kinder = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_k,
+        SUM(CASE WHEN sp.mode_kinder LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_k,
+        SUM(CASE WHEN sp.mode_kinder = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_k,
+        SUM(CASE WHEN sp.mode_g1 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g1,
+        SUM(CASE WHEN sp.mode_g1 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g1,
+        SUM(CASE WHEN sp.mode_g1 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g1,
+        SUM(CASE WHEN sp.mode_g2 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g2,
+        SUM(CASE WHEN sp.mode_g2 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g2,
+        SUM(CASE WHEN sp.mode_g2 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g2,
+        SUM(CASE WHEN sp.mode_g3 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g3,
+        SUM(CASE WHEN sp.mode_g3 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g3,
+        SUM(CASE WHEN sp.mode_g3 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g3,
+        SUM(CASE WHEN sp.mode_g4 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g4,
+        SUM(CASE WHEN sp.mode_g4 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g4,
+        SUM(CASE WHEN sp.mode_g4 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g4,
+        SUM(CASE WHEN sp.mode_g5 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g5,
+        SUM(CASE WHEN sp.mode_g5 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g5,
+        SUM(CASE WHEN sp.mode_g5 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g5,
+        SUM(CASE WHEN sp.mode_g6 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g6,
+        SUM(CASE WHEN sp.mode_g6 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g6,
+        SUM(CASE WHEN sp.mode_g6 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g6,
+        SUM(CASE WHEN sp.mode_g7 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g7,
+        SUM(CASE WHEN sp.mode_g7 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g7,
+        SUM(CASE WHEN sp.mode_g7 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g7,
+        SUM(CASE WHEN sp.mode_g8 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g8,
+        SUM(CASE WHEN sp.mode_g8 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g8,
+        SUM(CASE WHEN sp.mode_g8 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g8,
+        SUM(CASE WHEN sp.mode_g9 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g9,
+        SUM(CASE WHEN sp.mode_g9 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g9,
+        SUM(CASE WHEN sp.mode_g9 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g9,
+        SUM(CASE WHEN sp.mode_g10 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g10,
+        SUM(CASE WHEN sp.mode_g10 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g10,
+        SUM(CASE WHEN sp.mode_g10 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g10,
+        SUM(CASE WHEN sp.mode_g11 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g11,
+        SUM(CASE WHEN sp.mode_g11 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g11,
+        SUM(CASE WHEN sp.mode_g11 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g11,
+        SUM(CASE WHEN sp.mode_g12 = 'In-Person Classes' THEN 1 ELSE 0 END) as cnt_mode_inperson_g12,
+        SUM(CASE WHEN sp.mode_g12 LIKE '%Blended%' THEN 1 ELSE 0 END) as cnt_mode_blended_g12,
+        SUM(CASE WHEN sp.mode_g12 = 'Full Distance Learning' THEN 1 ELSE 0 END) as cnt_mode_distance_g12,
+
+        -- EMERGENCY ADM METRICS
+        SUM(CASE WHEN sp.adm_mdl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_mdl,
+        SUM(CASE WHEN sp.adm_odl IS TRUE THEN 1 ELSE 0 END) as cnt_adm_odl,
+        SUM(CASE WHEN sp.adm_tvi IS TRUE THEN 1 ELSE 0 END) as cnt_adm_tvi,
+        SUM(CASE WHEN sp.adm_blended IS TRUE THEN 1 ELSE 0 END) as cnt_adm_blended,
+
+        -- TEACHER METRICS (COUNT BY GRADE/LEVEL)
+        SUM(sp.teach_kinder) as cnt_teach_k,
+        SUM(sp.teach_g1) as cnt_teach_g1,
+        SUM(sp.teach_g2) as cnt_teach_g2,
+        SUM(sp.teach_g3) as cnt_teach_g3,
+        SUM(sp.teach_g4) as cnt_teach_g4,
+        SUM(sp.teach_g5) as cnt_teach_g5,
+        SUM(sp.teach_g6) as cnt_teach_g6,
+        SUM(sp.teach_g7) as cnt_teach_g7,
+        SUM(sp.teach_g8) as cnt_teach_g8,
+        SUM(sp.teach_g9) as cnt_teach_g9,
+        SUM(sp.teach_g10) as cnt_teach_g10,
+        SUM(sp.teach_g11) as cnt_teach_g11,
+        SUM(sp.teach_g12) as cnt_teach_g12,
+
+        -- MULTIGRADE TEACHERS
+        SUM(sp.teach_multi_1_2) as cnt_multi_1_2,
+        SUM(sp.teach_multi_3_4) as cnt_multi_3_4,
+        SUM(sp.teach_multi_5_6) as cnt_multi_5_6,
+
+        -- TEACHING EXPERIENCE
+        SUM(sp.teach_exp_0_1) as cnt_exp_0_1,
+        SUM(sp.teach_exp_2_5) as cnt_exp_2_5,
+        SUM(sp.teach_exp_6_10) as cnt_exp_6_10,
+        SUM(sp.teach_exp_11_15) as cnt_exp_11_15,
+        SUM(sp.teach_exp_16_20) as cnt_exp_16_20,
+        SUM(sp.teach_exp_21_25) as cnt_exp_21_25,
+        SUM(sp.teach_exp_26_30) as cnt_exp_26_30,
+        SUM(sp.teach_exp_31_35) as cnt_exp_31_35,
+        SUM(sp.teach_exp_36_40) as cnt_exp_36_40,
+        SUM(sp.teach_exp_40_45) as cnt_exp_40_45,
+
+        -- SPECIALIZATION (MAJORS)
+        SUM(sp.spec_math_major) as cnt_spec_math,
+        SUM(sp.spec_science_major) as cnt_spec_sci,
+        SUM(sp.spec_english_major) as cnt_spec_eng,
+        SUM(sp.spec_filipino_major) as cnt_spec_fil,
+        SUM(sp.spec_ap_major) as cnt_spec_ap,
+        SUM(sp.spec_mapeh_major) as cnt_spec_mapeh,
+        SUM(sp.spec_esp_major) as cnt_spec_esp,
+        SUM(sp.spec_tle_major) as cnt_spec_tle,
+        SUM(sp.spec_general_major) as cnt_spec_gen,
+        SUM(sp.spec_ece_major) as cnt_spec_ece,
+
+        -- CLASSROOMS (Condition)
+        SUM(sp.build_classrooms_new) as cnt_class_new,
+        SUM(sp.build_classrooms_good) as cnt_class_good,
+        SUM(sp.build_classrooms_repair) as cnt_class_repair,
+        SUM(sp.build_classrooms_demolition) as cnt_class_demolish,
+
+        -- EQUIPMENT & INVENTORY
+        SUM(sp.res_ecart_func) as cnt_equip_ecart_func,
+        SUM(sp.res_ecart_nonfunc) as cnt_equip_ecart_non,
+        SUM(sp.res_laptop_func) as cnt_equip_laptop_func,
+        SUM(sp.res_laptop_nonfunc) as cnt_equip_laptop_non,
+        SUM(sp.res_printer_func) as cnt_equip_printer_func,
+        SUM(sp.res_printer_nonfunc) as cnt_equip_printer_non,
+        SUM(sp.res_tv_func) as cnt_equip_tv_func,
+        SUM(sp.res_tv_nonfunc) as cnt_equip_tv_non,
+
+        -- SEATS (By Grade)
+        SUM(sp.seats_kinder) as cnt_seats_k,
+        SUM(sp.seats_grade_1) as cnt_seats_g1,
+        SUM(sp.seats_grade_2) as cnt_seats_g2,
+        SUM(sp.seats_grade_3) as cnt_seats_g3,
+        SUM(sp.seats_grade_4) as cnt_seats_g4,
+        SUM(sp.seats_grade_5) as cnt_seats_g5,
+        SUM(sp.seats_grade_6) as cnt_seats_g6,
+        SUM(sp.seats_grade_7) as cnt_seats_g7,
+        SUM(sp.seats_grade_8) as cnt_seats_g8,
+        SUM(sp.seats_grade_9) as cnt_seats_g9,
+        SUM(sp.seats_grade_10) as cnt_seats_g10,
+        SUM(sp.seats_grade_11) as cnt_seats_g11,
+        SUM(sp.seats_grade_12) as cnt_seats_g12,
+
+        -- TOILETS (Comfort Rooms)
+        SUM(sp.res_toilets_male) as cnt_toilet_male,
+        SUM(sp.res_toilets_female) as cnt_toilet_female,
+        SUM(sp.res_toilets_pwd) as cnt_toilet_pwd,
+        SUM(sp.res_toilets_common) as cnt_toilet_common,
+
+        -- SPECIALIZED ROOMS
+        SUM(sp.res_sci_labs) as cnt_room_sci,
+        SUM(sp.res_com_labs) as cnt_room_com,
+        SUM(sp.res_tvl_workshops) as cnt_room_tvl,
+
+        -- SITE & UTILITIES
+        -- Electricity
+        SUM(CASE WHEN sp.res_electricity_source = 'GRID SUPPLY' THEN 1 ELSE 0 END) as cnt_site_elec_grid,
+        SUM(CASE WHEN sp.res_electricity_source LIKE '%OFF-GRID%' THEN 1 ELSE 0 END) as cnt_site_elec_offgrid,
+        SUM(CASE WHEN sp.res_electricity_source = 'NO ELECTRICITY' THEN 1 ELSE 0 END) as cnt_site_elec_none,
+        
+        -- Water
+        SUM(CASE WHEN sp.res_water_source LIKE '%Piped%' THEN 1 ELSE 0 END) as cnt_site_water_piped,
+        SUM(CASE WHEN sp.res_water_source = 'Natural Resources' THEN 1 ELSE 0 END) as cnt_site_water_natural,
+        SUM(CASE WHEN sp.res_water_source = 'No Water Source' THEN 1 ELSE 0 END) as cnt_site_water_none,
+
+        -- Buildable Space
+        SUM(CASE WHEN sp.res_buildable_space = 'Yes' THEN 1 ELSE 0 END) as cnt_site_build_yes,
+        SUM(CASE WHEN sp.res_buildable_space = 'No' THEN 1 ELSE 0 END) as cnt_site_build_no,
+
+        -- SHA (Hardship)
+        SUM(CASE WHEN sp.sha_category LIKE '%HARDSHIP%' THEN 1 ELSE 0 END) as cnt_site_sha_hardship,
+        SUM(CASE WHEN sp.sha_category LIKE '%MULTIGRADE%' THEN 1 ELSE 0 END) as cnt_site_sha_multi,
+
+
+        -- HIERARCHICAL AGGREGATES
+        
+        -- SNED (Sum of Levels - Calculated from grades as requested)
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0)
+        ) as stat_sned_es,
+        
+        SUM(
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + 
+            COALESCE(sp.stat_sned_g9, 0) + COALESCE(sp.stat_sned_g10, 0)
+        ) as stat_sned_jhs,
+        
+        SUM(COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)) as stat_sned_shs,
+        
+        SUM(
+            COALESCE(sp.stat_sned_k, 0) + 
+            COALESCE(sp.stat_sned_g1, 0) + COALESCE(sp.stat_sned_g2, 0) + COALESCE(sp.stat_sned_g3, 0) + 
+            COALESCE(sp.stat_sned_g4, 0) + COALESCE(sp.stat_sned_g5, 0) + COALESCE(sp.stat_sned_g6, 0) + 
+            COALESCE(sp.stat_sned_g7, 0) + COALESCE(sp.stat_sned_g8, 0) + COALESCE(sp.stat_sned_g9, 0) + 
+            COALESCE(sp.stat_sned_g10, 0) + COALESCE(sp.stat_sned_g11, 0) + COALESCE(sp.stat_sned_g12, 0)
+        ) as stat_sned_total,
+
+        -- DISABILITY (Sum of Levels)
+        SUM(COALESCE(sp.stat_disability_es, 0)) as stat_disability_es,
+        SUM(COALESCE(sp.stat_disability_jhs, 0)) as stat_disability_jhs,
+        SUM(COALESCE(sp.stat_disability_shs, 0)) as stat_disability_shs,
+        SUM(COALESCE(sp.stat_disability_es, 0) + COALESCE(sp.stat_disability_jhs, 0) + COALESCE(sp.stat_disability_shs, 0)) as stat_disability_total,
+
+        -- ALS (Sum of Levels)
+        SUM(COALESCE(sp.stat_als_es, 0)) as stat_als_es,
+        SUM(COALESCE(sp.stat_als_jhs, 0)) as stat_als_jhs,
+        SUM(COALESCE(sp.stat_als_shs, 0)) as stat_als_shs,
+        SUM(COALESCE(sp.stat_als_es, 0) + COALESCE(sp.stat_als_jhs, 0) + COALESCE(sp.stat_als_shs, 0)) as stat_als_total,
+
+        -- MUSLIM (Sum of Grades, as aggregates missing)
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0)
+        ) as stat_muslim_es,
+        SUM(
+            COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + COALESCE(sp.stat_muslim_g9, 0) + 
+            COALESCE(sp.stat_muslim_g10, 0)
+        ) as stat_muslim_jhs,
+        SUM(COALESCE(sp.stat_muslim_g11, 0) + COALESCE(sp.stat_muslim_g12, 0)) as stat_muslim_shs,
+        SUM(
+            COALESCE(sp.stat_muslim_k, 0) + COALESCE(sp.stat_muslim_g1, 0) + COALESCE(sp.stat_muslim_g2, 0) + 
+            COALESCE(sp.stat_muslim_g3, 0) + COALESCE(sp.stat_muslim_g4, 0) + COALESCE(sp.stat_muslim_g5, 0) + 
+            COALESCE(sp.stat_muslim_g6, 0) + COALESCE(sp.stat_muslim_g7, 0) + COALESCE(sp.stat_muslim_g8, 0) + 
+            COALESCE(sp.stat_muslim_g9, 0) + COALESCE(sp.stat_muslim_g10, 0) + COALESCE(sp.stat_muslim_g11, 0) + 
+            COALESCE(sp.stat_muslim_g12, 0)
+        ) as stat_muslim_total,
+
+        -- IP (Existing Total)
+        SUM(COALESCE(sp.stat_ip_es, 0)) as stat_ip_es,
+        SUM(COALESCE(sp.stat_ip_jhs, 0)) as stat_ip_jhs,
+        SUM(COALESCE(sp.stat_ip_shs, 0)) as stat_ip_shs,
+        SUM(COALESCE(sp.stat_ip, 0)) as stat_ip_total,
+
+        -- DISPLACED (Existing Total)
+        SUM(COALESCE(sp.stat_displaced_es, 0)) as stat_displaced_es,
+        SUM(COALESCE(sp.stat_displaced_jhs, 0)) as stat_displaced_jhs,
+        SUM(COALESCE(sp.stat_displaced_shs, 0)) as stat_displaced_shs,
+        SUM(COALESCE(sp.stat_displaced, 0)) as stat_displaced_total,
+
+        -- REPETITION (Existing Total)
+        SUM(COALESCE(sp.stat_repetition_es, 0)) as stat_repetition_es,
+        SUM(COALESCE(sp.stat_repetition_jhs, 0)) as stat_repetition_jhs,
+        SUM(COALESCE(sp.stat_repetition_shs, 0)) as stat_repetition_shs,
+        SUM(COALESCE(sp.stat_repetition, 0)) as stat_repetition_total,
+
+        -- OVERAGE (Existing Total)
+        SUM(COALESCE(sp.stat_overage_es, 0)) as stat_overage_es,
+        SUM(COALESCE(sp.stat_overage_jhs, 0)) as stat_overage_jhs,
+        SUM(COALESCE(sp.stat_overage_shs, 0)) as stat_overage_shs,
+        SUM(COALESCE(sp.stat_overage, 0)) as stat_overage_total,
+
+        -- DROPOUT (Sum of Levels, missing Total)
+        SUM(COALESCE(sp.stat_dropout_es, 0)) as stat_dropout_es,
+        SUM(COALESCE(sp.stat_dropout_jhs, 0)) as stat_dropout_jhs,
+        SUM(COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_shs,
+        SUM(COALESCE(sp.stat_dropout_es, 0) + COALESCE(sp.stat_dropout_jhs, 0) + COALESCE(sp.stat_dropout_shs, 0)) as stat_dropout_total
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+      LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE TRIM(s.region) = TRIM($1) AND TRIM(s.division) = TRIM($2)
       GROUP BY s.district
       ORDER BY s.district ASC
@@ -6758,6 +8018,53 @@ console.log('Is Main Module?', isMainModule);
 console.log('Force Start Env?', process.env.START_SERVER);
 console.log('--------------------------');
 
+
+// --- TEMPORARY MIGRATION ENDPOINT (FACILITY REPAIRS) ---
+// --- MIGRATE REPAIR DETAILS SCHEMA ---
+app.get('/api/migrate-repair-details', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const results = [];
+
+    // 1. Drop old table
+    try {
+      await client.query('DROP TABLE IF EXISTS facility_repairs');
+      results.push("Dropped old facility_repairs table");
+    } catch (e) { results.push(`Failed drop: ${e.message}`); }
+
+    // 2. Create new table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS facility_repair_details (
+          id SERIAL PRIMARY KEY,
+          school_id VARCHAR(50), -- Added explicitly for consistency
+          iern VARCHAR(50),
+          building_no VARCHAR(100),
+          room_no VARCHAR(100),
+          item_name VARCHAR(100),
+          oms TEXT,
+          condition VARCHAR(50),
+          damage_ratio INTEGER,
+          recommended_action VARCHAR(100),
+          demo_justification TEXT,
+          remarks TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      // Add indexes
+      await client.query('CREATE INDEX IF NOT EXISTS idx_frd_iern ON facility_repair_details(iern)');
+      await client.query('CREATE INDEX IF NOT EXISTS idx_frd_school_id ON facility_repair_details(school_id)');
+
+      results.push("Created facility_repair_details table");
+    } catch (e) { results.push(`Failed create: ${e.message}`); }
+
+    client.release();
+    res.json({ message: "Repair Details Migration finished", results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- TEMPORARY MIGRATION ENDPOINT (MOVED OUTSIDE FOR ACCESS) ---
 app.get('/api/migrate-schema', async (req, res) => {
   try {
@@ -6954,61 +8261,645 @@ app.get('/api/user-info/:uid', async (req, res) => {
   }
 });
 
-// --- POST: Save Facility Repair Assessment ---
-app.post('/api/save-facility-repair', async (req, res) => {
-  const data = req.body;
-  // Normalize building_no for consistent grouping
-  if (data.building_no) data.building_no = data.building_no.trim();
-  try {
-    const result = await pool.query(`
-      INSERT INTO facility_repairs (
-        school_id, iern, building_no, room_no,
-        repair_roofing, repair_ceiling_ext, repair_ceiling_int,
-        repair_wall_ext, repair_partition, repair_door,
-        repair_windows, repair_flooring, repair_structural,
-        remarks
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-      RETURNING repair_id
-    `, [
-      data.schoolId, data.iern, data.building_no, data.room_no,
-      data.repair_roofing || false, data.repair_ceiling_ext || false, data.repair_ceiling_int || false,
-      data.repair_wall_ext || false, data.repair_partition || false, data.repair_door || false,
-      data.repair_windows || false, data.repair_flooring || false, data.repair_structural || false,
-      data.remarks || null
-    ]);
+// ==================================================================
+//                      LGU FORMS ROUTES
+// ==================================================================
 
-    // --- DUAL WRITE: FACILITY REPAIRS ---
+// --- LGU 1. POST: Save New Project (LGU) ---
+app.post('/api/lgu/save-project', async (req, res) => {
+  const data = req.body;
+
+  if (!data.schoolName || !data.projectName || !data.schoolId) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  let client;
+  let clientNew;
+
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // Dual Write Setup
     if (poolNew) {
-      poolNew.query(`
-        INSERT INTO facility_repairs (
-          school_id, iern, building_no, room_no,
-          repair_roofing, repair_ceiling_ext, repair_ceiling_int,
-          repair_wall_ext, repair_partition, repair_door,
-          repair_windows, repair_flooring, repair_structural,
-          remarks
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-      `, [
-        data.schoolId, data.iern, data.building_no, data.room_no,
-        data.repair_roofing || false, data.repair_ceiling_ext || false, data.repair_ceiling_int || false,
-        data.repair_wall_ext || false, data.repair_partition || false, data.repair_door || false,
-        data.repair_windows || false, data.repair_flooring || false, data.repair_structural || false,
-        data.remarks || null
-      ]).catch(e => console.error("Dual-Write Facility Repair Err:", e.message));
+      try {
+        clientNew = await poolNew.connect();
+        await clientNew.query('BEGIN');
+      } catch (connErr) {
+        console.error("⚠️ Dual-Write LGU: Failed to start transaction:", connErr.message);
+        clientNew = null;
+      }
     }
 
-    res.json({ success: true, repair_id: result.rows[0].repair_id });
+    // 1. Generate IPC (LGU-YYYY-XXXXX)
+    const year = new Date().getFullYear();
+    const ipcResult = await client.query(
+      "SELECT ipc FROM lgu_forms WHERE ipc LIKE $1 ORDER BY ipc DESC LIMIT 1",
+      [`LGU-${year}-%`]
+    );
+
+    let nextSeq = 1;
+    if (ipcResult.rows.length > 0) {
+      const lastIpc = ipcResult.rows[0].ipc;
+      const parts = lastIpc.split('-');
+      if (parts.length === 3 && !isNaN(parts[2])) {
+        nextSeq = parseInt(parts[2]) + 1;
+      }
+    }
+    const newIpc = `LGU-${year}-${String(nextSeq).padStart(5, '0')}`;
+
+    // 2. Prepare Data
+    const lguName = await getUserFullName(data.uid);
+    const resolvedLguName = lguName || data.submittedBy || 'LGU User';
+
+    const docs = data.documents || [];
+    const powDoc = docs.find(d => d.type === 'POW')?.base64 || null;
+    const dupaDoc = docs.find(d => d.type === 'DUPA')?.base64 || null;
+    const contractDoc = docs.find(d => d.type === 'CONTRACT')?.base64 || null;
+
+    const projectValues = [
+      data.projectName, data.schoolName, data.schoolId,
+      valueOrNull(data.region), valueOrNull(data.division),
+      data.status || 'Not Yet Started', parseIntOrNull(data.accomplishmentPercentage),
+      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+      valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+      data.uid,           // lgu_id
+      newIpc,
+      resolvedLguName,    // lgu_name
+      valueOrNull(data.latitude),
+      valueOrNull(data.longitude),
+      powDoc,
+      dupaDoc,
+      contractDoc,
+      // --- NEW FIELDS ---
+      valueOrNull(data.moa_date), // 24
+      parseIntOrNull(data.tranches_count), // 25
+      parseNumberOrNull(data.tranche_amount), // 26
+      valueOrNull(data.fund_source), // 27
+      valueOrNull(data.province), // 28
+      valueOrNull(data.city), // 29
+      valueOrNull(data.municipality), // 30
+      valueOrNull(data.legislative_district), // 31
+      valueOrNull(data.scope_of_works), // 32
+      parseNumberOrNull(data.contract_amount), // 33
+      valueOrNull(data.bid_opening_date), // 34
+      valueOrNull(data.resolution_award_date), // 35
+      valueOrNull(data.procurement_stage), // 36
+      valueOrNull(data.bidding_date), // 37
+      valueOrNull(data.awarding_date), // 38
+      valueOrNull(data.construction_start_date), // 39
+      parseNumberOrNull(data.funds_downloaded), // 40
+      parseNumberOrNull(data.funds_utilized), // 41
+
+      // NEW FIELDS
+      valueOrNull(data.source_agency), // 42
+      valueOrNull(data.lsb_resolution_no), // 43
+      valueOrNull(data.moa_ref_no), // 44
+      valueOrNull(data.validity_period), // 45
+      valueOrNull(data.contract_duration), // 46
+      valueOrNull(data.date_approved_pow), // 47
+      valueOrNull(data.fund_release_schedule), // 48
+      valueOrNull(data.mode_of_procurement), // 49
+      valueOrNull(data.philgeps_ref_no), // 50
+      valueOrNull(data.pcab_license_no), // 51
+      valueOrNull(data.date_contract_signing), // 52
+      parseNumberOrNull(data.bid_amount), // 53
+      valueOrNull(data.nature_of_delay), // 54
+      valueOrNull(data.date_notice_of_award) // 55
+    ];
+
+    const projectQuery = `
+      INSERT INTO "lgu_forms" (
+        project_name, school_name, school_id, region, division,
+        status, accomplishment_percentage, status_as_of,
+        target_completion_date, actual_completion_date, notice_to_proceed,
+        contractor_name, project_allocation, batch_of_funds, other_remarks,
+        lgu_id, ipc, lgu_name, latitude, longitude,
+        pow_pdf, dupa_pdf, contract_pdf,
+        -- EXISTING NEW COLUMNS
+        moa_date, tranches_count, tranche_amount, fund_source,
+        province, city, municipality, legislative_district,
+        scope_of_works, contract_amount, bid_opening_date,
+        resolution_award_date, procurement_stage, bidding_date,
+        awarding_date, construction_start_date, funds_downloaded,
+        funds_utilized,
+        -- NEWEST COLUMNS
+        source_agency, lsb_resolution_no, moa_ref_no, validity_period,
+        contract_duration, date_approved_pow, fund_release_schedule,
+        mode_of_procurement, philgeps_ref_no, pcab_license_no,
+        date_contract_signing, bid_amount, nature_of_delay, date_notice_of_award
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41,
+        $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55
+      )
+      RETURNING project_id, project_name, ipc;
+    `;
+
+    // 3. Insert Project
+    const projectResult = await client.query(projectQuery, projectValues);
+    const newProject = projectResult.rows[0];
+    const newProjectId = newProject.project_id;
+
+    // 4. Insert Images
+    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+      const imageQuery = `
+        INSERT INTO "lgu_image" (project_id, image_data, uploaded_by)
+        VALUES ($1, $2, $3)
+      `;
+      for (const imgBase64 of data.images) {
+        await client.query(imageQuery, [newProjectId, imgBase64, data.uid]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Dual Write Replay
+    if (clientNew) {
+      try {
+        await clientNew.query(projectQuery, projectValues);
+        // We need to fetch the ID from secondary to insert images correctly if sequence differs, 
+        // but for now assuming synced or just using payload logic (Wait, project_id is serial, so checking ipc is safer)
+
+        const newProjRes = await clientNew.query("SELECT project_id FROM lgu_forms WHERE ipc = $1", [newIpc]);
+        if (newProjRes.rows.length > 0) {
+          const secProjId = newProjRes.rows[0].project_id;
+          if (data.images && Array.isArray(data.images)) {
+            const imageQuery = `INSERT INTO "lgu_image" (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+            for (const imgBase64 of data.images) {
+              await clientNew.query(imageQuery, [secProjId, imgBase64, data.uid]);
+            }
+          }
+        }
+        await clientNew.query('COMMIT');
+        console.log("✅ Dual-Write: LGU Project Synced!");
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Error:", dwErr.message);
+        await clientNew.query('ROLLBACK').catch(() => { });
+      }
+    }
+
+    // 5. Log Activity
+    const logDetails = {
+      action: "LGU Project Created",
+      ipc: newIpc,
+      status: data.status,
+      timestamp: new Date().toISOString()
+    };
+
+    await logActivity(
+      data.uid, resolvedLguName, 'LGU', 'CREATE',
+      `LGU Project: ${newProject.project_name} (${newIpc})`,
+      JSON.stringify(logDetails)
+    );
+
+    res.status(200).json({ message: "LGU Project saved!", project: newProject, ipc: newIpc });
+
+  } catch (err) {
+    if (client) await client.query('ROLLBACK');
+    if (clientNew) await clientNew.query('ROLLBACK').catch(() => { });
+    console.error("❌ LGU Save Error:", err.message);
+    res.status(500).json({ message: "Database error", error: err.message });
+  } finally {
+    if (client) client.release();
+    if (clientNew) clientNew.release();
+  }
+});
+
+// --- LGU 2. POST: Upload Image (LGU) ---
+app.post('/api/lgu/upload-image', async (req, res) => {
+  const { projectId, imageData, uploadedBy } = req.body;
+  if (!projectId || !imageData) return res.status(400).json({ error: "Missing required data" });
+
+  try {
+    const query = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3) RETURNING id;`;
+    const result = await pool.query(query, [projectId, imageData, uploadedBy]);
+
+    await logActivity(uploadedBy, 'LGU User', 'LGU', 'UPLOAD', `LGU Project ID: ${projectId}`, `Uploaded image`);
+
+    res.status(201).json({ success: true, imageId: result.rows[0].id });
+
+    // Dual Write
+    if (poolNew) {
+      try {
+        // Need to map project_id if sequences drifted, but simple logic for now:
+        // Ideally we pass IPC, but here we only have ID. 
+        // Warning: ID mismatch risk.
+        // Safe way: SELECT ipc FROM lgu_forms WHERE project_id = $1 -> Then on secondary SELECT project_id FROM lgu_forms WHERE ipc = ...
+
+        const ipcRes = await pool.query("SELECT ipc FROM lgu_forms WHERE project_id = $1", [projectId]);
+        if (ipcRes.rows.length > 0) {
+          const ipc = ipcRes.rows[0].ipc;
+          await poolNew.query(`
+                    INSERT INTO lgu_image (project_id, image_data, uploaded_by)
+                    VALUES ((SELECT project_id FROM lgu_forms WHERE ipc = $1), $2, $3)
+                `, [ipc, imageData, uploadedBy]);
+          console.log("✅ Dual-Write: LGU Image Synced!");
+        }
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Image Error:", dwErr.message);
+      }
+    }
+
+  } catch (err) {
+    console.error("❌ LGU Image Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save image" });
+  }
+});
+
+// --- LGU 2b. POST: Upload Project Document (LGU Sequential) ---
+app.post('/api/lgu/upload-project-document', async (req, res) => {
+  const { projectId, type, base64, uid } = req.body;
+
+  if (!projectId || !type || !base64) return res.status(400).json({ error: "Missing required data" });
+
+  let column = '';
+  if (type === 'POW') column = 'pow_pdf';
+  else if (type === 'DUPA') column = 'dupa_pdf';
+  else if (type === 'CONTRACT') column = 'contract_pdf';
+  else return res.status(400).json({ error: "Invalid document type" });
+
+  try {
+    const query = `UPDATE lgu_forms SET ${column} = $1 WHERE project_id = $2`;
+    await pool.query(query, [base64, projectId]);
+
+    // --- DUAL WRITE ---
+    if (poolNew) {
+      try {
+        const ipcRes = await pool.query('SELECT ipc FROM lgu_forms WHERE project_id = $1', [projectId]);
+        if (ipcRes.rows.length > 0) {
+          const ipc = ipcRes.rows[0].ipc;
+          await poolNew.query(`UPDATE lgu_forms SET ${column} = $1 WHERE ipc = $2`, [base64, ipc]);
+          console.log(`✅ Dual-Write LGU: ${type} Synced via IPC!`);
+        }
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Doc Upload Error:", dwErr.message);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ LGU Doc Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save document" });
+  }
+});
+
+// --- LGU 3. GET: Fetch LGU Projects (List) ---
+app.get('/api/lgu/projects', async (req, res) => {
+  const { uid, municipality } = req.query;
+  try {
+    let query = `
+      SELECT 
+        project_id, project_name, school_name, school_id, 
+        status, accomplishment_percentage, project_allocation, 
+        ipc, lgu_name, 
+        TO_CHAR(target_completion_date, 'YYYY-MM-DD') as target_completion_date,
+        TO_CHAR(status_as_of, 'YYYY-MM-DD') as status_as_of,
+        other_remarks
+      FROM lgu_forms
+    `;
+    const params = [];
+
+    if (uid) {
+      query += ` WHERE lgu_id = $1`;
+      params.push(uid);
+    } else if (municipality) {
+      query += ` WHERE municipality = $1 OR city = $1`;
+      params.push(municipality);
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error("❌ Fetch LGU Projects Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
+});
+
+// --- LGU 4. GET: Fetch Single LGU Project (Detail) ---
+app.get('/api/lgu/project/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log(`[DEBUG] Fetching LGU Project with ID: ${id}`); // DEBUG LOG
+  try {
+    const query = `
+            SELECT *,
+            TO_CHAR(target_completion_date, 'YYYY-MM-DD') as "targetCompletionDate",
+            TO_CHAR(status_as_of, 'YYYY-MM-DD') as "statusAsOfDate",
+            TO_CHAR(actual_completion_date, 'YYYY-MM-DD') as "actualCompletionDate",
+            TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') as "noticeToProceed",
+            TO_CHAR(construction_start_date, 'YYYY-MM-DD') as "construction_start_date",
+            TO_CHAR(moa_date, 'YYYY-MM-DD') as "moa_date",
+            TO_CHAR(bid_opening_date, 'YYYY-MM-DD') as "bid_opening_date",
+            TO_CHAR(resolution_award_date, 'YYYY-MM-DD') as "resolution_award_date",
+            TO_CHAR(bidding_date, 'YYYY-MM-DD') as "bidding_date",
+            TO_CHAR(awarding_date, 'YYYY-MM-DD') as "awarding_date",
+            TO_CHAR(date_approved_pow, 'YYYY-MM-DD') as "date_approved_pow",
+            TO_CHAR(date_contract_signing, 'YYYY-MM-DD') as "date_contract_signing",
+            TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') as "date_notice_of_award"
+            FROM lgu_forms WHERE project_id = $1
+        `;
+    const result = await pool.query(query, [id]);
+
+    console.log(`[DEBUG] Query Result Row Count: ${result.rows.length}`); // DEBUG LOG
+
+    if (result.rows.length === 0) {
+      console.log(`[DEBUG] Project ${id} NOT FOUND in lgu_forms table.`); // DEBUG LOG
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    // Fetch images too
+    const imgQuery = `SELECT id, image_data, category FROM lgu_image WHERE project_id = $1`;
+    const imgResult = await pool.query(imgQuery, [id]);
+
+    const project = result.rows[0];
+    project.images = imgResult.rows;
+
+    res.json(project);
+  } catch (err) {
+    console.error("❌ Fetch LGU Project Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch project details" });
+  }
+});
+
+// --- LGU 5. PUT: Update LGU Project ---
+app.put('/api/lgu/update-project/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+
+  if (!id) return res.status(400).json({ error: "Project ID required" });
+
+  let client;
+  let clientNew;
+
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    if (poolNew) {
+      try {
+        clientNew = await poolNew.connect();
+        await clientNew.query('BEGIN');
+      } catch (e) { console.error("Dual-write connect error", e); }
+    }
+
+    // 1. Update Main Fields
+    const updateQuery = `
+            UPDATE lgu_forms SET
+                project_name = COALESCE($1, project_name),
+                school_name = COALESCE($2, school_name),
+                school_id = COALESCE($3, school_id),
+                status = COALESCE($4, status),
+                accomplishment_percentage = COALESCE($5, accomplishment_percentage),
+                status_as_of = COALESCE($6, status_as_of),
+                target_completion_date = COALESCE($7, target_completion_date),
+                actual_completion_date = COALESCE($8, actual_completion_date),
+                notice_to_proceed = COALESCE($9, notice_to_proceed),
+                contractor_name = COALESCE($10, contractor_name),
+                project_allocation = COALESCE($11, project_allocation),
+                batch_of_funds = COALESCE($12, batch_of_funds),
+                other_remarks = COALESCE($13, other_remarks),
+                latitude = COALESCE($14, latitude),
+                longitude = COALESCE($15, longitude),
+                
+                -- NEW FIELDS
+                moa_date = COALESCE($16, moa_date),
+                tranches_count = COALESCE($17, tranches_count),
+                tranche_amount = COALESCE($18, tranche_amount),
+                fund_source = COALESCE($19, fund_source),
+                scope_of_works = COALESCE($20, scope_of_works),
+                contract_amount = COALESCE($21, contract_amount),
+                bid_opening_date = COALESCE($22, bid_opening_date),
+                resolution_award_date = COALESCE($23, resolution_award_date),
+                procurement_stage = COALESCE($24, procurement_stage),
+                bidding_date = COALESCE($25, bidding_date),
+                awarding_date = COALESCE($26, awarding_date),
+                construction_start_date = COALESCE($27, construction_start_date),
+                funds_downloaded = COALESCE($28, funds_downloaded),
+                funds_utilized = COALESCE($29, funds_utilized),
+
+                -- NEWEST FIELDS
+                source_agency = COALESCE($30, source_agency),
+                lsb_resolution_no = COALESCE($31, lsb_resolution_no),
+                moa_ref_no = COALESCE($32, moa_ref_no),
+                validity_period = COALESCE($33, validity_period),
+                contract_duration = COALESCE($34, contract_duration),
+                date_approved_pow = COALESCE($35, date_approved_pow),
+                fund_release_schedule = COALESCE($36, fund_release_schedule),
+                mode_of_procurement = COALESCE($37, mode_of_procurement),
+                philgeps_ref_no = COALESCE($38, philgeps_ref_no),
+                pcab_license_no = COALESCE($39, pcab_license_no),
+                date_contract_signing = COALESCE($40, date_contract_signing),
+                bid_amount = COALESCE($41, bid_amount),
+                nature_of_delay = COALESCE($42, nature_of_delay),
+                date_notice_of_award = COALESCE($43, date_notice_of_award)
+
+            WHERE project_id = $44
+            RETURNING *;
+        `;
+
+    const values = [
+      data.projectName, data.schoolName, data.schoolId,
+      data.status, parseIntOrNull(data.accomplishmentPercentage),
+      valueOrNull(data.statusAsOfDate), valueOrNull(data.targetCompletionDate),
+      valueOrNull(data.actualCompletionDate), valueOrNull(data.noticeToProceed),
+      valueOrNull(data.contractorName), parseNumberOrNull(data.projectAllocation),
+      valueOrNull(data.batchOfFunds), valueOrNull(data.otherRemarks),
+      valueOrNull(data.latitude), valueOrNull(data.longitude),
+      // New
+      valueOrNull(data.moa_date), parseIntOrNull(data.tranches_count), parseNumberOrNull(data.tranche_amount),
+      valueOrNull(data.fund_source), valueOrNull(data.scope_of_works), parseNumberOrNull(data.contract_amount),
+      valueOrNull(data.bid_opening_date), valueOrNull(data.resolution_award_date), valueOrNull(data.procurement_stage),
+      valueOrNull(data.bidding_date), valueOrNull(data.awarding_date), valueOrNull(data.construction_start_date),
+      parseNumberOrNull(data.funds_downloaded), parseNumberOrNull(data.funds_utilized),
+
+      // Newest
+      valueOrNull(data.source_agency),
+      valueOrNull(data.lsb_resolution_no),
+      valueOrNull(data.moa_ref_no),
+      valueOrNull(data.validity_period),
+      valueOrNull(data.contract_duration),
+      valueOrNull(data.date_approved_pow),
+      valueOrNull(data.fund_release_schedule),
+      valueOrNull(data.mode_of_procurement),
+      valueOrNull(data.philgeps_ref_no),
+      valueOrNull(data.pcab_license_no),
+      valueOrNull(data.date_contract_signing),
+      parseNumberOrNull(data.bid_amount),
+      valueOrNull(data.nature_of_delay),
+      valueOrNull(data.date_notice_of_award),
+
+      id
+    ];
+
+    const result = await client.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    // 2. Handle New Images (Append)
+    if (data.newImages && Array.isArray(data.newImages) && data.newImages.length > 0) {
+      const imageQuery = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+      for (const img of data.newImages) {
+        await client.query(imageQuery, [id, img, data.uid]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Dual Write
+    if (clientNew) {
+      try {
+        // Determine Secondary ID via IPC (safer) since IDs might drift
+        const ipc = result.rows[0].ipc;
+        if (ipc) {
+          // Update on Secondary by IPC
+          // Construct UPDATE by IPC... or just by ID if we trust it?
+          // Let's rely on ID for now but catch error
+          await clientNew.query(updateQuery, values);
+
+          // Images
+          if (data.newImages && Array.isArray(data.newImages)) {
+            const secProjRes = await clientNew.query("SELECT project_id FROM lgu_forms WHERE ipc = $1", [ipc]);
+            if (secProjRes.rows.length > 0) {
+              const secId = secProjRes.rows[0].project_id;
+              const imageQuery = `INSERT INTO lgu_image (project_id, image_data, uploaded_by) VALUES ($1, $2, $3)`;
+              for (const img of data.newImages) {
+                await clientNew.query(imageQuery, [secId, img, data.uid]);
+              }
+            }
+          }
+          await clientNew.query('COMMIT');
+          console.log("✅ Dual-Write: LGU Update Synced");
+        }
+      } catch (dwErr) {
+        console.error("❌ Dual-Write LGU Update Error", dwErr);
+        await clientNew.query('ROLLBACK').catch(() => { });
+      }
+    }
+
+    res.json({ success: true, project: result.rows[0] });
+
+  } catch (err) {
+    if (client) await client.query('ROLLBACK');
+    console.error("❌ LGU Update Project Error:", err.message);
+    res.status(500).json({ error: "Failed to update project" });
+  } finally {
+    if (client) client.release();
+    if (clientNew) clientNew.release();
+  }
+});
+
+
+// --- POST: Save Facility Repair Assessment (ITEMIZED) ---
+app.post('/api/save-facility-repair', async (req, res) => {
+  const data = req.body;
+  // data should look like: { schoolId, iern, building_no, room_no, items: [ { item_name, oms, condition... } ] }
+
+  if (data.building_no) data.building_no = data.building_no.trim();
+  if (data.room_no) data.room_no = data.room_no.trim();
+
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Delete existing items for this specific room
+      await client.query(`
+        DELETE FROM facility_repair_details 
+        WHERE school_id = $1 AND building_no = $2 AND room_no = $3
+      `, [data.schoolId, data.building_no, data.room_no]);
+
+      // 2. Insert new items
+      if (data.items && Array.isArray(data.items)) {
+        for (const item of data.items) {
+          await client.query(`
+            INSERT INTO facility_repair_details (
+              school_id, iern, building_no, room_no, item_name,
+              oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `, [
+            data.schoolId, data.iern || data.schoolId,
+            data.building_no, data.room_no,
+            item.item_name,
+            item.oms || '',
+            item.condition || '',
+            item.damage_ratio || 0,
+            item.recommended_action || '',
+            item.demo_justification || '',
+            item.remarks || ''
+          ]);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // --- DUAL WRITE (Best Effort) ---
+      if (poolNew) {
+        (async () => {
+          const cNew = await poolNew.connect();
+          try {
+            await cNew.query('BEGIN');
+            await cNew.query(`
+              DELETE FROM facility_repair_details 
+              WHERE school_id = $1 AND building_no = $2 AND room_no = $3
+            `, [data.schoolId, data.building_no, data.room_no]);
+
+            if (data.items && Array.isArray(data.items)) {
+              for (const item of data.items) {
+                await cNew.query(`
+                  INSERT INTO facility_repair_details (
+                    school_id, iern, building_no, room_no, item_name,
+                    oms, condition, damage_ratio, recommended_action, demo_justification, remarks
+                  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                `, [
+                  data.schoolId, data.iern || data.schoolId,
+                  data.building_no, data.room_no,
+                  item.item_name,
+                  item.oms || '',
+                  item.condition || '',
+                  item.damage_ratio || 0,
+                  item.recommended_action || '',
+                  item.demo_justification || '',
+                  item.remarks || ''
+                ]);
+              }
+            }
+            await cNew.query('COMMIT');
+          } catch (e) {
+            await cNew.query('ROLLBACK');
+            console.error("Dual write failed for repair details", e);
+          } finally {
+            cNew.release();
+          }
+        })();
+      }
+
+      res.json({ success: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     console.error("❌ Save Facility Repair Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- GET: Facility Repairs by IERN ---
+// --- GET: Facility Repairs by IERN (ITEMIZED) ---
 app.get('/api/facility-repairs/:iern', async (req, res) => {
   const { iern } = req.params;
   try {
     const result = await pool.query(
-      'SELECT * FROM facility_repairs WHERE iern = $1 ORDER BY created_at DESC',
+      'SELECT * FROM facility_repair_details WHERE iern = $1 ORDER BY building_no, room_no, id ASC',
       [iern]
     );
     res.json(result.rows);

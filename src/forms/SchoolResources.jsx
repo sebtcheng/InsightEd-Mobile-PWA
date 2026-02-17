@@ -1,7 +1,7 @@
 // src/forms/SchoolResources.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiPackage, FiMapPin, FiLayout, FiCheckCircle, FiXCircle, FiMonitor, FiTool, FiDroplet, FiZap, FiHelpCircle, FiInfo, FiSave } from 'react-icons/fi';
+import { FiArrowLeft, FiPackage, FiMapPin, FiLayout, FiCheckCircle, FiXCircle, FiMonitor, FiTool, FiDroplet, FiZap, FiHelpCircle, FiInfo, FiSave, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
@@ -204,6 +204,18 @@ const SchoolResources = ({ embedded }) => {
     // --- BUILDABLE SPACES STATE ---
     const [spaces, setSpaces] = useState([]);
     const [schoolLocation, setSchoolLocation] = useState(null); // [NEW]
+
+    // --- E-CART BATCHES STATE ---
+    const ECART_TEMPLATE = {
+        batch_no: '', year_received: '', source_fund: 'DepEd Central',
+        ecart_qty_laptops: '', ecart_condition_laptops: 'Good',
+        ecart_has_smart_tv: false, ecart_tv_size: '', ecart_condition_tv: '',
+        ecart_condition_charging: '', ecart_condition_cabinet: ''
+    };
+    const [ecartBatches, setEcartBatches] = useState([]);
+    const [showEcartModal, setShowEcartModal] = useState(false);
+    const [currentEcart, setCurrentEcart] = useState({ ...ECART_TEMPLATE });
+    const [editingEcartIdx, setEditingEcartIdx] = useState(null); // null = adding, number = editing
     const [showTutorial, setShowTutorial] = useState(false); // [NEW]
     const [currentSpace, setCurrentSpace] = useState({ lat: null, lng: null, length: '', width: '', area: 0 });
     const [mapCenter, setMapCenter] = useState([12.8797, 121.7740]); // Default PH Center
@@ -347,8 +359,7 @@ const SchoolResources = ({ embedded }) => {
         // LABS
         res_sci_labs: 0, res_com_labs: 0,
 
-        // FUNCTIONAL / NON-FUNCTIONAL
-        res_ecart_func: 0, res_ecart_nonfunc: 0,
+        // FUNCTIONAL / NON-FUNCTIONAL (E-Cart moved to separate ecartBatches state)
         res_laptop_func: 0, res_laptop_nonfunc: 0,
         res_tv_func: 0, res_tv_nonfunc: 0,
         res_printer_func: 0, res_printer_nonfunc: 0,
@@ -546,7 +557,7 @@ const SchoolResources = ({ embedded }) => {
 
                             // Fetch Buildable Spaces if applicable
                             // Use dbData (current scope) or fallback IDs
-                            const resolvedSchoolId = dbData.school_id || schoolIdParam || auditTargetId;
+                            const resolvedSchoolId = dbData.school_id || schoolIdParam || auditTargetId || localStorage.getItem('schoolId');
                             if (loaded.res_buildable_space === 'Yes' && resolvedSchoolId) {
                                 try {
                                     const spacesRes = await fetch(`/api/buildable-spaces/${resolvedSchoolId}`);
@@ -566,6 +577,32 @@ const SchoolResources = ({ embedded }) => {
                                     }
                                 } catch (e) {
                                     console.error("Failed to load spaces", e);
+                                }
+                            }
+
+                            // Fetch e-Cart Batches
+                            if (resolvedSchoolId) {
+                                try {
+                                    const ecartRes = await fetch(`/api/ecart-batches/${resolvedSchoolId}`);
+                                    if (ecartRes.ok) {
+                                        const ecartData = await ecartRes.json();
+                                        if (ecartData.length > 0) {
+                                            setEcartBatches(ecartData.map(b => ({
+                                                batch_no: b.batch_no || '',
+                                                year_received: b.year_received || '',
+                                                source_fund: b.source_fund || '',
+                                                ecart_qty_laptops: b.ecart_qty_laptops || 0,
+                                                ecart_condition_laptops: b.ecart_condition_laptops || '',
+                                                ecart_has_smart_tv: !!b.ecart_has_smart_tv,
+                                                ecart_tv_size: b.ecart_tv_size || '',
+                                                ecart_condition_tv: b.ecart_condition_tv || '',
+                                                ecart_condition_charging: b.ecart_condition_charging || '',
+                                                ecart_condition_cabinet: b.ecart_condition_cabinet || ''
+                                            })));
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to load e-Cart batches", e);
                                 }
                             }
                         }
@@ -679,7 +716,8 @@ const SchoolResources = ({ embedded }) => {
             schoolId: schoolId || localStorage.getItem('schoolId'),
             uid: auth.currentUser.uid,
             ...formData,
-            spaces: formData.res_buildable_space === 'Yes' ? spaces : [] // Include spaces
+            spaces: formData.res_buildable_space === 'Yes' ? spaces : [], // Include spaces
+            ecartBatches: ecartBatches // Include e-Cart batches
         };
 
         // Sanitize Payload: Convert empty strings to 0 for numeric fields
@@ -689,7 +727,7 @@ const SchoolResources = ({ embedded }) => {
             'res_buildable_space', 'sha_category',
             'schoolId', 'uid'
         ];
-        const skipFields = ['spaces']; // Complex types handled by backend separately
+        const skipFields = ['spaces', 'ecartBatches']; // Complex types handled by backend separately
 
         const payload = {};
         Object.keys(rawPayload).forEach(key => {
@@ -704,6 +742,7 @@ const SchoolResources = ({ embedded }) => {
         });
         // Re-attach complex fields
         payload.spaces = rawPayload.spaces;
+        payload.ecartBatches = rawPayload.ecartBatches;
         payload.iern = iern || schoolId || localStorage.getItem('schoolId'); // Use IERN state first
 
         if (!payload.schoolId) {
@@ -817,10 +856,16 @@ const SchoolResources = ({ embedded }) => {
                         <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                             <FiPackage size={20} />
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <h2 className="text-slate-800 font-bold text-lg">Equipment & Inventory</h2>
                             <p className="text-xs text-slate-400 font-medium">Assets status audit</p>
                         </div>
+                        {ecartBatches.length > 0 && (
+                            <div className="text-right">
+                                <p className="text-lg font-extrabold text-indigo-600">{ecartBatches.reduce((sum, b) => sum + (parseInt(b.ecart_qty_laptops) || 0), 0)}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">e-Cart Laptops</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Functional / Non-Functional Table */}
@@ -834,7 +879,7 @@ const SchoolResources = ({ embedded }) => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50 bg-white">
-                                <ResourceAuditRow label="E-Cart" funcName="res_ecart_func" nonFuncName="res_ecart_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+
                                 <ResourceAuditRow label="Laptop" funcName="res_laptop_func" nonFuncName="res_laptop_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                 <ResourceAuditRow label="TV / Smart TV" funcName="res_tv_func" nonFuncName="res_tv_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                 <ResourceAuditRow label="Printers" funcName="res_printer_func" nonFuncName="res_printer_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
@@ -844,6 +889,95 @@ const SchoolResources = ({ embedded }) => {
                                 <ResourceAuditRow label="Hand Washing Stn" funcName="res_handwash_func" nonFuncName="res_handwash_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* E-CART BATCHES SECTION */}
+                    <div className="mt-6 pt-4 border-t border-slate-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">e-Cart Batches</p>
+                                <p className="text-[9px] text-slate-400 mt-0.5">Track multiple e-Cart deliveries by batch</p>
+                            </div>
+                            {!isLocked && !viewOnly && !isReadOnly && (
+                                <button
+                                    onClick={() => {
+                                        setCurrentEcart({ ...ECART_TEMPLATE });
+                                        setEditingEcartIdx(null);
+                                        setShowEcartModal(true);
+                                    }}
+                                    className="flex items-center gap-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-[11px] font-bold px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95"
+                                >
+                                    <FiPlus size={14} /> Add Batch
+                                </button>
+                            )}
+                        </div>
+
+                        {ecartBatches.length === 0 && (
+                            <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                <FiMonitor className="mx-auto text-slate-300 mb-2" size={28} />
+                                <p className="text-xs text-slate-400 font-medium">No e-Carts recorded yet.</p>
+                                {!isLocked && !viewOnly && !isReadOnly && (
+                                    <p className="text-[10px] text-slate-400 mt-1">Click <b>+ Add Batch</b> to add.</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Resource Cards */}
+                        <div className="space-y-3">
+                            {ecartBatches.map((batch, idx) => {
+                                const COND_STYLES = {
+                                    'Good': { cls: 'bg-emerald-50 text-emerald-600 border-emerald-200', icon: '✅' },
+                                    'Needs Repair': { cls: 'bg-amber-50 text-amber-600 border-amber-200', icon: '🔧' },
+                                    'For Replacement': { cls: 'bg-rose-50 text-rose-600 border-rose-200', icon: '🔄' }
+                                };
+                                const cond = COND_STYLES[batch.ecart_condition_laptops] || COND_STYLES['Good'];
+                                return (
+                                    <div key={idx} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                                        {/* Card Header */}
+                                        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-2.5 flex items-center justify-between">
+                                            <span className="text-white text-xs font-bold tracking-wide">e-Cart — {batch.batch_no || `Batch ${idx + 1}`}</span>
+                                            {!isLocked && !viewOnly && !isReadOnly && (
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            setCurrentEcart({ ...batch });
+                                                            setEditingEcartIdx(idx);
+                                                            setShowEcartModal(true);
+                                                        }}
+                                                        className="text-white/70 hover:text-white hover:bg-white/20 p-1 rounded-md transition-colors"
+                                                    >
+                                                        <FiTool size={13} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEcartBatches(prev => prev.filter((_, i) => i !== idx))}
+                                                        className="text-white/70 hover:text-white hover:bg-white/20 p-1 rounded-md transition-colors"
+                                                    >
+                                                        <FiTrash2 size={13} />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Card Body */}
+                                        <div className="px-4 py-3">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <FiMonitor className="text-indigo-400" size={16} />
+                                                    <span className="text-sm font-bold text-slate-800">{batch.ecart_qty_laptops || 0} Laptops</span>
+                                                </div>
+                                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${cond.cls}`}>
+                                                    {cond.icon} {batch.ecart_condition_laptops || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-3 text-[10px] text-slate-400">
+                                                {batch.source_fund && <span className="flex items-center gap-1"><FiPackage size={10} /> {batch.source_fund}</span>}
+                                                {batch.year_received && <span>• Year {batch.year_received}</span>}
+                                                {batch.ecart_has_smart_tv && <span>• 📺 TV {batch.ecart_tv_size || ''}</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Labs Section */}
@@ -1194,6 +1328,173 @@ const SchoolResources = ({ embedded }) => {
                         <div className="flex gap-3">
                             <button onClick={() => setShowEditModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
                             <button onClick={() => { setIsLocked(false); setShowEditModal(false); }} className="flex-1 py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 hover:bg-blue-800 transition-colors">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* E-CART ENTRY MODAL */}
+            {showEcartModal && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[70] flex items-end sm:items-center justify-center" onClick={(e) => e.target === e.currentTarget && setShowEcartModal(false)}>
+                    <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom duration-300">
+                        {/* Modal Header */}
+                        <div className="sticky top-0 bg-white z-10 px-6 pt-5 pb-3 border-b border-slate-100">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-bold text-lg text-slate-800">{editingEcartIdx !== null ? 'Edit' : 'Add'} e-Cart Batch</h3>
+                                <button onClick={() => setShowEcartModal(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors">&times;</button>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 space-y-5">
+
+                            {/* ─── SECTION 1: ACQUISITION ─── */}
+                            <div>
+                                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                    <FiPackage size={12} /> Acquisition
+                                </p>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div>
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Batch No. <span className="text-rose-400">*</span></label>
+                                        <input type="text" placeholder="e.g. Batch 40" value={currentEcart.batch_no}
+                                            onChange={(e) => setCurrentEcart(prev => ({ ...prev, batch_no: e.target.value }))}
+                                            className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Year Received</label>
+                                        <input type="text" inputMode="numeric" placeholder="e.g. 2024" value={currentEcart.year_received}
+                                            onChange={(e) => setCurrentEcart(prev => ({ ...prev, year_received: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) }))}
+                                            className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Source of Fund</label>
+                                    <select value={currentEcart.source_fund}
+                                        onChange={(e) => setCurrentEcart(prev => ({ ...prev, source_fund: e.target.value }))}
+                                        className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                        <option value="DepEd Central">DepEd Central</option>
+                                        <option value="LGU">LGU</option>
+                                        <option value="SEF">SEF</option>
+                                        <option value="Private Donor">Private Donor</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* ─── SECTION 2: LAPTOPS ─── */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                    <FiMonitor size={12} /> Laptops
+                                </p>
+                                <div className="mb-3">
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Quantity <span className="text-rose-400">*</span></label>
+                                    <input type="text" inputMode="numeric" placeholder="Number of laptops" value={currentEcart.ecart_qty_laptops}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                            setCurrentEcart(prev => ({ ...prev, ecart_qty_laptops: val }));
+                                        }}
+                                        className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Condition</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {['Good', 'Needs Repair', 'For Replacement'].map(opt => (
+                                            <button key={opt}
+                                                onClick={() => setCurrentEcart(prev => ({ ...prev, ecart_condition_laptops: opt }))}
+                                                className={`py-2.5 px-2 rounded-xl text-[11px] font-bold transition-all border ${currentEcart.ecart_condition_laptops === opt
+                                                    ? opt === 'Good' ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                                                        : opt === 'Needs Repair' ? 'bg-amber-50 border-amber-300 text-amber-700'
+                                                            : 'bg-rose-50 border-rose-300 text-rose-700'
+                                                    : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                                    }`}>
+                                                {opt === 'Good' ? '✅ Good' : opt === 'Needs Repair' ? '🔧 Repair' : '🔄 Replace'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ─── SECTION 3: MULTIMEDIA & POWER ─── */}
+                            <div className="pt-2 border-t border-slate-100">
+                                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                    <FiZap size={12} /> Multimedia & Power
+                                </p>
+
+                                {/* Smart TV Checkbox */}
+                                <label className="flex items-center gap-3 bg-slate-50 rounded-xl p-3 mb-3 cursor-pointer">
+                                    <input type="checkbox" checked={currentEcart.ecart_has_smart_tv}
+                                        onChange={(e) => setCurrentEcart(prev => ({ ...prev, ecart_has_smart_tv: e.target.checked, ecart_tv_size: e.target.checked ? prev.ecart_tv_size : '', ecart_condition_tv: e.target.checked ? prev.ecart_condition_tv : '' }))}
+                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                                    <span className="text-sm font-medium text-slate-700">Includes Smart TV</span>
+                                </label>
+
+                                {/* Conditional TV Fields */}
+                                {currentEcart.ecart_has_smart_tv && (
+                                    <div className="grid grid-cols-2 gap-3 mb-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div>
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">TV Size</label>
+                                            <input type="text" placeholder="e.g. 55-inch" value={currentEcart.ecart_tv_size}
+                                                onChange={(e) => setCurrentEcart(prev => ({ ...prev, ecart_tv_size: e.target.value }))}
+                                                className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">TV Condition</label>
+                                            <select value={currentEcart.ecart_condition_tv}
+                                                onChange={(e) => setCurrentEcart(prev => ({ ...prev, ecart_condition_tv: e.target.value }))}
+                                                className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                                <option value="">-- Select --</option>
+                                                <option value="Functional">Functional</option>
+                                                <option value="Defective">Defective</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Cabinet & Charging */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Charging Station</label>
+                                        <select value={currentEcart.ecart_condition_charging}
+                                            onChange={(e) => setCurrentEcart(prev => ({ ...prev, ecart_condition_charging: e.target.value }))}
+                                            className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                            <option value="">-- Select --</option>
+                                            <option value="Functional">Functional</option>
+                                            <option value="Defective">Defective</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Cabinet</label>
+                                        <select value={currentEcart.ecart_condition_cabinet}
+                                            onChange={(e) => setCurrentEcart(prev => ({ ...prev, ecart_condition_cabinet: e.target.value }))}
+                                            className="w-full text-sm font-medium text-slate-800 bg-white border border-slate-200 rounded-xl py-2.5 px-3 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                            <option value="">-- Select --</option>
+                                            <option value="Secure">Secure</option>
+                                            <option value="Broken Lock">Broken Lock</option>
+                                            <option value="Damaged Wheels">Damaged Wheels</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex gap-3">
+                            <button onClick={() => setShowEcartModal(false)}
+                                className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">
+                                Cancel
+                            </button>
+                            <button
+                                disabled={!currentEcart.batch_no.trim() || !currentEcart.ecart_qty_laptops}
+                                onClick={() => {
+                                    const entry = { ...currentEcart, ecart_qty_laptops: parseInt(currentEcart.ecart_qty_laptops) || 0 };
+                                    if (editingEcartIdx !== null) {
+                                        setEcartBatches(prev => prev.map((b, i) => i === editingEcartIdx ? entry : b));
+                                    } else {
+                                        setEcartBatches(prev => [...prev, entry]);
+                                    }
+                                    setShowEcartModal(false);
+                                }}
+                                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                                {editingEcartIdx !== null ? 'Update Batch' : 'Add Batch'}
+                            </button>
                         </div>
                     </div>
                 </div>
