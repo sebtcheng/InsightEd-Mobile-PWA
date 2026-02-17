@@ -33,6 +33,7 @@ const AUTHORIZATION_CODES = {
     'School Division Office': 'Q9D2-R4J6',
     'Division Engineer': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
+    'Central Office Finance': '8XK2-M9P4', // Same as Central Office
     'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
     'Admin': 'A3M6-Y1K8'
@@ -50,6 +51,7 @@ const getDashboardPath = (role) => {
         'Central Office': '/monitoring-dashboard',
         'Regional Office': '/monitoring-dashboard',
         'School Division Office': '/monitoring-dashboard',
+        'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
     };
     return roleMap[role] || '/';
@@ -644,6 +646,7 @@ const Register = () => {
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
+                                        <option value="Central Office Finance">Central Office Finance</option>
                                         {/* <option value="Super User" hidden>Super User</option> */}
                                         {/* Super User hidden from registration - managed internally */}
                                         {/* {<option value="Admin">Admin</option>} */}
