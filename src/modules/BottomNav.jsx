@@ -30,7 +30,7 @@ const BottomNav = ({ userRole }) => {
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'Local Government Unit': [
-            { label: 'Projects', path: '/lgu-projects', icon: TbClipboardList },
+            { label: 'Projects', path: '/lgu-dashboard', icon: TbClipboardList },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
         'School Head': [
@@ -67,7 +67,12 @@ const BottomNav = ({ userRole }) => {
             { label: 'InsightED', path: '/monitoring-dashboard', state: { activeTab: 'accomplishment', resetFilters: true }, icon: TbHomeEdit },
             { label: 'Infra Projects', path: '/monitoring-dashboard', state: { activeTab: 'infra', resetFilters: true }, icon: TbClipboardList },
             { label: 'Settings', path: '/profile', icon: FiSettings },
-        ]
+        ],
+        'Central Office Finance': [
+            { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
+            { label: 'Settings', path: '/profile', icon: FiSettings },
+        ],
+
     };
 
     const currentNavItems = navConfigs[effectiveRole];
