@@ -571,6 +571,29 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init facility_repairs table:`, migErr.message);
     }
+
+    // --- 16. FACILITY INVENTORY TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS facility_inventory (
+                id SERIAL PRIMARY KEY,
+                school_id TEXT,
+                iern TEXT,
+                building_name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                status TEXT NOT NULL,
+                no_of_storeys INTEGER DEFAULT 1,
+                no_of_classrooms INTEGER NOT NULL,
+                year_completed INTEGER,
+                remarks TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_facility_inventory_iern ON facility_inventory(iern);`);
+        console.log(`✅ [${dbLabel}] Facility Inventory Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init facility_inventory table:`, migErr.message);
+    }
 };
 
 export { initOtpTable, runMigrations };
