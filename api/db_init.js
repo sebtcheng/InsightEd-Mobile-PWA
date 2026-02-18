@@ -571,6 +571,46 @@ const runMigrations = async (client, dbLabel) => {
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init facility_repairs table:`, migErr.message);
     }
+    // --- 16. FINANCE PROJECTS TABLE ---
+    try {
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS finance_projects (
+                finance_id SERIAL PRIMARY KEY,
+                school_id TEXT NOT NULL,
+                school_name TEXT,
+                project_name TEXT,
+                region TEXT,
+                division TEXT,
+                municipality TEXT,
+                district TEXT,
+                legislative_district TEXT,
+                total_funds NUMERIC,
+                fund_released NUMERIC,
+                date_of_release TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                root_id TEXT
+            );
+        `);
+        // --- MIGRATION: ADD updated_at and root_id if missing ---
+        await client.query(`
+            ALTER TABLE finance_projects 
+            ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS root_id TEXT;
+        `);
+
+        // --- MIGRATION: BACKFILL root_id ---
+        // If root_id is NULL, set it to 'FIN-' + finance_id
+        await client.query(`
+            UPDATE finance_projects 
+            SET root_id = 'FIN-' || finance_id 
+            WHERE root_id IS NULL;
+        `);
+
+        console.log(`✅ [${dbLabel}] Finance Projects Table Initialized`);
+    } catch (migErr) {
+        console.error(`❌ [${dbLabel}] Failed to init finance_projects table:`, migErr.message);
+    }
 };
 
 export { initOtpTable, runMigrations };

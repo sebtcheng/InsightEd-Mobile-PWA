@@ -44,7 +44,7 @@ import locationData from './locations.json';
 const getDashboardPath = (role) => {
     const roleMap = {
         'Division Engineer': '/engineer-dashboard',
-        'Local Government Unit': '/lgu-form',
+        'Local Government Unit': '/lgu-dashboard',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Admin': '/admin-dashboard',
@@ -600,6 +600,8 @@ const Register = () => {
                 setRegisteredIern(regData.iern);
                 setShowSuccessModal(true);
             } else {
+                // Set role in localStorage for immediate access by Dashboard/BottomNav
+                localStorage.setItem('userRole', formData.role);
                 navigate(getDashboardPath(formData.role));
             }
 
