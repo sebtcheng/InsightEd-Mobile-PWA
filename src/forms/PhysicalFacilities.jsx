@@ -112,6 +112,107 @@ const DemolitionEntryModal = ({ isOpen, onClose, onSave, data, setData }) => {
     );
 };
 
+// --- BUILDING INVENTORY MODAL ---
+const CATEGORY_OPTIONS = [
+    'New Construction', 'Electrification', 'Health', 'QRF',
+    'LMS', 'ALS-CLC', 'Gabaldon', 'Repairs'
+];
+
+const defaultInventoryData = {
+    building_name: '', category: 'New Construction',
+    no_of_storeys: 1, no_of_classrooms: '', year_completed: '', remarks: ''
+};
+
+const BuildingInventoryModal = ({ isOpen, onClose, onSave, data, setData, statusLabel, isEditing }) => {
+    if (!isOpen) return null;
+
+    const canSave = data.building_name.trim() &&
+        data.no_of_classrooms !== '' && Number(data.no_of_classrooms) > 0;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[80] flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 className="font-bold text-lg text-slate-800">{isEditing ? 'Edit' : 'Add'} {statusLabel} Building</h3>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center transition-colors">✕</button>
+                </div>
+
+                <div className="p-6 overflow-y-auto space-y-4">
+                    {/* Building Name */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Building Name *</label>
+                        <input type="text" value={data.building_name}
+                            onChange={(e) => setData({ ...data, building_name: e.target.value })}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all"
+                            placeholder="e.g. Building A" autoFocus />
+                    </div>
+
+                    {/* Category Dropdown */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Category *</label>
+                        <select value={data.category}
+                            onChange={(e) => setData({ ...data, category: e.target.value })}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all">
+                            {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Storey & Classrooms — Side by Side */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Storeys</label>
+                            <input type="number" min="1" max="999" value={data.no_of_storeys}
+                                onChange={(e) => { const v = parseInt(e.target.value) || 1; setData({ ...data, no_of_storeys: Math.min(v, 999) }); }}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all text-center" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Classrooms *</label>
+                            <input type="number" min="1" max="999" value={data.no_of_classrooms}
+                                onChange={(e) => { if (e.target.value === '') { setData({ ...data, no_of_classrooms: '' }); return; } const v = parseInt(e.target.value) || 0; setData({ ...data, no_of_classrooms: Math.min(v, 999) }); }}
+                                className={`w-full p-3 bg-slate-50 border rounded-xl font-bold text-slate-700 outline-none focus:ring-4 transition-all text-center ${data.no_of_classrooms === '' || Number(data.no_of_classrooms) <= 0
+                                    ? 'border-red-300 focus:ring-red-100 focus:border-red-300'
+                                    : 'border-slate-200 focus:ring-blue-100 focus:border-blue-200'
+                                    }`}
+                                placeholder="Req." />
+                        </div>
+                    </div>
+                    {(data.no_of_classrooms === '' || Number(data.no_of_classrooms) <= 0) &&
+                        <p className="text-red-500 text-xs font-semibold -mt-2">⚠️ No. of Classrooms is required</p>}
+
+                    {/* Year Completed (Dropdown) */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Year Completed</label>
+                        <select value={data.year_completed}
+                            onChange={(e) => setData({ ...data, year_completed: e.target.value === '' ? '' : parseInt(e.target.value) })}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all">
+                            <option value="">— Select Year —</option>
+                            {Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Remarks */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Remarks</label>
+                        <textarea value={data.remarks}
+                            onChange={(e) => setData({ ...data, remarks: e.target.value })}
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all resize-none"
+                            rows={2} placeholder="Optional notes..." />
+                    </div>
+                </div>
+
+                <div className="p-5 border-t border-slate-100 bg-slate-50/50">
+                    <button onClick={onSave} disabled={!canSave}
+                        className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all disabled:opacity-50 disabled:shadow-none">
+                        {isEditing ? '✔ Update Building' : '+ Add Building'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const PhysicalFacilities = ({ embedded }) => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -163,6 +264,60 @@ const PhysicalFacilities = ({ embedded }) => {
     });
     const [isDemolitionSubmitted, setIsDemolitionSubmitted] = useState(false);
     const [isLoadingDemolitions, setIsLoadingDemolitions] = useState(false);
+
+    // --- BUILDING INVENTORY DATA ---
+    const [newlyBuiltBuildings, setNewlyBuiltBuildings] = useState([]);
+    const [goodConditionBuildings, setGoodConditionBuildings] = useState([]);
+    const [showInventoryModal, setShowInventoryModal] = useState(false);
+    const [inventoryModalData, setInventoryModalData] = useState({ ...defaultInventoryData });
+    const [inventoryModalTarget, setInventoryModalTarget] = useState('new'); // 'new' or 'good'
+    const [editingInventoryIdx, setEditingInventoryIdx] = useState(null); // null = adding, number = editing index
+    const [isLoadingInventory, setIsLoadingInventory] = useState(false);
+
+    const openAddInventory = (target) => {
+        setInventoryModalData({ ...defaultInventoryData });
+        setInventoryModalTarget(target);
+        setEditingInventoryIdx(null);
+        setShowInventoryModal(true);
+    };
+
+    const openEditInventory = (target, idx) => {
+        const list = target === 'new' ? newlyBuiltBuildings : goodConditionBuildings;
+        setInventoryModalData({ ...list[idx] });
+        setInventoryModalTarget(target);
+        setEditingInventoryIdx(idx);
+        setShowInventoryModal(true);
+    };
+
+    const saveInventoryFromModal = () => {
+        if (editingInventoryIdx !== null) {
+            // Update existing entry
+            const updater = (prev) => prev.map((item, i) => i === editingInventoryIdx ? { ...inventoryModalData, id: item.id } : item);
+            if (inventoryModalTarget === 'new') {
+                setNewlyBuiltBuildings(updater);
+            } else {
+                setGoodConditionBuildings(updater);
+            }
+        } else {
+            // Add new entry
+            const entry = { ...inventoryModalData, id: Date.now() };
+            if (inventoryModalTarget === 'new') {
+                setNewlyBuiltBuildings(prev => [...prev, entry]);
+            } else {
+                setGoodConditionBuildings(prev => [...prev, entry]);
+            }
+        }
+        setEditingInventoryIdx(null);
+        setShowInventoryModal(false);
+    };
+
+    const removeInventoryBuilding = (target, idx) => {
+        if (target === 'new') {
+            setNewlyBuiltBuildings(prev => prev.filter((_, i) => i !== idx));
+        } else {
+            setGoodConditionBuildings(prev => prev.filter((_, i) => i !== idx));
+        }
+    };
 
 
     const repairItems = [
@@ -439,6 +594,35 @@ const PhysicalFacilities = ({ embedded }) => {
         fetchDemolitions();
     }, [schoolIdParam]);
 
+    // --- HYDRATE BUILDING INVENTORY ---
+    useEffect(() => {
+        const fetchInventory = async () => {
+            const iern = queryParams.get('schoolId') || localStorage.getItem('schoolId');
+            if (!iern) return;
+
+            setIsLoadingInventory(true);
+            try {
+                const res = await fetch(`/api/facility-inventory/${iern}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('📦 Inventory API response:', data.length, 'rows, statuses:', [...new Set(data.map(d => d.status))]);
+                    const newBuildings = data.filter(d => d.status === 'Newly Built' || d.status === 'New').map((d, i) => ({ id: Date.now() + i, ...d }));
+                    const goodBuildings = data.filter(d => d.status === 'Good Condition' || d.status === 'Good').map((d, i) => ({ id: Date.now() + 1000 + i, ...d }));
+                    console.log('📦 Filtered:', newBuildings.length, 'new,', goodBuildings.length, 'good');
+                    setNewlyBuiltBuildings(newBuildings);
+                    setGoodConditionBuildings(goodBuildings);
+                } else {
+                    console.error('📦 Inventory API error:', res.status);
+                }
+            } catch (e) {
+                console.error("Failed to fetch inventory", e);
+            } finally {
+                setIsLoadingInventory(false);
+            }
+        };
+        fetchInventory();
+    }, [schoolIdParam]);
+
     // --- CHECK PENDING REPAIRS ON MOUNT ---
     useEffect(() => {
         const checkPending = async () => {
@@ -460,6 +644,22 @@ const PhysicalFacilities = ({ embedded }) => {
             setFormData(prev => ({ ...prev, build_classrooms_repair: totalRooms }));
         }
     }, [facilityData]);
+
+    // --- SYNC NEW BUILDING COUNT FROM INVENTORY ---
+    useEffect(() => {
+        const totalNew = newlyBuiltBuildings.reduce((sum, b) => sum + (Number(b.no_of_classrooms) || 0), 0);
+        if (totalNew !== (formData.build_classrooms_new || 0)) {
+            setFormData(prev => ({ ...prev, build_classrooms_new: totalNew }));
+        }
+    }, [newlyBuiltBuildings]);
+
+    // --- SYNC GOOD BUILDING COUNT FROM INVENTORY ---
+    useEffect(() => {
+        const totalGood = goodConditionBuildings.reduce((sum, b) => sum + (Number(b.no_of_classrooms) || 0), 0);
+        if (totalGood !== (formData.build_classrooms_good || 0)) {
+            setFormData(prev => ({ ...prev, build_classrooms_good: totalGood }));
+        }
+    }, [goodConditionBuildings]);
 
     // --- FETCH AND HYDRATE REPAIRS ---
     useEffect(() => {
@@ -801,7 +1001,11 @@ const PhysicalFacilities = ({ embedded }) => {
             uid: auth.currentUser.uid,
             ...formData,
             repairEntries,
-            demolitionEntries: demolitionData
+            demolitionEntries: demolitionData,
+            inventoryEntries: [
+                ...newlyBuiltBuildings.map(b => ({ ...b, status: 'Newly Built' })),
+                ...goodConditionBuildings.map(b => ({ ...b, status: 'Good Condition' }))
+            ]
         };
 
         try {
@@ -888,11 +1092,219 @@ const PhysicalFacilities = ({ embedded }) => {
                     <p className="text-[10px] text-slate-400 mt-2 font-medium">Overall count in the school</p>
                 </div>
 
-                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
-                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
+                <InputCard label="Newly Built" name="build_classrooms_new" icon="✨" color="bg-emerald-500 text-emerald-600" value={formData.build_classrooms_new ?? 0} onChange={handleChange} disabled={true} />
+                <p className="text-[10px] text-emerald-400 font-semibold -mt-2 ml-1 flex items-center gap-1">✨ Calculated from buildings added below</p>
+                <InputCard label="Good Condition" name="build_classrooms_good" icon="✅" color="bg-blue-500 text-blue-600" value={formData.build_classrooms_good ?? 0} onChange={handleChange} disabled={true} />
+                <p className="text-[10px] text-blue-400 font-semibold -mt-2 ml-1 flex items-center gap-1">✨ Calculated from buildings added below</p>
                 <InputCard label="Needs Repair" name="build_classrooms_repair" icon="🛠️" color="bg-orange-500 text-orange-600" value={formData.build_classrooms_repair ?? 0} onChange={handleChange} disabled={true} />
                 <p className="text-[10px] text-orange-400 font-semibold -mt-2 ml-1 flex items-center gap-1">✨ Calculated from rooms added below</p>
                 <InputCard label="Needs Demolition" name="build_classrooms_demolition" icon="⚠️" color="bg-red-500 text-red-600" value={formData.build_classrooms_demolition ?? 0} onChange={handleChange} disabled={isLocked || viewOnly || isReadOnly} />
+
+                {/* --- NEWLY BUILT BUILDINGS SECTION --- */}
+                <div className="bg-white p-6 rounded-3xl shadow-xl shadow-emerald-900/5 border border-emerald-100 mt-6 relative overflow-hidden">
+                    {isLoadingInventory && (
+                        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
+                            <div className="w-8 h-8 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin" />
+                            <p className="text-xs font-bold text-emerald-600 animate-pulse">Loading buildings...</p>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-3 mb-5">
+                        <div className="p-3 bg-emerald-100 rounded-2xl text-2xl">✨</div>
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800">Newly Built Buildings</h2>
+                            <p className="text-xs text-slate-400 font-medium">Buildings recently constructed or completed</p>
+                        </div>
+                    </div>
+
+                    {!isReadOnly && !isLocked && (
+                        <div className="mb-4">
+                            <button onClick={() => openAddInventory('new')}
+                                className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors text-sm shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2">
+                                <FiPlus /> Add Newly Built Building
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        {newlyBuiltBuildings.map((item, idx) => (
+                            <div key={item.id} className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50/30 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                {/* Card Header */}
+                                <div className="px-4 pt-4 pb-2 flex items-start justify-between">
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">{item.category}</span>
+                                        <h4 className="font-bold text-slate-800 text-[15px] mt-1.5 truncate">{item.building_name}</h4>
+                                    </div>
+                                    {!isReadOnly && !isLocked && (
+                                        <div className="flex items-center gap-1 ml-2 shrink-0">
+                                            <button onClick={() => openEditInventory('new', idx)} className="w-7 h-7 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
+                                                <FiEdit size={13} />
+                                            </button>
+                                            <button onClick={() => removeInventoryBuilding('new', idx)} className="w-7 h-7 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
+                                                <FiTrash2 size={13} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {/* Card Body */}
+                                <div className="px-4 py-2 flex items-center gap-4 text-slate-500">
+                                    <span className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <FiLayout size={13} className="text-purple-400" /> {item.no_of_storeys || 1} Storey{(item.no_of_storeys || 1) !== 1 ? 's' : ''}
+                                    </span>
+                                    <span className="text-slate-200">|</span>
+                                    <span className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <FiBox size={13} className="text-blue-400" /> {item.no_of_classrooms} Classroom{item.no_of_classrooms !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                {/* Card Footer */}
+                                {(item.year_completed || item.remarks) && (
+                                    <div className="px-4 pb-3 pt-1 flex items-center gap-3 border-t border-slate-100/80 mt-1">
+                                        {item.year_completed && <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1"><FiClock size={10} /> Built {item.year_completed}</span>}
+                                        {item.remarks && <p className="text-[10px] text-slate-400 font-medium truncate flex-1">📝 {item.remarks}</p>}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {newlyBuiltBuildings.length === 0 && (
+                            <div className="text-center py-8 text-slate-400 text-sm">
+                                <p className="text-xl mb-2">🏗️</p>
+                                <p>No newly built buildings added.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* --- GOOD CONDITION BUILDINGS SECTION --- */}
+                <div className="bg-white p-6 rounded-3xl shadow-xl shadow-blue-900/5 border border-blue-100 mt-6 relative overflow-hidden">
+                    {isLoadingInventory && (
+                        <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center gap-3">
+                            <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+                            <p className="text-xs font-bold text-blue-600 animate-pulse">Loading buildings...</p>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-3 mb-5">
+                        <div className="p-3 bg-blue-100 rounded-2xl text-2xl">✅</div>
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800">Good Condition Buildings</h2>
+                            <p className="text-xs text-slate-400 font-medium">Buildings in good working condition</p>
+                        </div>
+                    </div>
+
+                    {!isReadOnly && !isLocked && (
+                        <div className="mb-4">
+                            <button onClick={() => openAddInventory('good')}
+                                className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl hover:bg-blue-600 transition-colors text-sm shadow-md shadow-blue-500/20 flex items-center justify-center gap-2">
+                                <FiPlus /> Add Good Condition Building
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        {goodConditionBuildings.map((item, idx) => (
+                            <div key={item.id} className="rounded-2xl border border-blue-100 bg-gradient-to-br from-white to-blue-50/30 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                {/* Card Header */}
+                                <div className="px-4 pt-4 pb-2 flex items-start justify-between">
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">{item.category}</span>
+                                        <h4 className="font-bold text-slate-800 text-[15px] mt-1.5 truncate">{item.building_name}</h4>
+                                    </div>
+                                    {!isReadOnly && !isLocked && (
+                                        <div className="flex items-center gap-1 ml-2 shrink-0">
+                                            <button onClick={() => openEditInventory('good', idx)} className="w-7 h-7 rounded-lg bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Edit">
+                                                <FiEdit size={13} />
+                                            </button>
+                                            <button onClick={() => removeInventoryBuilding('good', idx)} className="w-7 h-7 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center transition-colors" title="Delete">
+                                                <FiTrash2 size={13} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {/* Card Body */}
+                                <div className="px-4 py-2 flex items-center gap-4 text-slate-500">
+                                    <span className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <FiLayout size={13} className="text-purple-400" /> {item.no_of_storeys || 1} Storey{(item.no_of_storeys || 1) !== 1 ? 's' : ''}
+                                    </span>
+                                    <span className="text-slate-200">|</span>
+                                    <span className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <FiBox size={13} className="text-blue-400" /> {item.no_of_classrooms} Classroom{item.no_of_classrooms !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                {/* Card Footer */}
+                                {(item.year_completed || item.remarks) && (
+                                    <div className="px-4 pb-3 pt-1 flex items-center gap-3 border-t border-slate-100/80 mt-1">
+                                        {item.year_completed && <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1"><FiClock size={10} /> Built {item.year_completed}</span>}
+                                        {item.remarks && <p className="text-[10px] text-slate-400 font-medium truncate flex-1">📝 {item.remarks}</p>}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {goodConditionBuildings.length === 0 && (
+                            <div className="text-center py-8 text-slate-400 text-sm">
+                                <p className="text-xl mb-2">🏢</p>
+                                <p>No good condition buildings added.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* --- BUILDING INVENTORY SUMMARY --- */}
+                {(newlyBuiltBuildings.length > 0 || goodConditionBuildings.length > 0) && (
+                    <div className="bg-white p-6 rounded-3xl shadow-xl shadow-indigo-900/5 border border-indigo-100 mt-6 relative overflow-hidden">
+                        {/* Accent bar */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-400" />
+
+                        <div className="flex items-center gap-3 mb-5 mt-1">
+                            <div className="p-3 bg-indigo-100 rounded-2xl text-2xl">📊</div>
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-800">Building Inventory Summary</h2>
+                                <p className="text-xs text-slate-400 font-medium">Breakdown of all buildings by category</p>
+                            </div>
+                        </div>
+
+                        {/* Category breakdown */}
+                        {(() => {
+                            const allBuildings = [...newlyBuiltBuildings, ...goodConditionBuildings];
+                            const catMap = {};
+                            allBuildings.forEach(b => {
+                                if (!catMap[b.category]) catMap[b.category] = { count: 0, classrooms: 0 };
+                                catMap[b.category].count += 1;
+                                catMap[b.category].classrooms += Number(b.no_of_classrooms) || 0;
+                            });
+                            const categories = Object.entries(catMap).sort((a, b) => b[1].count - a[1].count);
+                            const totalBuildings = allBuildings.length;
+                            const totalClassrooms = allBuildings.reduce((sum, b) => sum + (Number(b.no_of_classrooms) || 0), 0);
+
+                            return (
+                                <>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {categories.map(([cat, info]) => (
+                                            <div key={cat} className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+                                                <span className="text-sm font-black text-indigo-600">{info.count}</span>
+                                                <div>
+                                                    <p className="text-xs font-bold text-slate-700 leading-tight">{cat}</p>
+                                                    <p className="text-[10px] text-slate-400 font-medium">{info.classrooms} classroom{info.classrooms !== 1 ? 's' : ''}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="flex items-center gap-4 pt-3 border-t border-slate-100">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                                            <span className="text-xs font-bold text-slate-500">{newlyBuiltBuildings.length} Newly Built</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-blue-400" />
+                                            <span className="text-xs font-bold text-slate-500">{goodConditionBuildings.length} Good Condition</span>
+                                        </div>
+                                        <div className="ml-auto text-right">
+                                            <p className="text-xs font-bold text-slate-400">{totalBuildings} Building{totalBuildings !== 1 ? 's' : ''} · {totalClassrooms} Classroom{totalClassrooms !== 1 ? 's' : ''}</p>
+                                        </div>
+                                    </div>
+                                </>
+                            );
+                        })()}
+                    </div>
+                )}
 
                 {/* --- FACILITY REPAIR ASSESSMENT SECTION --- */}
                 {!viewOnly && (
@@ -1194,6 +1606,16 @@ const PhysicalFacilities = ({ embedded }) => {
                 setRoomModalData={setRoomModalData}
                 repairItems={repairItems}
                 readOnly={isReadOnly || roomModalData.saved}
+            />
+
+            <BuildingInventoryModal
+                isOpen={showInventoryModal}
+                onClose={() => { setShowInventoryModal(false); setEditingInventoryIdx(null); }}
+                onSave={saveInventoryFromModal}
+                data={inventoryModalData}
+                setData={setInventoryModalData}
+                statusLabel={inventoryModalTarget === 'new' ? 'Newly Built' : 'Good Condition'}
+                isEditing={editingInventoryIdx !== null}
             />
 
             <DemolitionEntryModal

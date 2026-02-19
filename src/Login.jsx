@@ -20,7 +20,7 @@ const getDashboardPath = (role) => {
     const roleMap = {
         'Division Engineer': '/engineer-dashboard',
         'Engineer': '/engineer-dashboard',
-        'Local Government Unit': '/lgu-form',
+        'Local Government Unit': '/lgu-dashboard',
         'School Head': '/schoolhead-dashboard',
         'Human Resource': '/hr-dashboard',
         'Regional Office': '/monitoring-dashboard',
@@ -28,6 +28,7 @@ const getDashboardPath = (role) => {
         'Admin': '/admin-dashboard',
         'Super Admin': '/super-admin',
         'Central Office': '/monitoring-dashboard',
+        'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
     };
     return roleMap[role] || '/';
@@ -481,23 +482,9 @@ const Login = () => {
                     console.log("Navigating to SchoolHeadDashboard");
                     navigate('/schoolhead-dashboard');
                 } else if (role === 'Local Government Unit') {
-                    // --- LGU LOGIC: Check for existing projects ---
-                    console.log("Checking LGU projects via UID...");
-                    try {
-                        const res = await fetch(`/api/lgu/projects?uid=${uid}`);
-                        const data = await res.json();
-
-                        if (res.ok && Array.isArray(data) && data.length > 0) {
-                            console.log(`LGU has ${data.length} projects. Redirecting to List.`);
-                            navigate('/lgu-projects');
-                        } else {
-                            console.log("LGU has 0 projects. Redirecting to Form.");
-                            navigate('/lgu-form');
-                        }
-                    } catch (err) {
-                        console.warn("LGU project check failed, defaulting to Form.", err);
-                        navigate('/lgu-form');
-                    }
+                    // --- LGU LOGIC: Redirect to LGU Dashboard ---
+                    console.log("Redirecting LGU to Dashboard...");
+                    navigate('/lgu-dashboard');
                 } else {
                     const path = getDashboardPath(role);
                     console.log("Navigating to:", path);

@@ -15,9 +15,9 @@ import Register from './Register';
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
 import EngineerProjects from './modules/EngineerProjects';
-import LguDashboard from './modules/lgu'; // Import LguDashboard
-import LguForm from './modules/LguForm';
-import LguProjects from './modules/LguProjects';
+
+// import LguDashboard from './modules/lgu'; // Import LguDashboard
+// import LguProjects from './modules/LguProjects';
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
 import HRDashboard from './modules/HRDashboard';
 import AdminDashboard from './modules/AdminDashboard';
@@ -33,7 +33,10 @@ import Outbox from './modules/Outbox';
 import EngineerOutbox from './modules/EngineerOutbox';
 import SuperAdminDashboard from './modules/SuperAdminDashboard';
 import SuperUserSelector from './modules/SuperUserSelector';
-// Import Banner
+import FinanceDashboard from './modules/FinanceDashboard'; // Import FinanceDashboard
+import LguDashboard from './modules/LguDashboard'; // Import LguDashboard
+import LguForms from './modules/LguForms'; // Import newly created LguForms
+import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
 
 
@@ -106,11 +109,15 @@ const AnimatedRoutes = () => {
 
         {/* Dashboards */}
         <Route path="/engineer-dashboard" element={<EngineerDashboard />} />
-        <Route path="/lgu" element={<LguDashboard />} />
-        <Route path="/lgu-form" element={<LguForm />} />
-        <Route path="/lgu-projects" element={<LguProjects />} />
+        {/* <Route path="/lgu" element={<LguDashboard />} /> */}
+        {/* <Route path="/lgu-form" element={<LguForm />} /> */}
+        {/* <Route path="/lgu-projects" element={<LguProjects />} /> */}
         <Route path="/engineer-projects" element={<EngineerProjects />} />
         <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        <Route path="/finance-dashboard" element={<FinanceDashboard />} />
+        <Route path="/lgu-dashboard" element={<LguDashboard />} />
+        <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
+        <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
 
         {/* Super User Selector (Protected) */}
         <Route
