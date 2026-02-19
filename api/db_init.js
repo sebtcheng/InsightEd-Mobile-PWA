@@ -610,6 +610,7 @@ const runMigrations = async (client, dbLabel) => {
         console.log(`✅ [${dbLabel}] Finance Projects Table Initialized`);
     } catch (migErr) {
         console.error(`❌ [${dbLabel}] Failed to init finance_projects table:`, migErr.message);
+    }
 
     // --- 16. FACILITY INVENTORY TABLE ---
     try {
