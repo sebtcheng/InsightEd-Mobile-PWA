@@ -52,7 +52,7 @@ const SchoolManagement = () => {
     const navigate = useNavigate();
     const [userData, setUserData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [activeView, setActiveView] = useState('form'); // 'form' or 'requests'
+    const [activeView, setActiveView] = useState('form'); // 'form', 'converted', or 'requests'
 
     // Form State - matching exact schools table schema
     const [formData, setFormData] = useState({
@@ -69,12 +69,20 @@ const SchoolManagement = () => {
         special_order: '', // PDF URL
     });
 
+    // Converted/Transferred Schools State
+    const [convertedDivision, setConvertedDivision] = useState('');
+    const [divisionOptions, setDivisionOptions] = useState([]);
+    const [masterSchoolOptions, setMasterSchoolOptions] = useState([]);
+    const [selectedMasterSchool, setSelectedMasterSchool] = useState('');
+
     const [mapPosition, setMapPosition] = useState([14.5995, 120.9842]); // Default: Manila
     const [mapZoom, setMapZoom] = useState(13);
     const [mapStatus, setMapStatus] = useState(''); // Idle, Searching..., Found
     const [submitting, setSubmitting] = useState(false);
     const [pendingSchools, setPendingSchools] = useState([]);
     const [uploading, setUploading] = useState(false);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [isConverting, setIsConverting] = useState(false);
 
     // Confirmation Modal State
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -131,6 +139,7 @@ const SchoolManagement = () => {
                 // Fetch location options for this user's region/division
                 fetchLocationOptions(data.region, data.division);
                 fetchLocationCoordinates(data.region, data.division);
+                fetchDivisions(data.region); // Fetch divisions for converted school tab
             }
             setLoading(false);
         };
@@ -138,6 +147,101 @@ const SchoolManagement = () => {
         fetchUserData();
         fetchPendingSchools();
     }, [navigate]);
+
+    const fetchDivisions = async (region) => {
+        try {
+            const res = await fetch(`/api/locations/divisions?region=${encodeURIComponent(region)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setDivisionOptions(data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch divisions:', err);
+        }
+    };
+
+    const fetchMasterSchools = async (division) => {
+        if (!division) return;
+        try {
+            const res = await fetch(`/api/master-list/schools?division=${encodeURIComponent(division)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setMasterSchoolOptions(data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch master schools:', err);
+        }
+    };
+
+    const handleSearchSchool = async () => {
+        if (!selectedMasterSchool || selectedMasterSchool.length !== 6) {
+            alert("Please enter a valid 6-digit School ID.");
+            return;
+        }
+
+        setSearchLoading(true);
+        try {
+            const res = await fetch(`/api/master-list/school/${selectedMasterSchool}`);
+            if (res.ok) {
+                const school = await res.json();
+                // Autofill Form
+                setFormData(prev => ({
+                    ...prev,
+                    school_id: school.school_id,
+                    school_name: school.school_name || '',
+                    district: school.district || '',
+                    province: school.province || '',
+                    municipality: school.municipality || '',
+                    leg_district: school.leg_district || '',
+                    barangay: school.barangay || '',
+                    street_address: school.address || '',
+                    curricular_offering: school.curricular_offering_classification || '',
+                }));
+                setIsConverting(true);
+                // Keep activeView as 'converted'
+                alert("School details autofilled! Please verify the location on the map and attach the Special Order.");
+            } else {
+                alert("School not found in Master List.");
+            }
+        } catch (err) {
+            console.error("Search failed:", err);
+            alert("An error occurred while searching for the school.");
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+
+    const handleMasterSchoolChange = (e) => {
+        const schoolId = e.target.value;
+        setSelectedMasterSchool(schoolId);
+
+        const school = masterSchoolOptions.find(s => s.school_id === schoolId);
+        if (school) {
+            // Autofill Form
+            setFormData(prev => ({
+                ...prev,
+                school_id: school.school_id,
+                school_name: school.school_name || '',
+                district: school.district || '',
+                province: school.province || '', // Note: Master list might not have province/municipality columns if they are not in the 'schools' table.
+                municipality: school.municipality || '', // If these refer to columns in 'schools' table, ensure they exist.
+                leg_district: school.leg_district || '',
+                barangay: school.barangay || '',
+                street_address: school.address || '', // Check if column is address or street_address
+                curricular_offering: school.curricular_offering_classification || '', // Check column name
+            }));
+
+            // Switch to form view to show autofilled data
+            setActiveView('form');
+
+            // Trigger map auto-pan if location data exists
+            // Since strict state updates are batched, we might need to manually trigger pan or rely on the effect in handleInputChange
+            // But handleInputChange isn't called here.
+            // Let's manually trigger the map logic if we have location info.
+            // ... (We can trust the user to verify location on map)
+            alert("School details autofilled! Please verify the location on the map and attach the Special Order.");
+        }
+    };
 
     const fetchLocationOptions = async (region, division) => {
         try {
@@ -386,11 +490,14 @@ const SchoolManagement = () => {
 
         try {
             const user = auth.currentUser;
-            const res = await fetch('/api/sdo/submit-school', {
+            const endpoint = isConverting ? '/api/sdo/convert-school' : '/api/sdo/submit-school';
+
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...formData,
+                    school_id: formData.school_id.trim(), // Ensure whitespace is removed
                     region: userData.region,
                     division: userData.division,
                     latitude: mapPosition[0],
@@ -403,7 +510,7 @@ const SchoolManagement = () => {
             const data = await res.json();
 
             if (res.ok) {
-                alert('School submitted successfully! Awaiting admin approval.');
+                alert(isConverting ? 'Converted school application submitted successfully! Awaiting approval.' : 'School submitted successfully! Awaiting admin approval.');
                 // Reset form
                 setFormData({
                     school_id: '',
@@ -419,6 +526,7 @@ const SchoolManagement = () => {
                     special_order: '',
                 });
                 setMapPosition([14.5995, 120.9842]);
+                setIsConverting(false); // Reset conversion flag
                 fetchPendingSchools(); // Refresh list
                 setActiveView('requests'); // Switch to requests view
             } else {
@@ -468,7 +576,24 @@ const SchoolManagement = () => {
                     {/* Tab Switcher */}
                     <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-2 flex gap-2">
                         <button
-                            onClick={() => setActiveView('form')}
+                            onClick={() => {
+                                setActiveView('form');
+                                setIsConverting(false);
+                                setFormData({
+                                    school_id: '',
+                                    school_name: '',
+                                    district: '',
+                                    province: '',
+                                    municipality: '',
+                                    leg_district: '',
+                                    barangay: '',
+                                    street_address: '',
+                                    mother_school_id: 'NA',
+                                    curricular_offering: '',
+                                    special_order: '',
+                                });
+                                setMapPosition([14.5995, 120.9842]);
+                            }}
                             className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${activeView === 'form'
                                 ? 'bg-blue-600 text-white shadow-md'
                                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
@@ -476,6 +601,16 @@ const SchoolManagement = () => {
                         >
                             <FiSave size={20} />
                             Add New School
+                        </button>
+                        <button
+                            onClick={() => setActiveView('converted')}
+                            className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${activeView === 'converted'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                        >
+                            <TbSchool size={20} />
+                            Register Converted School
                         </button>
                         <button
                             onClick={() => setActiveView('requests')}
@@ -489,10 +624,77 @@ const SchoolManagement = () => {
                         </button>
                     </div>
 
-                    {/* Form View */}
-                    {activeView === 'form' && (
+                    {/* Converted School Selection View */}
+                    {activeView === 'converted' && !isConverting && (
+                        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 space-y-6">
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-6">Register Converted School</h2>
+                            <p className="text-slate-600 dark:text-slate-300 mb-6">
+                                Enter the 6-digit School ID to search the Master List and autofill the registration form.
+                            </p>
+
+                            <div className="flex flex-col md:flex-row gap-4 items-end">
+                                <div className="flex-1 w-full">
+                                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">School ID</label>
+                                    <input
+                                        type="text"
+                                        value={selectedMasterSchool}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            if (val.length <= 6) setSelectedMasterSchool(val);
+                                        }}
+                                        placeholder="e.g. 100000"
+                                        className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleSearchSchool}
+                                    disabled={selectedMasterSchool.length !== 6 || searchLoading}
+                                    className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {searchLoading ? (
+                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    ) : (
+                                        <FiList size={20} />
+                                    )}
+                                    Search School
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Form View (Shared for New and Converted) */}
+                    {(activeView === 'form' || (activeView === 'converted' && isConverting)) && (
                         <form onSubmit={handleInitialSubmit} className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl p-8 space-y-6">
-                            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-6">Submit New School</h2>
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-black text-slate-800 dark:text-white">
+                                    {isConverting ? 'Register Converted School' : 'Submit New School'}
+                                </h2>
+                                {isConverting && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsConverting(false);
+                                            setFormData({
+                                                school_id: '',
+                                                school_name: '',
+                                                district: '',
+                                                province: '',
+                                                municipality: '',
+                                                leg_district: '',
+                                                barangay: '',
+                                                street_address: '',
+                                                mother_school_id: 'NA',
+                                                curricular_offering: '',
+                                                special_order: '',
+                                            });
+                                            setMapPosition([14.5995, 120.9842]);
+                                        }}
+                                        className="text-sm font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                    >
+                                        Cancel / Search Again
+                                    </button>
+                                )}
+                            </div>
 
                             {/* Grid Layout for Inputs */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -508,7 +710,8 @@ const SchoolManagement = () => {
                                         maxLength="6"
                                         pattern="[0-9]{6}"
                                         placeholder="e.g. 100000"
-                                        className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white"
+                                        disabled={isConverting}
+                                        className={`w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-blue-500 focus:outline-none dark:bg-slate-700 dark:text-white ${isConverting ? 'opacity-70 cursor-not-allowed bg-slate-100 dark:bg-slate-800' : ''}`}
                                         required
                                     />
                                     <p className="text-xs text-slate-500 mt-1">{formData.school_id.length}/6 characters</p>
@@ -833,7 +1036,11 @@ const SchoolManagement = () => {
 
                             <p className="text-center text-slate-600 dark:text-slate-300 font-medium mb-6 leading-relaxed">
                                 By submitting this form, you confirm that this school is <br />
-                                <span className="text-rose-600 dark:text-rose-400 font-black text-lg uppercase mt-1 block">NEWLY ESTABLISHED and NOT CONVERTED</span>.
+                                {isConverting ? (
+                                    <span className="text-blue-600 dark:text-blue-400 font-black text-lg uppercase mt-1 block">CONVERTED and NOT NEWLY ESTABLISHED</span>
+                                ) : (
+                                    <span className="text-rose-600 dark:text-rose-400 font-black text-lg uppercase mt-1 block">NEWLY ESTABLISHED and NOT CONVERTED</span>
+                                )}
                             </p>
 
                             <div className="text-center mb-8">

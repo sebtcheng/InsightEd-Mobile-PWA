@@ -2795,6 +2795,107 @@ app.get('/api/sdo/location-options', async (req, res) => {
 });
 
 // POST - SDO Submit New School
+// GET - Master List of Schools (For Converted/Transferred Schools)
+// GET - Search Single School by ID (For Converted/Transferred Schools)
+app.get('/api/master-list/school/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM schools WHERE school_id = $1', [id]);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).json({ error: "School not found" });
+    }
+  } catch (err) {
+    console.error("Fetch Master School Error:", err);
+    res.status(500).json({ error: "Failed to fetch school details" });
+  }
+});
+
+// POST - Submit Converted School
+app.post('/api/sdo/convert-school', async (req, res) => {
+  const { school_id, ...newDetails } = req.body;
+  console.log("Received convert-school request for ID:", school_id); // DEBUG LOG
+
+  if (!school_id) {
+    return res.status(400).json({ error: "School ID is required" });
+  }
+
+  try {
+    // 1. Fetch Original Data
+    console.log(`Querying original school data for ID: ${school_id}`); // DEBUG LOG
+    const originalRes = await pool.query('SELECT * FROM schools WHERE school_id = $1', [school_id]);
+    console.log(`Original school query found rows: ${originalRes.rows.length}`); // DEBUG LOG
+
+    if (originalRes.rows.length === 0) {
+      console.error(`Original school record not found for ID: ${school_id}`); // DEBUG LOG
+      return res.status(404).json({ error: "Original school record not found" });
+    }
+    const originalData = originalRes.rows[0];
+
+    // 2. Insert into converted_schools table
+    // Ensure table exists (simple check/create if not exists for now)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS converted_schools (
+        id SERIAL PRIMARY KEY,
+        school_id VARCHAR(50) NOT NULL,
+        original_data JSONB,
+        new_data JSONB,
+        submitted_by VARCHAR(100),
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'Pending'
+      )
+    `);
+
+    await pool.query(
+      `INSERT INTO converted_schools (school_id, original_data, new_data, submitted_by, status)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        school_id,
+        originalData,
+        newDetails,
+        newDetails.submitted_by,
+        'Pending'
+      ]
+    );
+
+    res.json({ message: "Converted school application submitted successfully" });
+  } catch (err) {
+    console.error("Convert School Error:", err);
+    res.status(500).json({ error: "Failed to submit converted school application" });
+  }
+});
+
+// GET - Master List of Schools (DEPRECATED)
+app.get('/api/master-list/schools-deprecated', async (req, res) => {
+  const { division, region } = req.query;
+
+  if (!division) {
+    return res.status(400).json({ error: "Division is required" });
+  }
+
+  try {
+    // Fetch all schools in the division from the master 'schools' table
+    // We select all columns to allow full autofill
+    const query = `
+      SELECT * 
+      FROM schools 
+      WHERE division = $1 
+      ORDER BY school_name ASC
+    `;
+
+    // Optional: Filter by region if provided for extra safety, though division is usually unique enough
+    // const query = `SELECT * FROM schools WHERE division = $1 AND region = $2 ORDER BY school_name ASC`;
+
+    const result = await pool.query(query, [division]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Master Schools Error:", err);
+    res.status(500).json({ error: "Failed to fetch master school list" });
+  }
+});
+
 app.post('/api/sdo/submit-school', async (req, res) => {
   const {
     school_id,
@@ -7177,13 +7278,21 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
 
 // --- 27. GET: District Stats (Within Division) ---
 app.get('/api/monitoring/district-stats', async (req, res) => {
-  const { region, division } = req.query;
-  console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division);
+  const { region, division, groupBy } = req.query;
+  // console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division, groupBy); // Original line
+  // console.log("District Stats Query:", { region, division, groupBy }); // DEBUG LOG
+
+  let groupCol = 's.district';
+  if (groupBy === 'legislative') groupCol = 's.leg_district';
+  if (groupBy === 'municipality') groupCol = 's.municipality';
+
+  // console.log("Grouping By:", groupCol); // DEBUG LOG
+
   try {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        s.district, 
+        ${groupCol} as district, 
         COUNT(s.school_id) as total_schools, 
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
@@ -7706,8 +7815,8 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE TRIM(s.region) = TRIM($1) AND TRIM(s.division) = TRIM($2)
-      GROUP BY s.district
-      ORDER BY s.district ASC
+      GROUP BY ${groupCol}
+      ORDER BY ${groupCol} ASC
     `;
 
     const result = await pool.query(query, [region, division]);
