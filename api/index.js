@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 
 
-// Load environment variables11111111111111
+// Load environment variables
 dotenv.config();
 
 // --- EMAIL TRANSPORTER ---
@@ -9215,11 +9215,9 @@ app.get('/api/facility-repairs/:iern', async (req, res) => {
   }
 });
 
-// --- SERVER LISTEN ---
-// --- SERVER LISTEN ---
-// --- SERVER LISTEN ---
-// const isMainModule = process.argv[1] === fileURLToPath(import.meta.url); // Reactivated
-if (isMainModule || process.env.START_SERVER === 'true') {
+
+// Force start for PM2 (since isMainModule is false in PM2 fork mode)
+if (true) {
   const PORT = process.env.PORT || 3000;
   const server = app.listen(PORT, () => {
     console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
