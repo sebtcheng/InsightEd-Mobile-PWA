@@ -54,9 +54,36 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 
 // --- DATABASE CONNECTION ---
-const isLocal = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1'));
+// Robust .env parsing for UTF-16LE support
+let dbUrl = process.env.DATABASE_URL;
+if (!dbUrl && fs.existsSync('.env')) {
+  try {
+    let envContent = fs.readFileSync('.env', 'utf16le');
+    let match = envContent.match(/DATABASE_URL=(.+)/);
+    if (!match) {
+      envContent = fs.readFileSync('.env', 'utf8');
+      match = envContent.match(/DATABASE_URL=(.+)/);
+    }
+    if (match) {
+      dbUrl = match[1].trim().replace(/^['"]|['"]$/g, '');
+      // Inject into env for other modules if needed
+      process.env.DATABASE_URL = dbUrl;
+    }
+  } catch (e) {
+    console.error("⚠️ Failed to manually parse .env:", e.message);
+  }
+}
+
+// Fallback to local if still missing
+const defaultLocal = 'postgres://postgres:password@localhost:5432/postgres';
+if (!dbUrl) dbUrl = defaultLocal;
+
+const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+
+console.log(`🔌 Database Connection: ${isLocal ? 'Local' : 'Remote'} (${dbUrl.replace(/:[^:@]*@/, ':****@')})`);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: dbUrl,
   ssl: isLocal ? false : { rejectUnauthorized: false }
 });
 
@@ -438,6 +465,371 @@ const initFinanceDB = async () => {
 
 };
 initFinanceDB();
+
+// --- PSIP DATABASE INIT ---
+const initMasterlistDB = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS masterlist_26_30 (
+          "Index" integer PRIMARY KEY,
+          "congressman" character varying(255),
+          "governor" character varying(255),
+          "mayor" character varying(255),
+          "region" character varying(100),
+          "division" character varying(100),
+          "school_id" character varying(50),
+          "lis_nsbi_school_id_24_25" character varying(50),
+          "in_masterlist_with_gov" character varying(50),
+          "school_name" text,
+          "municipality" character varying(100),
+          "leg_district" character varying(100),
+          "priority_index" numeric,
+          "cl_requirement" integer,
+          "estimated_classroom_shortage" integer,
+          "no_of_sites" integer,
+          "proposed_no_of_classrooms" integer,
+          "no_of_unit" integer,
+          "sty" integer,
+          "cl" integer,
+          "proposed_scope_of_work" text,
+          "number_of_workshops" text,
+          "workshop_types" text,
+          "other_design_configurations" text,
+          "proposed_funding_year" integer,
+          "est_cost_of_classrooms" numeric,
+          "project_implementor" character varying(255),
+          "cl_sty_ratio" character varying(50)
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_funding_year ON masterlist_26_30("proposed_funding_year");`);
+    console.log("✅ DB Init: Masterlist (Cloned) table verified.");
+  } catch (err) {
+    console.error("❌ Masterlist DB Init Error:", err);
+  }
+};
+initMasterlistDB();
+
+// --- PSIP IMPORT ENDPOINT (One-Time) ---
+/* app.get('/api/psip/import', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // Check if already imported
+    const countResult = await client.query('SELECT COUNT(*) FROM psip_masterlist');
+    const existingCount = parseInt(countResult.rows[0].count);
+    if (existingCount > 0) {
+      return res.json({ message: `Already imported. ${existingCount} rows exist. Add ?force=true to re-import.`, count: existingCount });
+    }
+
+    // Dynamic import of xlsx
+    const { createRequire: cr } = await import('module');
+    const requireSync = cr(import.meta.url);
+    const XLSX = requireSync('xlsx');
+
+    // Find the file
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const filePath = path.join(__dirname, '..', 'public', 'Masterlist 2026-2030 139706 CL - with Cong-Gov-Mayor.xlsx');
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Excel file not found at: ' + filePath });
+    }
+
+    console.log('📥 PSIP Import: Reading Excel file...');
+    const wb = XLSX.readFile(filePath);
+    const ws = wb.Sheets['MASTERLIST'];
+    if (!ws) return res.status(400).json({ error: 'MASTERLIST sheet not found' });
+
+    console.log('📥 PSIP Import: Converting to JSON...');
+    const data = XLSX.utils.sheet_to_json(ws);
+    console.log(`📥 PSIP Import: ${data.length} rows parsed.`);
+
+    // Truncate if force
+    if (req.query.force === 'true') {
+      await client.query('TRUNCATE TABLE psip_masterlist RESTART IDENTITY');
+      console.log('🗑️ PSIP Import: Table truncated (force mode).');
+    }
+
+    // Batch insert
+    const BATCH_SIZE = 500;
+    let inserted = 0;
+
+    for (let i = 0; i < data.length; i += BATCH_SIZE) {
+      const batch = data.slice(i, i + BATCH_SIZE);
+      const values = [];
+      const placeholders = [];
+
+      batch.forEach((row, rIdx) => {
+        const offset = rIdx * 14;
+        values.push(
+          row['CONGRESSMAN'] || null,
+          row['GOVERNOR'] || null,
+          row['MAYOR'] || null,
+          row['Region'] || null,
+          row['Division'] || null,
+          row['School ID'] ? String(row['School ID']) : null,
+          row['School Name'] || null,
+          row['Municipality'] || null,
+          row['Leg District'] || null,
+          parseFloat(row['PRIORITY INDEX']) || null,
+          parseInt(row['CL Requirement']) || 0,
+          parseInt(row['Estimated Classroom Shortage']) || 0,
+          parseInt(row['No. of Sites']) || 0,
+          parseInt(row['Proposed No. of Classrooms']) || 0,
+          parseInt(row['No. of Unit']) || 0,
+          parseInt(row['STY']) || 0,
+          parseInt(row['CL']) || 0,
+          row['Proposed Scope Of Work'] || null,
+          parseInt(row['Number of Workshops']) || 0,
+          row['Workshop Type/s'] || null,
+          parseInt(row['PROPOSED FUNDING YEAR']) || null,
+          parseFloat(row['Est. Cost of Classrooms']) || 0,
+          parseInt(row['CL/STY']) || 0
+        );
+        const p = Array.from({ length: 23 }, (_, k) => `$${offset + k + 1}`);
+        // Fix: offset is based on 23 columns
+        const realOffset = rIdx * 23;
+        const realP = Array.from({ length: 23 }, (_, k) => `$${realOffset + k + 1}`);
+        placeholders.push(`(${realP.join(',')})`);
+      });
+
+      // Rebuild values correctly
+      const correctValues = [];
+      batch.forEach((row) => {
+        correctValues.push(
+          row['CONGRESSMAN'] || null,
+          row['GOVERNOR'] || null,
+          row['MAYOR'] || null,
+          row['Region'] || null,
+          row['Division'] || null,
+          row['School ID'] ? String(row['School ID']) : null,
+          row['School Name'] || null,
+          row['Municipality'] || null,
+          row['Leg District'] || null,
+          parseFloat(row['PRIORITY INDEX']) || null,
+          parseInt(row['CL Requirement']) || 0,
+          parseInt(row['Estimated Classroom Shortage']) || 0,
+          parseInt(row['No. of Sites']) || 0,
+          parseInt(row['Proposed No. of Classrooms']) || 0,
+          parseInt(row['No. of Unit']) || 0,
+          parseInt(row['STY']) || 0,
+          parseInt(row['CL']) || 0,
+          row['Proposed Scope Of Work'] || null,
+          parseInt(row['Number of Workshops']) || 0,
+          row['Workshop Type/s'] || null,
+          parseInt(row['PROPOSED FUNDING YEAR']) || null,
+          parseFloat(row['Est. Cost of Classrooms']) || 0,
+          parseInt(row['CL/STY']) || 0
+        );
+      });
+
+      const rebuildPlaceholders = [];
+      batch.forEach((_, rIdx) => {
+        const realOffset = rIdx * 23;
+        const realP = Array.from({ length: 23 }, (_, k) => `$${realOffset + k + 1}`);
+        rebuildPlaceholders.push(`(${realP.join(',')})`);
+      });
+
+      const query = `
+        INSERT INTO psip_masterlist (
+          congressman, governor, mayor, region, division, school_id, school_name,
+          municipality, leg_district, priority_index, cl_requirement, estimated_shortage,
+          no_of_sites, proposed_classrooms, no_of_units, storeys, classrooms,
+          scope_of_work, workshops, workshop_types, funding_year, estimated_cost, cl_per_storey
+        ) VALUES ${rebuildPlaceholders.join(',')}
+      `;
+
+      await client.query(query, correctValues);
+      inserted += batch.length;
+      if (inserted % 5000 === 0 || inserted === data.length) {
+        console.log(`📥 PSIP Import: ${inserted}/${data.length} rows inserted...`);
+      }
+    }
+
+    console.log(`✅ PSIP Import Complete: ${inserted} rows inserted.`);
+    res.json({ success: true, count: inserted });
+
+  } catch (err) {
+    console.error('❌ PSIP Import Error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+}); */
+
+// --- PSIP API ENDPOINTS ---
+
+app.get('/api/debug-integrity', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const results = {
+      count: (await client.query('SELECT COUNT(*) FROM masterlist_26_30')).rows[0].count,
+      shortage_sum: (await client.query('SELECT SUM(estimated_classroom_shortage) as val FROM masterlist_26_30')).rows[0].val,
+      duplicates: (await client.query(`
+                SELECT "school_id", "sty", "cl", "proposed_funding_year", COUNT(*)
+                FROM masterlist_26_30
+                GROUP BY "school_id", "sty", "cl", "proposed_funding_year"
+                HAVING COUNT(*) > 1
+                LIMIT 5
+            `)).rows
+    };
+    client.release();
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Summary totals
+app.get('/api/psip/summary', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) as total_projects,
+        COUNT(DISTINCT "school_id") as total_schools,
+        COALESCE(SUM("proposed_no_of_classrooms"), 0) as total_classrooms,
+        COALESCE(SUM("est_cost_of_classrooms"), 0) as total_cost,
+        COALESCE(SUM("estimated_classroom_shortage"), 0) as total_shortage,
+        COUNT(DISTINCT "region") as total_regions,
+        COUNT(DISTINCT "congressman") as total_congressmen,
+        COUNT(DISTINCT "governor") as total_governors,
+        COUNT(DISTINCT "mayor") as total_mayors
+      FROM masterlist_26_30
+    `);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('❌ PSIP Summary Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// By Region
+app.get('/api/psip/by-region', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        "region" as region,
+        COUNT(*) as projects,
+        COUNT(DISTINCT "school_id") as schools,
+        COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
+        COALESCE(SUM("est_cost_of_classrooms"), 0) as cost,
+        COALESCE(SUM("estimated_classroom_shortage"), 0) as shortage
+      FROM masterlist_26_30
+      WHERE "region" IS NOT NULL
+      GROUP BY "region"
+      ORDER BY classrooms DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ PSIP By Region Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// By Funding Year
+app.get('/api/psip/by-funding-year', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        "proposed_funding_year" as funding_year,
+        COUNT(*) as projects,
+        COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
+        COALESCE(SUM("est_cost_of_classrooms"), 0) as cost
+      FROM masterlist_26_30
+      WHERE "proposed_funding_year" IS NOT NULL
+      GROUP BY "proposed_funding_year"
+      ORDER BY "proposed_funding_year"
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ PSIP By Year Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// By Storey Type
+app.get('/api/psip/by-storey', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        "sty" as storeys,
+        COUNT(*) as projects,
+        COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
+        COALESCE(SUM("est_cost_of_classrooms"), 0) as cost
+      FROM masterlist_26_30
+      WHERE "sty" > 0
+      GROUP BY "sty"
+      ORDER BY "sty"
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ PSIP By Storey Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// By Storey Breakdown (e.g., 2sty4cl)
+app.get('/api/psip/storey-breakdown', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        "sty" as storey,
+        "cl" as classrooms,
+        COUNT(*) as count
+      FROM masterlist_26_30
+      WHERE "sty" IS NOT NULL AND "cl" IS NOT NULL
+      GROUP BY "sty", "cl"
+      ORDER BY "sty", "cl"
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ PSIP Storey Breakdown Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Partnerships (Congressman / Governor / Mayor)
+app.get('/api/psip/partnerships', async (req, res) => {
+  try {
+    const [congRes, govRes, mayorRes] = await Promise.all([
+      pool.query(`
+        SELECT "congressman" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
+        FROM masterlist_26_30 WHERE "congressman" IS NOT NULL
+        GROUP BY "congressman" ORDER BY classrooms DESC LIMIT 20
+      `),
+      pool.query(`
+        SELECT "governor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
+        FROM masterlist_26_30 WHERE "governor" IS NOT NULL
+        GROUP BY "governor" ORDER BY classrooms DESC LIMIT 20
+      `),
+      pool.query(`
+        SELECT "mayor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
+        FROM masterlist_26_30 WHERE "mayor" IS NOT NULL
+        GROUP BY "mayor" ORDER BY classrooms DESC LIMIT 20
+      `)
+    ]);
+
+    // Also get totals per category
+    const totals = await pool.query(`
+      SELECT
+        COUNT(DISTINCT "congressman") as congressman_count,
+        COUNT(DISTINCT "governor") as governor_count,
+        COUNT(DISTINCT "mayor") as mayor_count,
+        COALESCE(SUM("proposed_no_of_classrooms"), 0) as total_classrooms
+      FROM masterlist_26_30
+    `);
+
+    res.json({
+      congressman: congRes.rows,
+      governor: govRes.rows,
+      mayor: mayorRes.rows,
+      totals: totals.rows[0]
+    });
+  } catch (err) {
+    console.error('❌ PSIP Partnerships Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- NEW VALIDATION ENDPOINTS ---
 
@@ -8304,26 +8696,7 @@ app.get('/api/migrate-lgu-image-schema', async (req, res) => {
   try {
     const client = await pool.connect();
     const results = [];
-    if (isMainModule || process.env.START_SERVER === 'true') {
 
-      const PORT = process.env.PORT || 3000;
-
-
-
-      const server = app.listen(PORT, () => {
-        console.log(`\nðŸš€ SERVER RUNNING ON PORT ${PORT} `);
-        console.log(`ðŸ‘‰ API Endpoint: http://localhost:${PORT}/api/send-otp`);
-        console.log(`ðŸ‘‰ CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
-      });
-
-      server.on('error', (e) => {
-        if (e.code === 'EADDRINUSE') {
-          console.error(`âŒ Port ${PORT} is already in use! Please close the other process or use a different port.`);
-        } else {
-          console.error("âŒ Server Error:", e);
-        }
-      });
-    }
 
     // Add category column to lgu_image
     try {
@@ -9217,8 +9590,8 @@ app.get('/api/facility-repairs/:iern', async (req, res) => {
 
 // --- SERVER LISTEN ---
 // --- SERVER LISTEN ---
-// --- SERVER LISTEN ---
-// const isMainModule = process.argv[1] === fileURLToPath(import.meta.url); // Reactivated
+
+
 if (isMainModule || process.env.START_SERVER === 'true') {
   const PORT = process.env.PORT || 3000;
   const server = app.listen(PORT, () => {

@@ -1,0 +1,170 @@
+[
+  {
+    "column_name": "Index",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "congressman",
+    "data_type": "character varying",
+    "character_maximum_length": 255,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "governor",
+    "data_type": "character varying",
+    "character_maximum_length": 255,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "mayor",
+    "data_type": "character varying",
+    "character_maximum_length": 255,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "region",
+    "data_type": "character varying",
+    "character_maximum_length": 100,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "division",
+    "data_type": "character varying",
+    "character_maximum_length": 100,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "school_id",
+    "data_type": "character varying",
+    "character_maximum_length": 50,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "lis_nsbi_school_id_24_25",
+    "data_type": "character varying",
+    "character_maximum_length": 50,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "in_masterlist_with_gov",
+    "data_type": "character varying",
+    "character_maximum_length": 50,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "school_name",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "municipality",
+    "data_type": "character varying",
+    "character_maximum_length": 100,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "leg_district",
+    "data_type": "character varying",
+    "character_maximum_length": 100,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "priority_index",
+    "data_type": "numeric",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "cl_requirement",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "estimated_classroom_shortage",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "no_of_sites",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "proposed_no_of_classrooms",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "no_of_unit",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "sty",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "cl",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "proposed_scope_of_work",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "number_of_workshops",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "workshop_types",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "other_design_configurations",
+    "data_type": "text",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "proposed_funding_year",
+    "data_type": "integer",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "est_cost_of_classrooms",
+    "data_type": "numeric",
+    "character_maximum_length": null,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "project_implementor",
+    "data_type": "character varying",
+    "character_maximum_length": 255,
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "cl_sty_ratio",
+    "data_type": "character varying",
+    "character_maximum_length": 50,
+    "is_nullable": "YES"
+  }
+]

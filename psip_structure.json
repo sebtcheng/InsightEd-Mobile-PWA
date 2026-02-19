@@ -1,0 +1,136 @@
+{
+  "MASTERLIST": {
+    "cols": [
+      "Index",
+      "CONGRESSMAN",
+      "GOVERNOR",
+      "MAYOR",
+      "Region",
+      "Division",
+      "School ID",
+      "LIS/NSBI School ID 24-25",
+      "In Masterlist with Gov",
+      "School Name",
+      "Municipality",
+      "Leg District",
+      "PRIORITY INDEX",
+      "CL Requirement",
+      "Estimated Classroom Shortage",
+      "No. of Sites",
+      "Proposed No. of Classrooms",
+      "No. of Unit",
+      "STY",
+      "CL",
+      "Proposed Scope Of Work",
+      "Number of Workshops",
+      "Workshop Type/s",
+      "PROPOSED FUNDING YEAR",
+      "Est. Cost of Classrooms",
+      "CL/STY"
+    ],
+    "rows": [
+      {
+        "Index": 1,
+        "CONGRESSMAN": "Rep. Solomon R. Chungalao",
+        "GOVERNOR": "JERRY U. DALIPOG",
+        "MAYOR": "CLEMENTE S. TALUSIG",
+        "Region": "CAR",
+        "Division": "Ifugao",
+        "School ID": 502250,
+        "LIS/NSBI School ID 24-25": 502250,
+        "In Masterlist with Gov": 0,
+        "School Name": "Itab Integrated School",
+        "Municipality": "AGUINALDO",
+        "Leg District": "IFUGAO LONE",
+        "PRIORITY INDEX": 1.9500000000000002,
+        "CL Requirement": 4,
+        "Estimated Classroom Shortage": 0,
+        "No. of Sites": 1,
+        "Proposed No. of Classrooms": 12,
+        "No. of Unit": 1,
+        "STY": 4,
+        "CL": 12,
+        "Proposed Scope Of Work": "4STY12CL",
+        "Number of Workshops": 3,
+        "Workshop Type/s": "Science Lab, Home Economics, Computer Lab",
+        "PROPOSED FUNDING YEAR": 2026,
+        "Est. Cost of Classrooms": 36000000,
+        "CL/STY": 3
+      },
+      {
+        "Index": 2,
+        "CONGRESSMAN": "Rep. Solomon R. Chungalao",
+        "GOVERNOR": "JERRY U. DALIPOG",
+        "MAYOR": "CLEMENTE S. TALUSIG",
+        "Region": "CAR",
+        "Division": "Ifugao",
+        "School ID": 319008,
+        "LIS/NSBI School ID 24-25": 319008,
+        "In Masterlist with Gov": 0,
+        "School Name": "Ubao NHS Extension",
+        "Municipality": "AGUINALDO",
+        "Leg District": "IFUGAO LONE",
+        "CL Requirement": 6,
+        "Estimated Classroom Shortage": 0,
+        "No. of Sites": 1,
+        "Proposed No. of Classrooms": 9,
+        "No. of Unit": 1,
+        "STY": 3,
+        "CL": 9,
+        "Proposed Scope Of Work": "3STY9CL",
+        "Number of Workshops": 3,
+        "Workshop Type/s": "Science Lab, Home Economics, Computer Lab",
+        "PROPOSED FUNDING YEAR": 2026,
+        "Est. Cost of Classrooms": 27000000,
+        "CL/STY": 3
+      }
+    ]
+  },
+  "Sheet1": {
+    "cols": [
+      "Row Labels"
+    ],
+    "rows": [
+      {
+        "Row Labels": 1
+      },
+      {
+        "Row Labels": 1
+      }
+    ]
+  },
+  "List of Mayor Gov Cong": {
+    "cols": [
+      " CONGRESSMAN ",
+      " GOVERNOR ",
+      " MAYOR ",
+      "Region",
+      "Division",
+      "Municipality",
+      "Leg District",
+      "CONGRESSMAN"
+    ],
+    "rows": [
+      {
+        " CONGRESSMAN ": "Rep. Yusop Alano",
+        " GOVERNOR ": "MUJIV HATAMAN",
+        " MAYOR ": "ALIH AWAL SALI",
+        "Region": "BARMM",
+        "Division": "Basilan",
+        "Municipality": "AKBAR",
+        "Leg District": "Lone",
+        "CONGRESSMAN": "Rep. Yusop Alano"
+      },
+      {
+        " CONGRESSMAN ": "Rep. Yusop Alano",
+        " GOVERNOR ": "MUJIV HATAMAN",
+        " MAYOR ": "JAYDEEFAR LAJID",
+        "Region": "BARMM",
+        "Division": "Basilan",
+        "Municipality": "AL-BARKA",
+        "Leg District": "Lone",
+        "CONGRESSMAN": "Rep. Bai Dimple Mastura"
+      }
+    ]
+  }
+}

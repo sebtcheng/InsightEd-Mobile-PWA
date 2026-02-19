@@ -1,4 +1,11 @@
---- DEBUG OUTPUT ---
-Sample Schools: [{"school_id":"102724","school_name":"Bagumbayan Central School"},{"school_id":"102648","school_name":"BATUG-PALAGAO ELEMENTARY SCHOOL"},{"school_id":"102373","school_name":"PIGGATAN ELEMENTARY SCHOOL"}]
-❌ School 112092 NOT FOUND in DB.
-Firebase User (112092@insighted.app): vPw4dY7T66fax12C0BxtOGe8VuA3
+--------------------------------------------------
+Total Rows: 23821
+Shortage Sum: 101440
+Duplicate Count (Sample): 5
+--- DUPLICATE SAMPLES ---
+School: 100948, Year: 2026, Sty: 1, CL: 2, Count: 2
+School: 110741, Year: 2026, Sty: 1, CL: 2, Count: 2
+School: 120680, Year: 2026, Sty: 1, CL: 2, Count: 2
+School: 123111, Year: 2026, Sty: 1, CL: 2, Count: 2
+School: 126306, Year: 2026, Sty: 1, CL: 3, Count: 3
+--------------------------------------------------

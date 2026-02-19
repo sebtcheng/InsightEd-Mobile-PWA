@@ -37,6 +37,7 @@ import FinanceDashboard from './modules/FinanceDashboard'; // Import FinanceDash
 import LguDashboard from './modules/LguDashboard'; // Import LguDashboard
 import LguForms from './modules/LguForms'; // Import newly created LguForms
 import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
+import PSIP from './modules/PSIP'; // Import PSIP
 import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
 
 
@@ -137,6 +138,9 @@ const AnimatedRoutes = () => {
         <Route path="/jurisdiction-schools" element={<SchoolJurisdictionList />} />
         <Route path="/school-audit" element={<SchoolAuditView />} />
         <Route path="/dummy-forms" element={<DummyDashboard />} />
+
+        <Route path="/dummy-forms" element={<DummyDashboard />} />
+        <Route path="/psip" element={<PSIP />} />
 
         {/* Menus */}
         <Route path="/school-forms" element={<SchoolForms />} />
