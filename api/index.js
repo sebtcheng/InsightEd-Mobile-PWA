@@ -292,6 +292,25 @@ const initDB = async () => {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_demolitions_iern ON facility_demolitions(iern);`);
     console.log("✅ DB Init: Facility Demolitions schema verified.");
 
+    // --- MIGRATION: ADD FACILITY INVENTORY ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS facility_inventory(
+      id SERIAL PRIMARY KEY,
+      school_id TEXT,
+      iern TEXT,
+      building_name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      status TEXT NOT NULL,
+      no_of_storeys INTEGER DEFAULT 1,
+      no_of_classrooms INTEGER NOT NULL,
+      year_completed INTEGER,
+      remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_facility_inventory_iern ON facility_inventory(iern); `);
+    console.log("✅ DB Init: Facility Inventory schema verified.");
+
   } catch (err) {
     console.error("âŒ DB Init Error:", err);
   }
@@ -328,7 +347,7 @@ const initFinanceDB = async () => {
     console.log("✅ DB Init: Finance Projects table verified.");
 
     // 2. DROP OBSOLETE TABLE
-    await pool.query(`DROP TABLE IF EXISTS lgu_forms CASCADE;`);
+    await pool.query(`DROP TABLE IF EXISTS lgu_forms CASCADE; `);
     console.log("✅ DB Init: Dropped obsolete 'lgu_forms' table.");
 
     // 3. Create/Update LGU Finance Projects Table (lgu_projects)
@@ -353,38 +372,38 @@ const initFinanceDB = async () => {
 
         -- NEW FIELDS (LGU Refactor)
         source_agency TEXT,
-        contractor_name TEXT,
-        lsb_resolution_no TEXT,
-        moa_ref_no TEXT,
-        moa_date DATE,
-        validity_period TEXT,
-        contract_duration TEXT,
-        date_approved_pow DATE,
-        approved_contract_budget NUMERIC,
-        schedule_of_fund_release TEXT, -- 'Lumpsum' or 'Tranches'
+      contractor_name TEXT,
+      lsb_resolution_no TEXT,
+      moa_ref_no TEXT,
+      moa_date DATE,
+      validity_period TEXT,
+      contract_duration TEXT,
+      date_approved_pow DATE,
+      approved_contract_budget NUMERIC,
+      schedule_of_fund_release TEXT, -- 'Lumpsum' or 'Tranches'
         number_of_tranches INTEGER,
-        amount_per_tranche NUMERIC,
-        mode_of_procurement TEXT,
-        philgeps_ref_no TEXT,
-        pcab_license_no TEXT,
-        date_contract_signing DATE,
-        date_notice_of_award DATE,
-        bid_amount NUMERIC,
-        latitude TEXT,
-        longitude TEXT,
+      amount_per_tranche NUMERIC,
+      mode_of_procurement TEXT,
+      philgeps_ref_no TEXT,
+      pcab_license_no TEXT,
+      date_contract_signing DATE,
+      date_notice_of_award DATE,
+      bid_amount NUMERIC,
+      latitude TEXT,
+      longitude TEXT,
 
-        -- DOCUMENTS
+      --DOCUMENTS
         pow_pdf TEXT,
-        dupa_pdf TEXT,
-        contract_pdf TEXT,
+      dupa_pdf TEXT,
+      contract_pdf TEXT,
 
-        -- PROGRESS
+      --PROGRESS
         project_status TEXT DEFAULT 'Not Yet Started',
-        accomplishment_percentage NUMERIC DEFAULT 0,
-        status_as_of_date DATE,
-        amount_utilized NUMERIC DEFAULT 0,
-        nature_of_delay TEXT
-      );
+      accomplishment_percentage NUMERIC DEFAULT 0,
+      status_as_of_date DATE,
+      amount_utilized NUMERIC DEFAULT 0,
+      nature_of_delay TEXT
+    );
     `);
 
     // Add columns if they don't exist (for migration)
@@ -401,7 +420,7 @@ const initFinanceDB = async () => {
     ];
 
     for (const col of newCols) {
-      await pool.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS ${col};`);
+      await pool.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS ${col}; `);
     }
 
     // --- MIGRATION: Backfill root_project_id for existing records ---
@@ -6013,6 +6032,17 @@ app.get('/api/physical-facilities/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- 24b. GET: Facility Inventory Data ---
+app.get('/api/facility-inventory/:iern', async (req, res) => {
+  const { iern } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM facility_inventory WHERE school_id = $1 OR iern = $1 ORDER BY id', [iern]
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // --- 25. POST: Save Physical Facilities (Unified Submission) ---
 app.post('/api/save-physical-facilities', async (req, res) => {
   const data = req.body;
@@ -6083,6 +6113,25 @@ app.post('/api/save-physical-facilities', async (req, res) => {
       }
     }
 
+    // 4. Handle Building Inventory (Delete All & Re-insert)
+    if (data.inventoryEntries && Array.isArray(data.inventoryEntries)) {
+      await client.query('DELETE FROM facility_inventory WHERE school_id = $1', [data.schoolId]);
+
+      for (const inv of data.inventoryEntries) {
+        await client.query(`
+                INSERT INTO facility_inventory (
+                    school_id, iern, building_name, category, status,
+                    no_of_storeys, no_of_classrooms, year_completed, remarks
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `, [
+          data.schoolId, data.iern || data.schoolId,
+          inv.building_name, inv.category, inv.status,
+          sanitize(inv.no_of_storeys) || 1, sanitize(inv.no_of_classrooms),
+          inv.year_completed || null, inv.remarks || ''
+        ]);
+      }
+    }
+
     await client.query('COMMIT');
     res.json({ message: "Facilities and details saved!" });
 
@@ -6138,6 +6187,24 @@ app.post('/api/save-physical-facilities', async (req, res) => {
                     `, [
                 data.schoolId, data.schoolId, d.building_no,
                 toBool(d.reason_age), toBool(d.reason_safety), toBool(d.reason_calamity), toBool(d.reason_upgrade)
+              ]);
+            }
+          }
+
+          // DW 4. Building Inventory
+          if (data.inventoryEntries) {
+            await clientNew.query('DELETE FROM facility_inventory WHERE school_id = $1', [data.schoolId]);
+            for (const inv of data.inventoryEntries) {
+              await clientNew.query(`
+                        INSERT INTO facility_inventory (
+                            school_id, iern, building_name, category, status,
+                            no_of_storeys, no_of_classrooms, year_completed, remarks
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    `, [
+                data.schoolId, data.iern || data.schoolId,
+                inv.building_name, inv.category, inv.status,
+                sanitize(inv.no_of_storeys) || 1, sanitize(inv.no_of_classrooms),
+                inv.year_completed || null, inv.remarks || ''
               ]);
             }
           }
