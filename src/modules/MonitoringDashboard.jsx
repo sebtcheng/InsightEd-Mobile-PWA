@@ -45,6 +45,7 @@ const MonitoringDashboard = () => {
     const [availableRegions, setAvailableRegions] = useState([]);
     const [availableDivisions, setAvailableDivisions] = useState([]);
     const [availableDistricts, setAvailableDistricts] = useState([]); // NEW: District State
+    const [drilldownType, setDrilldownType] = useState('school_district'); // NEW: Drilldown Type (school_district vs legislative)
     const [schoolData, setSchoolData] = useState([]); // Store raw CSV data
 
     // NEW: Regional Stats for National View
@@ -312,30 +313,35 @@ const MonitoringDashboard = () => {
             // This populates the "Accomplishment Rate per School Division" list. 
             // This SHOULD change on drill down? 
             // Attempting to list Divisions. queryRegion is set.
+            // Dynamic indices for additional fetches
+            let divisionStatsIndex = -1;
+            let districtStatsIndex = -1;
+
+            // Fetch Division Stats (RO main view, or CO drilled to Region)
             if (effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && queryRegion && !queryDivision)) {
-                // If RO drills to Division, this list (of divisions) might disappear or be replaced by school list.
-                // The existing logic `!coDivision` (Line 1187) hides it when division selected.
-                // So the specific fetch here (Division Stats) is for the LIST. 
-                // It should use `params`. (Which includes region, excludes division if null).
                 fetchPromises.push(fetch(`/api/monitoring/division-stats?${params.toString()}`));
+                divisionStatsIndex = fetchPromises.length - 1;
             }
 
-            // Fetch District Stats only for SDO or CO (when Division is selected)
-            if (effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && queryDivision)) {
-                fetchPromises.push(fetch(`/api/monitoring/district-stats?${params.toString()}`));
+            // Fetch District Stats (SDO main view, or RO/CO drilled to Division)
+            if (effectiveRole === 'School Division Office' || ((effectiveRole === 'Central Office' || effectiveRole === 'Regional Office') && queryDivision)) {
+                let url = `/api/monitoring/district-stats?${params.toString()}`;
+                if (drilldownType === 'legislative') {
+                    url += '&groupBy=legislative';
+                } else if (drilldownType === 'municipality') {
+                    url += '&groupBy=municipality';
+                }
+                fetchPromises.push(fetch(url));
+                districtStatsIndex = fetchPromises.length - 1;
             }
 
             const results = await Promise.all(fetchPromises);
             const statsRes = results[0];
             const engStatsRes = results[1];
             const projectsRes = results[2];
-            // ... (rest is same)
 
-            // ... (Variable assignments need to match the array indices, which didn't change order)
-            // Re-mapping results to match original variable names for clarity in replacement
-
-            const divStatsRes = effectiveRole === 'Regional Office' || (effectiveRole === 'Central Office' && queryRegion && !queryDivision) ? results[3] : null;
-            const distStatsRes = effectiveRole === 'School Division Office' || (effectiveRole === 'Central Office' && queryDivision) ? results[3] : null;
+            const divStatsRes = divisionStatsIndex !== -1 ? results[divisionStatsIndex] : null;
+            const distStatsRes = districtStatsIndex !== -1 ? results[districtStatsIndex] : null;
 
             if (statsRes.ok) setStats(await statsRes.json());
             if (engStatsRes.ok) setEngStats(await engStatsRes.json());
@@ -537,6 +543,24 @@ const MonitoringDashboard = () => {
             fetchData(coRegion, division);
         }
     };
+
+    // NEW: Trigger re-fetch when drilldown type changes
+    useEffect(() => {
+        if (isDistrictView) {
+            // Determine effective region/division based on role to re-fetch correct stats
+            const effectiveRole = (userData?.role === 'Super User' && sessionStorage.getItem('impersonatedRole'))
+                ? sessionStorage.getItem('impersonatedRole')
+                : userData?.role;
+
+            const r = effectiveRole === 'Central Office' ? coRegion : (userData?.role === 'Regional Office' ? userData?.region : coRegion);
+            const d = effectiveRole === 'School Division Office' ? userData?.division : coDivision;
+
+            // Just call fetchData with current context
+            // Note: fetchData handles role logic internally, we just need to pass the right "query" params if needed
+            // Actually, simply calling fetchData with current coRegion/coDivision is usually enough as it figures out the rest
+            fetchData(coRegion, coDivision);
+        }
+    }, [drilldownType]);
 
     const handleDistrictChange = async (district) => {
         setCoDistrict(district);
@@ -748,6 +772,19 @@ const MonitoringDashboard = () => {
             return val.toString().replace(/^District\s+of\s+/i, '').replace(/\s+District$/i, '').trim();
         }
         return val.toString().replace('Division of ', '').replace(' City', '').trim();
+    };
+
+    // HANDLER: Drill down on chart click
+    const handleInsightBarClick = (data, index) => {
+        // Only drill down if we are at the Division level (not yet drilled down)
+        // And if we have a valid division name
+        if (!isDistrictView && data) {
+            // Need to handle both data formats: { fullName: ... } and { ...d, displayDivision: ... }
+            const divisionName = data.fullName || data.division || (data.payload && data.payload.fullName);
+            if (divisionName) {
+                handleDivisionChange(divisionName);
+            }
+        }
     };
 
 
@@ -1714,29 +1751,81 @@ const MonitoringDashboard = () => {
                                                 );
                                             }
 
-                                            // DEFAULT: LIST OF DISTRICTS
-                                            // 1. Get unique districts from CSV
-                                            const divisionDistricts = [...new Set(schoolData
-                                                .filter(s => s.region === targetRegion && s.division === targetDivision)
-                                                .map(s => s.district))]
-                                                .sort();
+                                            // DEFAULT: LIST OF DISTRICTS / LEGISLATIVE / MUNICIPALITY
+                                            // DYNAMIC GROUPING FIX: Use Keys from API (districtStats) if available, otherwise fall back to CSV
+                                            // The API returns grouped data. The CSV is for the "Master List" of what *should* be there.
+                                            // For Legislative/Municipality, we might not have a perfect master list in CSV if those columns are missing or messy.
+                                            // Strategy: Collection of ALL unique keys from both CSV (if applicable) and API.
+
+                                            let divisionDistricts = [];
+
+                                            if (drilldownType === 'legislative') {
+                                                // Get keys from API
+                                                const apiKeys = districtStats.map(d => d.leg_district).filter(k => k);
+                                                // Get keys from CSV (if column exists) - Assuming 'leg_district' column in CSV
+                                                const csvKeys = schoolData
+                                                    .filter(s => s.region === targetRegion && s.division === targetDivision)
+                                                    .map(s => s.leg_district) // Ensure CSV has this column
+                                                    .filter(k => k);
+
+                                                divisionDistricts = [...new Set([...apiKeys, ...csvKeys])].sort();
+
+                                                // console.log("Drilldown Legislative Keys:", divisionDistricts);
+                                            } else if (drilldownType === 'municipality') {
+                                                // Get keys from API
+                                                const apiKeys = districtStats.map(d => d.municipality).filter(k => k);
+                                                // Get keys from CSV
+                                                const csvKeys = schoolData
+                                                    .filter(s => s.region === targetRegion && s.division === targetDivision)
+                                                    .map(s => s.municipality)
+                                                    .filter(k => k);
+
+                                                divisionDistricts = [...new Set([...apiKeys, ...csvKeys])].sort();
+                                                // console.log("Drilldown Municipality Keys:", divisionDistricts);
+                                            } else {
+                                                // Default: School District
+                                                divisionDistricts = [...new Set(schoolData
+                                                    .filter(s => s.region === targetRegion && s.division === targetDivision)
+                                                    .map(s => s.district))]
+                                                    .sort();
+                                            }
 
                                             if (divisionDistricts.length === 0) {
-                                                return <p className="text-sm text-slate-400 italic">No district data available in Master List (CSV).</p>;
+                                                return <p className="text-sm text-slate-400 italic">No grouped data available.</p>;
                                             }
 
                                             return (
                                                 <div className="space-y-4">
                                                     {divisionDistricts.map((distName, idx) => {
                                                         // 2. Count Total from CSV
-                                                        const csvTotal = schoolData.filter(s =>
-                                                            s.region === targetRegion &&
-                                                            s.division === targetDivision &&
-                                                            s.district === distName
-                                                        ).length;
+                                                        let csvTotal = 0;
+                                                        if (drilldownType === 'legislative') {
+                                                            csvTotal = schoolData.filter(s =>
+                                                                s.region === targetRegion &&
+                                                                s.division === targetDivision &&
+                                                                s.leg_district === distName
+                                                            ).length;
+                                                        } else if (drilldownType === 'municipality') {
+                                                            csvTotal = schoolData.filter(s =>
+                                                                s.region === targetRegion &&
+                                                                s.division === targetDivision &&
+                                                                s.municipality === distName
+                                                            ).length;
+                                                        } else {
+                                                            csvTotal = schoolData.filter(s =>
+                                                                s.region === targetRegion &&
+                                                                s.division === targetDivision &&
+                                                                s.district === distName
+                                                            ).length;
+                                                        }
 
-                                                        // 3. Get API Stats for this District
+                                                        // 3. Get API Stats for this Group
                                                         const startStat = districtStats.find(d => {
+                                                            if (drilldownType === 'legislative') {
+                                                                return normalizeLocationName(d.leg_district) === normalizeLocationName(distName);
+                                                            } else if (drilldownType === 'municipality') {
+                                                                return normalizeLocationName(d.municipality) === normalizeLocationName(distName);
+                                                            }
                                                             return normalizeLocationName(d.district) === normalizeLocationName(distName);
                                                         });
 
@@ -1812,9 +1901,38 @@ const MonitoringDashboard = () => {
                     {(activeTab === 'insights') && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                             <div className="flex justify-between items-center">
-                                <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
-                                    <TbChartBar className="text-purple-500" size={18} /> Regional Insights
-                                </h2>
+                                <div className="flex items-center gap-4">
+                                    <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
+                                        <TbChartBar className="text-purple-500" size={18} /> Regional Insights
+                                    </h2>
+
+                                    <div className="flex items-center gap-2">
+                                        {/* Drilldown Type Selector */}
+                                        {isDistrictView && (
+                                            <select
+                                                value={drilldownType}
+                                                onChange={(e) => setDrilldownType(e.target.value)}
+                                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-bold uppercase tracking-wide rounded-lg py-1.5 pl-2 pr-6 outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-sm appearance-none"
+                                                style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundPosition: `right 0.3rem center`, backgroundRepeat: `no-repeat`, backgroundSize: `1.2em 1.2em` }}
+                                            >
+                                                <option value="school_district">School District</option>
+                                                <option value="legislative">Legislative District</option>
+                                                <option value="municipality">Municipality</option>
+                                            </select>
+                                        )}
+
+                                        {/* Back Button for Drilldown */}
+                                        {isDistrictView && effectiveRole !== 'School Division Office' && (
+                                            <button
+                                                onClick={() => handleDivisionChange('')}
+                                                className="px-3 py-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all shadow-sm group"
+                                            >
+                                                <FiArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" />
+                                                Back to Division View
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
 
                                 {/* Selector for Metric */}
                                 <div className="flex items-center gap-2">
@@ -2393,7 +2511,7 @@ const MonitoringDashboard = () => {
                             </div>
 
                             {/* Chart Container */}
-                            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden">
+                            <div key={drilldownType} className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden">
                                 {insightsMetric === 'enrolment' && (
                                     <>
                                         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -2452,6 +2570,8 @@ const MonitoringDashboard = () => {
                                                         }}
                                                     />
                                                     <Bar
+                                                        onClick={handleInsightBarClick}
+                                                        cursor="pointer"
                                                         dataKey="enrolment"
                                                         fill="#8b5cf6"
                                                         radius={[4, 4, 0, 0]}
@@ -2527,6 +2647,8 @@ const MonitoringDashboard = () => {
                                                         }}
                                                     />
                                                     <Bar
+                                                        onClick={handleInsightBarClick}
+                                                        cursor="pointer"
                                                         dataKey="value"
                                                         fill="#3b82f6"
                                                         radius={[4, 4, 0, 0]}
@@ -2603,6 +2725,8 @@ const MonitoringDashboard = () => {
                                                         }}
                                                     />
                                                     <Bar
+                                                        onClick={handleInsightBarClick}
+                                                        cursor="pointer"
                                                         dataKey="value"
                                                         fill="#f97316"
                                                         radius={[4, 4, 0, 0]}
@@ -2681,6 +2805,8 @@ const MonitoringDashboard = () => {
                                                         }}
                                                     />
                                                     <Bar
+                                                        onClick={handleInsightBarClick}
+                                                        cursor="pointer"
                                                         dataKey="value"
                                                         fill="#10b981"
                                                         radius={[4, 4, 0, 0]}
@@ -2723,6 +2849,8 @@ const MonitoringDashboard = () => {
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
+                                                        onClick={handleInsightBarClick}
+                                                        cursor="pointer"
                                                         dataKey="value"
                                                         name={`${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift`}
                                                         fill={insightsShiftingCategory === 'single' ? '#3b82f6' : insightsShiftingCategory === 'double' ? '#f59e0b' : '#ef4444'}
@@ -2761,6 +2889,8 @@ const MonitoringDashboard = () => {
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
+                                                        onClick={handleInsightBarClick}
+                                                        cursor="pointer"
                                                         dataKey="value"
                                                         name={`${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning`}
                                                         fill={insightsDeliveryCategory === 'inperson' ? '#10b981' : insightsDeliveryCategory === 'blended' ? '#6366f1' : '#f43f5e'}
@@ -2799,7 +2929,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Schools" fill="#ef4444" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Schools" fill="#ef4444" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -2830,7 +2960,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Teachers" fill="#3b82f6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Teachers" fill="#3b82f6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -2859,7 +2989,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Teachers" fill="#f59e0b" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Teachers" fill="#f59e0b" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -2888,7 +3018,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Teachers" fill="#8b5cf6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Teachers" fill="#8b5cf6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -2927,7 +3057,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Teachers" fill="#ec4899" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Teachers" fill="#ec4899" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -2975,7 +3105,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Units" fill="#06b6d4" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Units" fill="#06b6d4" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3008,7 +3138,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Classrooms" fill="#f59e0b" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Classrooms" fill="#f59e0b" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3040,7 +3170,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Rooms" fill="#8b5cf6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Rooms" fill="#8b5cf6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3081,7 +3211,7 @@ const MonitoringDashboard = () => {
                                                     <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
                                                     <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar dataKey="value" name="Schools" fill="#14b8a6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" name="Schools" fill="#14b8a6" radius={[4, 4, 0, 0]} label={{ position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} />
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
