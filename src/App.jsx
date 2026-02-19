@@ -15,7 +15,7 @@ import Register from './Register';
 // Dashboards
 import EngineerDashboard from './modules/EngineerDashboard';
 import EngineerProjects from './modules/EngineerProjects';
-import LguForms from './modules/LguForms'; // Import newly created LguForms
+
 // import LguDashboard from './modules/lgu'; // Import LguDashboard
 // import LguProjects from './modules/LguProjects';
 import SchoolHeadDashboard from './modules/SchoolHeadDashboard';
@@ -35,7 +35,8 @@ import SuperAdminDashboard from './modules/SuperAdminDashboard';
 import SuperUserSelector from './modules/SuperUserSelector';
 import FinanceDashboard from './modules/FinanceDashboard'; // Import FinanceDashboard
 import LguDashboard from './modules/LguDashboard'; // Import LguDashboard
-// Import Banner
+import LguForms from './modules/LguForms'; // Import newly created LguForms
+import LguProjectDetails from './modules/LguProjectDetails'; // Import LguProjectDetails
 import ProtectedRoute from './components/ProtectedRoute'; // Import ProtectedRoute
 
 
@@ -116,6 +117,7 @@ const AnimatedRoutes = () => {
         <Route path="/finance-dashboard" element={<FinanceDashboard />} />
         <Route path="/lgu-dashboard" element={<LguDashboard />} />
         <Route path="/lgu-form" element={<LguForms />} /> {/* Mapped to LguForms */}
+        <Route path="/lgu-project-details/:id" element={<LguProjectDetails />} />
 
         {/* Super User Selector (Protected) */}
         <Route

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageTransition from '../components/PageTransition';
 import { FiPlus, FiFilter, FiSearch, FiEdit2, FiEye, FiMoreVertical, FiCheckCircle } from 'react-icons/fi';
 import { auth } from '../firebase';
+import LguEditModal from '../components/LguEditModal';
 import BottomNav from './BottomNav';
 
 const LguDashboard = () => {
@@ -11,6 +12,20 @@ const LguDashboard = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
+    const [selectedProject, setSelectedProject] = useState(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+    const handleUpdateClick = (project) => {
+        setSelectedProject(project);
+        setIsEditModalOpen(true);
+    };
+
+    const handleUpdateSuccess = () => {
+        setIsEditModalOpen(false);
+        // Refresh projects (simple reload of fetch)
+        window.location.reload(); 
+        // Or re-fetch if we extracted fetchProjects. For now, reload is safest for history updates.
+    };
 
     // --- FETCH PROJECTS ---
     useEffect(() => {
@@ -113,7 +128,7 @@ const LguDashboard = () => {
                         </div>
                     ) : (
                         filteredProjects.map((project) => (
-                            <div key={project.lgu_project_id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all group">
+                        <div key={project.lgu_project_id || project.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition-all group">
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
                                         <span className={`px-2 py-1 rounded-lg text-xs font-bold uppercase ${getStatusColor(project.project_status)}`}>
@@ -122,7 +137,7 @@ const LguDashboard = () => {
                                         <h3 className="text-slate-800 font-bold mt-2 text-lg leading-tight line-clamp-2">
                                             {project.project_name}
                                         </h3>
-                                        <p className="text-slate-500 text-xs mt-1 font-medium">{project.school_name}</p>
+                                        <p className="text-slate-500 text-xs mt-1 font-medium">{project.school_name} {project.school_id && `(${project.school_id})`}</p>
                                     </div>
                                     <button className="text-slate-300 hover:text-blue-600 transition-colors p-1">
                                         <FiMoreVertical />
@@ -160,12 +175,18 @@ const LguDashboard = () => {
                                 </div>
 
                                 {/* Actions */}
-                                {/* In future, wire these to Edit Modal or View Details page */}
                                 <div className="mt-4 flex gap-2">
-                                    <button className="flex-1 py-2 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors">
+                                    <button 
+                                        onClick={() => navigate(`/lgu-project-details/${project.lgu_project_id || project.id}`)}
+                                        className="flex-1 py-2 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors"
+                                    >
                                         View Details
                                     </button>
-                                    <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
+                                    {/* Update button directs to details page too, where the edit button is */}
+                                    <button 
+                                        onClick={() => handleUpdateClick(project)}
+                                        className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
+                                    >
                                         Update Progress
                                     </button>
                                 </div>
@@ -173,6 +194,16 @@ const LguDashboard = () => {
                         ))
                     )}
                 </div>
+
+
+
+                 {/* Edit Modal */}
+                <LguEditModal 
+                    isOpen={isEditModalOpen}
+                    onClose={() => setIsEditModalOpen(false)}
+                    project={selectedProject}
+                    onUpdateSuccess={handleUpdateSuccess}
+                />
 
                 <BottomNav userRole={localStorage.getItem('userRole')} />
             </div>

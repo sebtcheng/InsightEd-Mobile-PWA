@@ -322,21 +322,28 @@ const initFinanceDB = async () => {
   try {
     // 1. Create Finance Projects Table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS finance_projects(
-      finance_id SERIAL PRIMARY KEY,
-      region TEXT,
-      division TEXT,
-      district TEXT,
-      legislative_district TEXT,
-      school_id TEXT,
-      school_name TEXT,
-      project_name TEXT,
-      total_funds NUMERIC,
-      fund_released NUMERIC,
-      date_of_release DATE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+      CREATE TABLE IF NOT EXISTS finance_projects (
+        finance_id SERIAL PRIMARY KEY,
+        root_id TEXT, -- For Append-Only History
+        region TEXT,
+        division TEXT,
+        district TEXT,
+        legislative_district TEXT,
+        school_id TEXT,
+        school_name TEXT,
+        project_name TEXT,
+        total_funds NUMERIC,
+        fund_released NUMERIC,
+        date_of_release DATE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
+
+    // --- MIGRATION: Add root_id to finance_projects if missing ---
+    await pool.query(`ALTER TABLE finance_projects ADD COLUMN IF NOT EXISTS root_id TEXT;`);
+    // Backfill root_id for existing
+    await pool.query(`UPDATE finance_projects SET root_id = 'FIN-' || finance_id WHERE root_id IS NULL;`);
+
     console.log("✅ DB Init: Finance Projects table verified.");
 
     // 2. DROP OBSOLETE TABLE
@@ -345,24 +352,25 @@ const initFinanceDB = async () => {
 
     // 3. Create/Update LGU Finance Projects Table (lgu_projects)
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS lgu_projects(
-      lgu_project_id SERIAL PRIMARY KEY,
-      region TEXT,
-      division TEXT,
-      district TEXT,
-      legislative_district TEXT,
-      school_id TEXT,
-      school_name TEXT,
-      project_name TEXT,
-      total_funds NUMERIC,
-      fund_released NUMERIC,
-      date_of_release DATE,
-      liquidated_amount NUMERIC DEFAULT 0,
-      liquidation_date DATE,
-      percentage_liquidated NUMERIC DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CREATE TABLE IF NOT EXISTS lgu_projects (
+        lgu_project_id SERIAL PRIMARY KEY,
+        region TEXT,
+        division TEXT,
+        district TEXT,
+        legislative_district TEXT,
+        school_id TEXT,
+        school_name TEXT,
+        project_name TEXT,
+        total_funds NUMERIC,
+        fund_released NUMERIC,
+        date_of_release DATE,
+        liquidated_amount NUMERIC DEFAULT 0,
+        liquidation_date DATE,
+        percentage_liquidated NUMERIC DEFAULT 0,
+        finance_id INTEGER, -- Link to CO Finance
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-      --NEW FIELDS(LGU Refactor)
+        -- NEW FIELDS (LGU Refactor)
         source_agency TEXT,
       contractor_name TEXT,
       lsb_resolution_no TEXT,
@@ -407,14 +415,22 @@ const initFinanceDB = async () => {
       "date_notice_of_award DATE", "bid_amount NUMERIC", "latitude TEXT", "longitude TEXT",
       "pow_pdf TEXT", "dupa_pdf TEXT", "contract_pdf TEXT",
       "project_status TEXT DEFAULT 'Not Yet Started'", "accomplishment_percentage NUMERIC DEFAULT 0",
-      "status_as_of_date DATE", "amount_utilized NUMERIC DEFAULT 0", "nature_of_delay TEXT"
+      "status_as_of_date DATE", "amount_utilized NUMERIC DEFAULT 0", "nature_of_delay TEXT",
+      "root_project_id INTEGER", "finance_id INTEGER"
     ];
 
     for (const col of newCols) {
       await pool.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS ${col}; `);
     }
 
-    console.log("✅ DB Init: LGU Projects table verified (Updated Schema).");
+    // --- MIGRATION: Backfill root_project_id for existing records ---
+    // If root_project_id is NULL, set it to the project's own ID (it becomes the root)
+    await pool.query(`
+        UPDATE lgu_projects 
+        SET root_project_id = lgu_project_id 
+        WHERE root_project_id IS NULL;
+    `);
+    console.log("✅ DB Init: LGU Projects table verified (Updated Schema + History Support).");
 
   } catch (err) {
     console.error("❌ Finance DB Init Error:", err);
@@ -847,46 +863,54 @@ app.post('/api/finance/projects', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const {
-      region, division, district, legislative_district,
+    let {
+      region, division, district, legislative_district, municipality, // Added municipality
       school_id, school_name, project_name,
       total_funds, fund_released, date_of_release
     } = req.body;
 
+    // Sanitize currency inputs (remove commas)
+    const cleanCurrency = (val) => {
+      if (!val) return null;
+      if (typeof val === 'string') return parseFloat(val.replace(/,/g, ''));
+      return val;
+    };
+
+    const sanitizedTotalFunds = cleanCurrency(total_funds);
+    const sanitizedFundReleased = cleanCurrency(fund_released);
+
     // A. Insert into Finance Table
     const financeQuery = `
       INSERT INTO finance_projects 
-      (region, division, district, legislative_district, school_id, school_name, project_name, total_funds, fund_released, date_of_release)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      (region, division, district, legislative_district, municipality, school_id, school_name, project_name, total_funds, fund_released, date_of_release)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING finance_id;
     `;
     const financeRes = await client.query(financeQuery, [
-      region, division, district, legislative_district,
+      region, division, district, legislative_district, municipality,
       school_id, school_name, project_name,
-      total_funds, fund_released, date_of_release
+      sanitizedTotalFunds, sanitizedFundReleased, date_of_release
     ]);
     const financeId = financeRes.rows[0].finance_id;
 
-    // B. Duplicate to LGU Table (lgu_forms) (REMOVED)
-    /*
-    // Mapping: 
-    // total_funds -> project_allocation
-    // fund_released -> funds_downloaded
-    // date_of_release -> funds_downloaded_date (if exists) or just generic mapping
+    // B. Duplicate to LGU Table (lgu_projects) - LINKED
     const lguQuery = `
-      INSERT INTO lgu_forms 
-      (finance_ref_id, region, division, legislative_district, school_id, school_name, project_name, project_allocation, funds_downloaded, construction_start_date)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING project_id;
+      INSERT INTO lgu_projects 
+      (
+        finance_id, municipality,
+        region, division, district, legislative_district, school_id, school_name, project_name, 
+        total_funds, fund_released, date_of_release,
+        project_status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Not Yet Started')
+      RETURNING lgu_project_id;
     `;
-    // Note: construction_start_date used for date_of_release temporarily or just omitted if no direct map.
-    // Let's stick to key fields.
+
     await client.query(lguQuery, [
-      financeId, region, division, legislative_district,
-      school_id, school_name, project_name,
-      total_funds, fund_released, date_of_release
+      financeId, municipality,
+      region, division, district, legislative_district, school_id, school_name, project_name,
+      sanitizedTotalFunds, sanitizedFundReleased, date_of_release
     ]);
-    */
 
     await client.query('COMMIT');
     res.json({ success: true, finance_id: financeId, message: "Project created and synced to LGU." });
@@ -894,7 +918,7 @@ app.post('/api/finance/projects', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error("Finance Create Error:", err);
-    res.status(500).json({ error: "Failed to create finance project." });
+    res.status(500).json({ error: "Failed to create finance project: " + err.message });
   } finally {
     client.release();
   }
@@ -920,7 +944,7 @@ app.post('/api/lgu/projects', async (req, res) => {
     await client.query('BEGIN');
 
     const {
-      region, division, district, legislative_district,
+      region, division, district, legislative_district, municipality,
       school_id, school_name, project_name,
       total_funds, fund_released, date_of_release,
 
@@ -941,11 +965,16 @@ app.post('/api/lgu/projects', async (req, res) => {
 
     // Helper to sanitize numeric/date fields
     const sanitize = (val) => (val === '' || val === null || val === undefined ? null : val);
+    const cleanNumeric = (val) => {
+      if (val === '' || val === null || val === undefined) return null;
+      if (typeof val === 'string') return parseFloat(val.replace(/,/g, ''));
+      return val;
+    };
 
     const query = `
       INSERT INTO lgu_projects 
       (
-        region, division, district, legislative_district, school_id, school_name, project_name, 
+        region, division, district, legislative_district, municipality, school_id, school_name, project_name, 
         total_funds, fund_released, date_of_release,
         source_agency, contractor_name, lsb_resolution_no, moa_ref_no, moa_date,
         validity_period, contract_duration, date_approved_pow, approved_contract_budget,
@@ -957,35 +986,39 @@ app.post('/api/lgu/projects', async (req, res) => {
         created_by_uid
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, 
-        $8, $9, $10,
-        $11, $12, $13, $14, $15,
-        $16, $17, $18, $19,
-        $20, $21, $22,
-        $23, $24, $25,
-        $26, $27, $28,
-        $29, $30,
-        $31, $32, $33, $34, $35,
-        $36
+        $1, $2, $3, $4, $5, $6, $7, $8, 
+        $9, $10, $11,
+        $12, $13, $14, $15, $16,
+        $17, $18, $19, $20,
+        $21, $22, $23,
+        $24, $25, $26,
+        $27, $28, $29,
+        $30, $31,
+        $32, $33, $34, $35, $36,
+        $37
       )
       RETURNING lgu_project_id;
     `;
 
     const result = await client.query(query, [
-      region, division, district, legislative_district, school_id, school_name, project_name,
-      sanitize(total_funds), sanitize(fund_released), sanitize(date_of_release),
+      region, division, district, legislative_district, municipality, school_id, school_name, project_name,
+      cleanNumeric(total_funds), cleanNumeric(fund_released), sanitize(date_of_release),
       source_agency, contractor_name, lsb_resolution_no, moa_ref_no, sanitize(moa_date),
-      validity_period, contract_duration, sanitize(date_approved_pow), sanitize(approved_contract_budget),
-      schedule_of_fund_release, sanitize(number_of_tranches), sanitize(amount_per_tranche),
+      validity_period, contract_duration, sanitize(date_approved_pow), cleanNumeric(approved_contract_budget),
+      schedule_of_fund_release, cleanNumeric(number_of_tranches), cleanNumeric(amount_per_tranche),
       mode_of_procurement, philgeps_ref_no, pcab_license_no,
-      sanitize(date_contract_signing), sanitize(date_notice_of_award), sanitize(bid_amount),
+      sanitize(date_contract_signing), sanitize(date_notice_of_award), cleanNumeric(bid_amount),
       latitude, longitude,
-      project_status || 'Not Yet Started', accomplishment_percentage || 0, sanitize(status_as_of_date), sanitize(amount_utilized) || 0, nature_of_delay,
+      project_status || 'Not Yet Started', cleanNumeric(accomplishment_percentage) || 0, sanitize(status_as_of_date), cleanNumeric(amount_utilized) || 0, nature_of_delay,
       created_by_uid
     ]);
 
+    // --- FIX: Initialize root_project_id ---
+    const newProjectId = result.rows[0].lgu_project_id;
+    await client.query('UPDATE lgu_projects SET root_project_id = $1 WHERE lgu_project_id = $1', [newProjectId]);
+
     await client.query('COMMIT');
-    res.json({ success: true, lgu_project_id: result.rows[0].lgu_project_id, message: "LGU Project created." });
+    res.json({ success: true, lgu_project_id: newProjectId, message: "LGU Project created." });
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -996,16 +1029,35 @@ app.post('/api/lgu/projects', async (req, res) => {
   }
 });
 
-// 2. Get All LGU Projects (Filtered by User)
+/* 
+// DUPLICATE ROUTE REMOVED (Legacy) - See line 8574 for correct implementation
+// 2. Get All LGU Projects (Filtered by User & Municipality)
 app.get('/api/lgu/projects', async (req, res) => {
   const { uid } = req.query; // Get UID from query
   try {
     let query = 'SELECT * FROM lgu_projects';
     let params = [];
+    let whereClauses = [];
 
+    // Check User Role & Municipality
     if (uid) {
-      query += ' WHERE created_by_uid = $1';
-      params.push(uid);
+      const userRes = await pool.query('SELECT role, city FROM users WHERE uid = $1', [uid]);
+      if (userRes.rows.length > 0) {
+        const user = userRes.rows[0];
+        // If user is LGU, filter by municipality (city)
+        // Assuming role 'LGU' or checking if city is present
+        if (user.city) {
+          whereClauses.push(`municipality = $${params.length + 1}`);
+          params.push(user.city);
+        }
+      }
+      // Also allow filtering by creator if needed, but for now municipality is the main filter
+      // whereClauses.push(`created_by_uid = $${params.length + 1}`);
+      // params.push(uid);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ' WHERE ' + whereClauses.join(' AND ');
     }
 
     query += ' ORDER BY created_at DESC';
@@ -1017,6 +1069,7 @@ app.get('/api/lgu/projects', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch LGU projects." });
   }
 });
+*/
 
 // 3. Update LGU Project (Liquidation)
 app.put('/api/lgu/projects/:id', async (req, res) => {
@@ -1043,7 +1096,13 @@ app.put('/api/lgu/projects/:id', async (req, res) => {
     // Liquidation Logic
     if (liquidated_amount !== undefined) {
       const totalFunds = parseFloat(current.total_funds || 0);
-      const liq = parseFloat(liquidated_amount || 0);
+      let liq = 0;
+      if (typeof liquidated_amount === 'string') {
+        liq = parseFloat(liquidated_amount.replace(/,/g, ''));
+      } else {
+        liq = parseFloat(liquidated_amount || 0);
+      }
+
       let pct = 0;
       if (totalFunds > 0) pct = parseFloat(((liq / totalFunds) * 100).toFixed(2));
 
@@ -1057,9 +1116,17 @@ app.put('/api/lgu/projects/:id', async (req, res) => {
 
     // Progress Logic
     if (project_status !== undefined) { updates.push(`project_status = $${idx++}`); values.push(project_status); }
-    if (accomplishment_percentage !== undefined) { updates.push(`accomplishment_percentage = $${idx++}`); values.push(accomplishment_percentage); }
+    if (accomplishment_percentage !== undefined) {
+      let acc = accomplishment_percentage;
+      if (typeof acc === 'string') acc = parseFloat(acc.replace(/,/g, ''));
+      updates.push(`accomplishment_percentage = $${idx++}`); values.push(acc);
+    }
     if (status_as_of_date !== undefined) { updates.push(`status_as_of_date = $${idx++}`); values.push(status_as_of_date); }
-    if (amount_utilized !== undefined) { updates.push(`amount_utilized = $${idx++}`); values.push(amount_utilized); }
+    if (amount_utilized !== undefined) {
+      let util = amount_utilized;
+      if (typeof util === 'string') util = parseFloat(util.replace(/,/g, ''));
+      updates.push(`amount_utilized = $${idx++}`); values.push(util);
+    }
     if (nature_of_delay !== undefined) { updates.push(`nature_of_delay = $${idx++}`); values.push(nature_of_delay); }
 
     if (updates.length === 0) {
@@ -8535,6 +8602,143 @@ app.post('/api/lgu/save-project', async (req, res) => {
   }
 });
 
+// --- FINANCE 1. GET: Fetch All Projects (Latest Version) ---
+app.get('/api/finance/projects', async (req, res) => {
+  try {
+    // DISTINCT ON (root_id) requires ORDER BY root_id, then other fields
+    const result = await pool.query(`
+        SELECT DISTINCT ON (root_id) * 
+        FROM finance_projects 
+        WHERE root_id IS NOT NULL
+        ORDER BY root_id, created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching finance projects:", err);
+    res.status(500).json({ error: "Failed to fetch projects" });
+  }
+});
+
+// --- FINANCE 2. POST: Create Project ---
+app.post('/api/finance/projects', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const {
+      school_id, school_name, project_name, region, division, municipality, district, legislative_district,
+      total_funds, fund_released, date_of_release
+    } = req.body;
+
+    await client.query('BEGIN');
+
+    // 1. Insert into Finance Table (Initial)
+    const insertQuery = `
+        INSERT INTO finance_projects (
+            school_id, school_name, project_name, region, division, municipality, district, legislative_district,
+            total_funds, fund_released, date_of_release
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING finance_id, *;
+    `;
+
+    // Clean numbers
+    const cleanTotal = total_funds ? parseFloat(total_funds.toString().replace(/,/g, '')) : 0;
+    const cleanReleased = fund_released ? parseFloat(fund_released.toString().replace(/,/g, '')) : 0;
+    // Clean Date
+    let cleanDate = date_of_release;
+    if (date_of_release === '' || date_of_release === null) cleanDate = null;
+
+    const result = await client.query(insertQuery, [
+      school_id, school_name, project_name, region, division, municipality, district, legislative_district,
+      cleanTotal, cleanReleased, cleanDate
+    ]);
+
+    let newProject = result.rows[0];
+    const newId = newProject.finance_id;
+    const rootId = `FIN-${newId}`;
+
+    // 2. Set root_id for this first record
+    await client.query('UPDATE finance_projects SET root_id = $1 WHERE finance_id = $2', [rootId, newId]);
+    newProject.root_id = rootId;
+
+    // 3. Auto-Create LGU Project (Sync) using the same Root ID
+    const lguQuery = `
+        INSERT INTO lgu_projects (
+            root_project_id, 
+            school_id, school_name, project_name, region, division, municipality, district, legislative_district,
+            total_funds, fund_released, date_of_release,
+            source_agency, project_status, accomplishment_percentage
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
+    `;
+
+    await client.query(lguQuery, [
+      rootId,
+      school_id, school_name, project_name, region, division, municipality, district, legislative_district,
+      cleanTotal, cleanReleased, cleanDate,
+      'Central Office', 'Not Started', 0
+    ]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, project: newProject });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Error creating finance project:", err);
+    res.status(500).json({ error: "Failed to create project" });
+  } finally {
+    client.release();
+  }
+});
+
+// --- FINANCE 3. PUT: Update Project (APPEND ONLY) ---
+app.put('/api/finance/project/:id', async (req, res) => {
+  const { id } = req.params;
+  const {
+    project_name, total_funds, fund_released, date_of_release
+  } = req.body;
+
+  try {
+    // 1. Fetch current project to get root_id & other details (to copy over if needed, or just root_id)
+    const currentRes = await pool.query('SELECT * FROM finance_projects WHERE finance_id = $1', [id]);
+    if (currentRes.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    const currentProject = currentRes.rows[0];
+    const rootId = currentProject.root_id || `FIN-${currentProject.finance_id}`; // Fallback
+
+    // Clean numbers
+    const cleanTotal = total_funds ? parseFloat(total_funds.toString().replace(/,/g, '')) : 0;
+    const cleanReleased = fund_released ? parseFloat(fund_released.toString().replace(/,/g, '')) : 0;
+
+    // 2. INSERT NEW ROW (Append)
+    const query = `
+        INSERT INTO finance_projects (
+            root_id,
+            school_id, school_name, project_name, 
+            region, division, municipality, district, legislative_district,
+            total_funds, fund_released, date_of_release
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *;
+    `;
+
+    // We copy school/location details from current project as they usually don't change in this edit mode, 
+    // or we should accept them from req.body if frontend sends them. 
+    // Based on FinanceDashboard, it sends project_name, total_funds, etc. 
+    // It implies we should keep the school/location from the original.
+
+    const result = await pool.query(query, [
+      rootId,
+      currentProject.school_id, currentProject.school_name, project_name || currentProject.project_name,
+      currentProject.region, currentProject.division, currentProject.municipality, currentProject.district, currentProject.legislative_district,
+      cleanTotal, cleanReleased, date_of_release
+    ]);
+
+    res.json({ success: true, project: result.rows[0], message: "Project updated (New Version Created)" });
+
+  } catch (err) {
+    console.error("Error updating finance project:", err);
+    res.status(500).json({ error: "Failed to update project" });
+  }
+});
+
 // --- LGU 2. POST: Upload Image (LGU) ---
 app.post('/api/lgu/upload-image', async (req, res) => {
   const { projectId, imageData, uploadedBy } = req.body;
@@ -8614,84 +8818,119 @@ app.post('/api/lgu/upload-project-document', async (req, res) => {
 });
 
 // --- LGU 3. GET: Fetch LGU Projects (List) ---
+// --- LGU 3. GET: Fetch LGU Projects (LATEST VERSION ONLY) ---
 app.get('/api/lgu/projects', async (req, res) => {
   const { uid, municipality } = req.query;
   try {
+    // We want the LATEST version for each project.
+    // Group by root_project_id and take the one with the latest created_at.
     let query = `
-      SELECT 
-        project_id, project_name, school_name, school_id, 
-        status, accomplishment_percentage, project_allocation, 
-        ipc, lgu_name, 
-        TO_CHAR(target_completion_date, 'YYYY-MM-DD') as target_completion_date,
-        TO_CHAR(status_as_of, 'YYYY-MM-DD') as status_as_of,
-        other_remarks
-      FROM lgu_forms
+      SELECT DISTINCT ON (root_project_id) *
+      FROM lgu_projects
     `;
     const params = [];
 
+    // Filter Logic
     if (uid) {
-      query += ` WHERE lgu_id = $1`;
-      params.push(uid);
+      const userRes = await pool.query('SELECT role, city FROM users WHERE uid = $1', [uid]);
+      if (userRes.rows.length > 0) {
+        const user = userRes.rows[0];
+        // If user is LGU, filter by municipality (city)
+        if (user.city) {
+          query += ` WHERE municipality = $1 `;
+          params.push(user.city);
+        }
+      }
     } else if (municipality) {
-      query += ` WHERE municipality = $1 OR city = $1`;
+      query += ` WHERE municipality = $1 `;
       params.push(municipality);
     }
 
-    query += ` ORDER BY created_at DESC`;
+    // IMPORTANT: DISTINCT ON requires the ORDER BY to start with the distinct column
+    query += ` ORDER BY root_project_id, created_at DESC`;
 
     const result = await pool.query(query, params);
     res.json(result.rows);
-
   } catch (err) {
-    console.error("❌ Fetch LGU Projects Error:", err.message);
-    res.status(500).json({ error: "Failed to fetch projects" });
+    console.error("Error fetching LGU projects:", err);
+    res.status(500).json({ error: "Failed to fetch LGU projects" });
   }
 });
 
-// --- LGU 4. GET: Fetch Single LGU Project (Detail) ---
+// --- LGU 4. GET: Fetch Single LGU Project Details ---
 app.get('/api/lgu/project/:id', async (req, res) => {
   const { id } = req.params;
-  console.log(`[DEBUG] Fetching LGU Project with ID: ${id}`); // DEBUG LOG
   try {
-    const query = `
-            SELECT *,
-            TO_CHAR(target_completion_date, 'YYYY-MM-DD') as "targetCompletionDate",
-            TO_CHAR(status_as_of, 'YYYY-MM-DD') as "statusAsOfDate",
-            TO_CHAR(actual_completion_date, 'YYYY-MM-DD') as "actualCompletionDate",
-            TO_CHAR(notice_to_proceed, 'YYYY-MM-DD') as "noticeToProceed",
-            TO_CHAR(construction_start_date, 'YYYY-MM-DD') as "construction_start_date",
-            TO_CHAR(moa_date, 'YYYY-MM-DD') as "moa_date",
-            TO_CHAR(bid_opening_date, 'YYYY-MM-DD') as "bid_opening_date",
-            TO_CHAR(resolution_award_date, 'YYYY-MM-DD') as "resolution_award_date",
-            TO_CHAR(bidding_date, 'YYYY-MM-DD') as "bidding_date",
-            TO_CHAR(awarding_date, 'YYYY-MM-DD') as "awarding_date",
-            TO_CHAR(date_approved_pow, 'YYYY-MM-DD') as "date_approved_pow",
-            TO_CHAR(date_contract_signing, 'YYYY-MM-DD') as "date_contract_signing",
-            TO_CHAR(date_notice_of_award, 'YYYY-MM-DD') as "date_notice_of_award"
-            FROM lgu_forms WHERE project_id = $1
-        `;
+    const query = `SELECT * FROM lgu_projects WHERE lgu_project_id = $1`;
     const result = await pool.query(query, [id]);
 
-    console.log(`[DEBUG] Query Result Row Count: ${result.rows.length}`); // DEBUG LOG
-
     if (result.rows.length === 0) {
-      console.log(`[DEBUG] Project ${id} NOT FOUND in lgu_forms table.`); // DEBUG LOG
       return res.status(404).json({ error: "Project not found" });
     }
-
-    // Fetch images too
-    const imgQuery = `SELECT id, image_data, category FROM lgu_image WHERE project_id = $1`;
-    const imgResult = await pool.query(imgQuery, [id]);
-
-    const project = result.rows[0];
-    project.images = imgResult.rows;
-
-    res.json(project);
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error("❌ Fetch LGU Project Error:", err.message);
+    console.error("Error fetching LGU project details:", err);
     res.status(500).json({ error: "Failed to fetch project details" });
   }
 });
+
+// --- LGU 5. POST: Update Project (Append-Only History) ---
+app.post('/api/lgu/project/update', async (req, res) => {
+  try {
+    const project = req.body;
+
+    // We create a NEW record in lgu_projects
+    // root_project_id MUST be maintained
+
+    const columns = [
+      "region", "division", "district", "legislative_district", "school_id", "school_name",
+      "project_name", "total_funds", "fund_released", "date_of_release", "liquidated_amount",
+      "liquidation_date", "percentage_liquidated", "source_agency", "contractor_name",
+      "lsb_resolution_no", "moa_ref_no", "moa_date", "validity_period", "contract_duration",
+      "date_approved_pow", "approved_contract_budget", "schedule_of_fund_release",
+      "number_of_tranches", "amount_per_tranche", "mode_of_procurement", "philgeps_ref_no",
+      "pcab_license_no", "date_contract_signing", "date_notice_of_award", "bid_amount",
+      "latitude", "longitude", "pow_pdf", "dupa_pdf", "contract_pdf",
+      "project_status", "accomplishment_percentage", "status_as_of_date",
+      "amount_utilized", "nature_of_delay", "root_project_id", "municipality"
+    ];
+
+    const numericCols = [
+      "total_funds", "fund_released", "liquidated_amount", "percentage_liquidated",
+      "approved_contract_budget", "number_of_tranches", "amount_per_tranche",
+      "bid_amount", "accomplishment_percentage", "amount_utilized"
+    ];
+
+    const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+    const values = columns.map(col => {
+      let val = project[col];
+      if (val === '' || val === undefined || val === null) return null;
+
+      if (numericCols.includes(col)) {
+        if (typeof val === 'string') {
+          return parseFloat(val.replace(/,/g, ''));
+        }
+      }
+      return val;
+    });
+
+    const query = `
+        INSERT INTO lgu_projects (${columns.join(', ')})
+        VALUES (${placeholders})
+        RETURNING lgu_project_id;
+    `;
+
+    const result = await pool.query(query, values);
+
+    res.json({ success: true, new_project_id: result.rows[0].lgu_project_id, message: "Project updated (History Saved)" });
+
+  } catch (err) {
+    console.error("Error updating LGU project:", err);
+    res.status(500).json({ error: "Update failed", details: err.message });
+  }
+});
+
+
 
 // --- LGU 5. PUT: Update LGU Project ---
 app.put('/api/lgu/update-project/:id', async (req, res) => {

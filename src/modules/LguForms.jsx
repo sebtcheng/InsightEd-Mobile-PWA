@@ -121,8 +121,10 @@ const LguForms = () => {
     const handleNumberChange = (e) => {
         const { name, value } = e.target;
         // Allow numbers and decimal points only
-        const val = value.replace(/[^0-9.]/g, '');
-        setFormData(prev => ({ ...prev, [name]: val }));
+        const rawVal = value.replace(/[^0-9.]/g, '');
+        // Format with commas
+        const formatted = rawVal.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        setFormData(prev => ({ ...prev, [name]: formatted }));
     };
 
     // --- SCHOOL VALIDATION ---
@@ -352,7 +354,7 @@ const LguForms = () => {
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">School ID <span className="text-red-500">*</span></label>
                                     <div className="flex">
-                                        <input name="school_id" value={formData.school_id} onChange={handleNumberChange} maxLength={6} required className="w-full p-3 border border-slate-200 rounded-l-xl" placeholder="ID" />
+                                        <input name="school_id" value={formData.school_id} onChange={handleChange} maxLength={6} required className="w-full p-3 border border-slate-200 rounded-l-xl" placeholder="ID" />
                                         <button type="button" onClick={handleSchoolLookup} disabled={isLookingUp} className="bg-blue-500 text-white px-3 rounded-r-xl font-bold text-sm">
                                             {isLookingUp ? '...' : 'Go'}
                                         </button>
@@ -417,11 +419,11 @@ const LguForms = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">Approved Budget</label>
-                                    <input name="approved_contract_budget" value={formData.approved_contract_budget} onChange={handleNumberChange} type="number" className="w-full p-3 border border-slate-200 rounded-xl font-mono" placeholder="0.00" />
+                                    <input name="approved_contract_budget" value={formData.approved_contract_budget} onChange={handleNumberChange} type="text" className="w-full p-3 border border-slate-200 rounded-xl font-mono" placeholder="0.00" />
                                 </div>
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">Bid Amount</label>
-                                    <input name="bid_amount" value={formData.bid_amount} onChange={handleNumberChange} type="number" className="w-full p-3 border border-slate-200 rounded-xl font-mono" placeholder="0.00" />
+                                    <input name="bid_amount" value={formData.bid_amount} onChange={handleNumberChange} type="text" className="w-full p-3 border border-slate-200 rounded-xl font-mono" placeholder="0.00" />
                                 </div>
                             </div>
 
@@ -441,7 +443,7 @@ const LguForms = () => {
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase">Amount / Tranche</label>
-                                        <input name="amount_per_tranche" value={formData.amount_per_tranche} onChange={handleNumberChange} type="number" className="w-full p-2 border border-slate-200 rounded-lg" />
+                                        <input name="amount_per_tranche" value={formData.amount_per_tranche} onChange={handleNumberChange} type="text" className="w-full p-2 border border-slate-200 rounded-lg" />
                                     </div>
                                 </div>
                             )}
@@ -449,12 +451,12 @@ const LguForms = () => {
                              <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-slate-500 uppercase">Total Funds</label>
-                                    <input name="total_funds" value={formData.total_funds} onChange={handleNumberChange} type="number" className="w-full p-3 border border-slate-200 rounded-xl font-mono text-blue-600 font-bold" />
+                                    <input name="total_funds" value={formData.total_funds} onChange={handleNumberChange} type="text" className="w-full p-3 border border-slate-200 rounded-xl font-mono text-blue-600 font-bold" />
                                 </div>
                                 <div className="space-y-3">
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase">Funds Released</label>
-                                        <input name="fund_released" value={formData.fund_released} onChange={handleNumberChange} type="number" className="w-full p-3 border border-slate-200 rounded-xl font-mono text-emerald-600 font-bold" />
+                                        <input name="fund_released" value={formData.fund_released} onChange={handleNumberChange} type="text" className="w-full p-3 border border-slate-200 rounded-xl font-mono text-emerald-600 font-bold" />
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 uppercase">Date Released</label>
@@ -471,7 +473,14 @@ const LguForms = () => {
                         <div className="space-y-4">
                              <div>
                                 <label className="text-xs font-bold text-slate-500 uppercase">Mode of Procurement</label>
-                                <input name="mode_of_procurement" value={formData.mode_of_procurement} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl" />
+                                <select name="mode_of_procurement" value={formData.mode_of_procurement} onChange={handleChange} className="w-full p-3 border border-slate-200 rounded-xl">
+                                    <option value="">Select Mode</option>
+                                    <option value="Public Bidding">Public Bidding</option>
+                                    <option value="Negotiated Procurement">Negotiated Procurement</option>
+                                    <option value="Shopping">Shopping</option>
+                                    <option value="Direct Contracting">Direct Contracting</option>
+                                    <option value="Small Value Procurement">Small Value Procurement</option>
+                                </select>
                             </div>
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
