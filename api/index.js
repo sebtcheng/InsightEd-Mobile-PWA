@@ -843,13 +843,77 @@ specialization = EXCLUDED.specialization,
       ]);
     }
 
+    // 4. SYNC: Update school_profiles for frontend status compatibility
+    // We update 'spec_general_teaching' with the total count of teachers, 
+    // ensuring SchoolForms.jsx sees a value > 0 to mark the form as "Completed".
+    await client.query(`
+      UPDATE school_profiles 
+      SET spec_general_teaching = (
+        SELECT COUNT(*)::int FROM teacher_specialization_details WHERE school_id = $1
+      )
+      WHERE school_id = $1
+    `, [schoolId]);
+
+    // 5. UPDATE PROGRESS
+    await calculateSchoolProgress(schoolId, client);
+
     await client.query('COMMIT');
     res.json({ success: true, message: "Teacher personnel saved successfully." });
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error("❌ Error saving teacher personnel:", err);
-    res.status(500).json({ error: "Failed to save teacher personnel." });
+    console.error("Save Teacher Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    client.release();
+  }
+});
+
+// POST: Save Legacy Specialization Aggregates
+app.post('/api/save-teacher-specialization-legacy', async (req, res) => {
+  const { schoolId, data } = req.body; // data contains spec_english_major: 5, etc.
+
+  if (!schoolId || !data) {
+    return res.status(400).json({ error: "Invalid payload. 'schoolId' and 'data' object are required." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // List of legacy columns to update
+    const fields = [
+      'spec_general_teaching', 'spec_ece_teaching',
+      'spec_english_major', 'spec_filipino_major', 'spec_math_major',
+      'spec_science_major', 'spec_ap_major', 'spec_mapeh_major',
+      'spec_esp_major', 'spec_tle_major', 'spec_bio_sci_major',
+      'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
+    ];
+
+    const updates = [];
+    const values = [schoolId];
+
+    // Build dynamic UPDATE query
+    fields.forEach((field, index) => {
+      // Use the value from data, default to 0
+      updates.push(`${field} = $${index + 2}`);
+      values.push(data[field] ? parseInt(data[field]) : 0);
+    });
+
+    const query = `UPDATE school_profiles SET ${updates.join(', ')} WHERE school_id = $1`;
+
+    await client.query(query, values);
+
+    // Trigger progress update just in case
+    await calculateSchoolProgress(schoolId, client);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Legacy specialization data saved." });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Save Legacy Spec Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   } finally {
     client.release();
   }
@@ -2431,11 +2495,29 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
 
     // --- FORM 6: Specialization ---
     // Criteria: At least one record in the new teacher_specialization_details table
+    // OR legacy aggregate columns have data
     const resultSpec = await dbClientOrPool.query(
       'SELECT id FROM teacher_specialization_details WHERE school_id = $1 LIMIT 1',
       [schoolId]
     );
-    const f6 = resultSpec.rows.length > 0 ? 1 : 0;
+
+    let f6 = resultSpec.rows.length > 0 ? 1 : 0;
+
+    if (!f6) {
+      // Fallback: Check Legacy Columns
+      // Columns: spec_general_teaching, spec_english_major, etc.
+      // We check if ANY of them are greater than 0
+      const legacyCols = [
+        'spec_general_teaching', 'spec_ece_teaching', 'spec_english_major', 'spec_filipino_major',
+        'spec_math_major', 'spec_science_major', 'spec_ap_major', 'spec_tle_major',
+        'spec_mapeh_major', 'spec_esp_major', 'spec_bio_sci_major', 'spec_phys_sci_major',
+        'spec_agri_fishery_major', 'spec_others_major'
+      ];
+      // Check if any col in sp is > 0
+      const hasLegacy = legacyCols.some(col => (sp[col] || 0) > 0);
+      if (hasLegacy) f6 = 1;
+    }
+
     if (f6) completed++;
 
     // --- FORM 7: Resources ---
@@ -5933,6 +6015,34 @@ app.get('/api/school-resources/:uid', async (req, res) => {
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({ exists: true, data: result.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- 21a. GET: Check Legacy Specialization Data ---
+app.get('/api/check-legacy-specialization/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT 
+        spec_general_teaching, spec_ece_teaching, spec_english_major, spec_filipino_major,
+        spec_math_major, spec_science_major, spec_ap_major, spec_tle_major,
+        spec_mapeh_major, spec_esp_major, spec_bio_sci_major, spec_phys_sci_major,
+        spec_agri_fishery_major, spec_others_major
+       FROM school_profiles WHERE school_id = $1`,
+      [schoolId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ hasLegacyData: false });
+    }
+
+    const row = result.rows[0];
+    const hasData = Object.values(row).some(val => (val || 0) > 0);
+
+    res.json({ hasLegacyData: hasData });
+  } catch (err) {
+    console.error("Check Legacy Spec Error:", err);
+    res.status(500).json({ error: "Failed to check legacy data" });
+  }
 });
 
 // --- 21b. GET: Fetch e-Cart Batches ---

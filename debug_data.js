@@ -1,35 +1,56 @@
-import dotenv from 'dotenv';
 import pg from 'pg';
-
+import dotenv from 'dotenv';
 dotenv.config();
-const { Pool } = pg;
 
+const { Pool } = pg;
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-const debugData = async () => {
+async function check() {
+    const schoolId = '301898';
+    console.log('--- START DEBUG ---');
+    console.log(`Checking School: ${schoolId}`);
+
     try {
-        console.log("--- DEBUGGING DATA ---");
+        // 1. Check School Profile
+        const res = await pool.query('SELECT school_id, school_name, submitted_by, email FROM school_profiles WHERE school_id = $1', [schoolId]);
+        if (res.rows.length === 0) {
+            console.log('SCHOOL NOT FOUND');
+        } else {
+            console.log('SCHOOL FOUND');
+            console.log('School Details: ' + JSON.stringify(res.rows[0]));
+            const submittedBy = res.rows[0].submitted_by;
 
-        // 1. Search for the School Profile
-        const schoolRes = await pool.query(`SELECT school_id, school_name, submitted_by FROM school_profiles WHERE school_name ILIKE '%Cabayo Primary%'`);
-        console.log("School Profile Record:", schoolRes.rows);
+            if (submittedBy) {
+                // 2. Check User by UID
+                const userRes = await pool.query('SELECT uid, email, role FROM users WHERE uid = $1', [submittedBy]);
+                if (userRes.rows.length > 0) {
+                    console.log('OWNER USER FOUND: ' + JSON.stringify(userRes.rows[0]));
+                } else {
+                    console.log('OWNER USER NOT FOUND (UID mismatch) with UID: ' + submittedBy);
+                }
+            } else {
+                console.log('SCHOOL HAS NO OWNER (submitted_by is null)');
+            }
+        }
 
-        if (schoolRes.rows.length > 0) {
-            const schoolId = schoolRes.rows[0].school_id;
-
-            // 2. Search for Users linked to this School ID
-            const userRes = await pool.query(`SELECT uid, email, first_name, last_name, school_id FROM users WHERE school_id = $1`, [schoolId]);
-            console.log("Users with this school_id:", userRes.rows);
+        // 3. Check for @deped.gov.ph user
+        const email = `${schoolId}@deped.gov.ph`;
+        const uRes = await pool.query('SELECT uid, email, role FROM users WHERE email = $1', [email]);
+        if (uRes.rows.length > 0) {
+            console.log(`DEPED USER FOUND: ` + JSON.stringify(uRes.rows[0]));
+        } else {
+            console.log(`DEPED USER NOT FOUND`);
         }
 
     } catch (err) {
-        console.error("Error:", err);
+        console.error("Query Error:", err);
     } finally {
+        console.log('--- END DEBUG ---');
         pool.end();
     }
-};
+}
 
-debugData();
+check();

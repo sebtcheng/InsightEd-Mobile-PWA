@@ -1,10 +1,9 @@
 // src/forms/TeacherSpecialization.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiBook, FiAward, FiBriefcase, FiCheckCircle, FiAlertCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiEdit3 } from 'react-icons/fi';
-import { auth, db } from '../firebase';
+import { FiArrowLeft, FiBriefcase, FiCheckCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiPieChart } from 'react-icons/fi';
+import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from 'firebase/firestore';
 import { addToOutbox, getOutbox } from '../db';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -25,6 +24,23 @@ const SPECIALIZATION_OPTIONS = [
     'AGRICULTURE AND FISHERY ARTS',
     'OTHERS'
 ];
+
+const ACADEMIC_MAP = {
+    'GENERAL EDUCATION': 'spec_general_teaching',
+    'EARLY CHILDHOOD EDUCATION': 'spec_ece_teaching',
+    'ENGLISH': 'spec_english_major',
+    'FILIPINO': 'spec_filipino_major',
+    'MATH': 'spec_math_major',
+    'SCIENCE': 'spec_science_major',
+    'ARALING PANLIPUNAN': 'spec_ap_major',
+    'TLE/EPP': 'spec_tle_major',
+    'MAPEH': 'spec_mapeh_major',
+    'ESP/ VALUES': 'spec_esp_major',
+    'BIOLOGICAL SCIENCE': 'spec_bio_sci_major',
+    'PHYSICAL SCIENCE': 'spec_phys_sci_major',
+    'AGRICULTURE AND FISHERY ARTS': 'spec_agri_fishery_major',
+    'OTHERS': 'spec_others_major'
+};
 
 const TeacherSpecialization = ({ embedded }) => {
     const navigate = useNavigate();
@@ -52,11 +68,38 @@ const TeacherSpecialization = ({ embedded }) => {
     const [showInfoModal, setShowInfoModal] = useState(false);
 
     const [schoolId, setSchoolId] = useState(localStorage.getItem('schoolId'));
-    const [formData, setFormData] = useState([]); // Array of teacher objects
+    const [teacherList, setTeacherList] = useState([]); // Array of teacher objects
     const [originalData, setOriginalData] = useState([]);
 
     // New Teacher State
     const [newTeacher, setNewTeacher] = useState({ full_name: '', position: '', specialization: 'GENERAL EDUCATION' });
+
+    // --- COMPUTED: SUMMARY STATS ---
+    const summaryStats = useMemo(() => {
+        if (!teacherList.length) return [];
+
+        const stats = {};
+        teacherList.forEach(t => {
+            if (!t.specialization) return;
+            if (!stats[t.specialization]) {
+                stats[t.specialization] = { count: 0, load: 0 };
+            }
+            stats[t.specialization].count += 1;
+
+            // Calculate load
+            const h = parseInt(t.load_hours || 0, 10);
+            const m = parseInt(t.load_minutes || 0, 10);
+            const decimalLoad = h + (m / 60);
+            stats[t.specialization].load += decimalLoad;
+        });
+
+        // Convert to array and sort by count desc
+        return Object.entries(stats).map(([spec, data]) => ({
+            name: spec,
+            count: data.count,
+            load: data.load
+        })).sort((a, b) => b.count - a.count);
+    }, [teacherList]);
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -66,6 +109,9 @@ const TeacherSpecialization = ({ embedded }) => {
             localStorage.setItem('hasSeenSpecializationInfo', 'true');
         }
     }, []);
+
+    // --- LEGACY DATA STATE ---
+    const [legacyHasData, setLegacyHasData] = useState(false);
 
     // --- DATA FETCHING ---
     useEffect(() => {
@@ -91,20 +137,23 @@ const TeacherSpecialization = ({ embedded }) => {
                 setLoading(true);
                 try {
                     // Check Outbox first
+                    let draftFound = false;
                     if (!viewOnly && !isAuditMode) {
                         try {
                             const drafts = await getOutbox();
                             const draft = drafts.find(d => d.type === 'TEACHER_SPECIALIZATION');
                             if (draft) {
-                                setFormData(draft.payload.teachers); // Assuming payload structure
+                                setTeacherList(draft.payload.teachers); // Assuming payload structure
                                 setIsLocked(false);
                                 setLoading(false);
-                                return;
+                                draftFound = true;
                             }
                         } catch (e) { }
                     }
 
-                    // Fetch from API
+                    if (draftFound) return;
+
+                    // 1. Fetch INDIVIDUAL Teachers
                     const response = await fetch(`/api/teacher-personnel/${targetId}`);
                     if (response.ok) {
                         const data = await response.json();
@@ -119,13 +168,58 @@ const TeacherSpecialization = ({ embedded }) => {
                                 load_minutes: minutes
                             };
                         });
-                        setFormData(formatted);
+                        setTeacherList(formatted);
                         setOriginalData(formatted);
                         setIsLocked(formatted.length > 0); // Lock if data exists
                     } else {
-                        // Fallback or empty
-                        setFormData([]);
+                        setTeacherList([]);
                     }
+
+                    // 2. Fetch LEGACY Data (for backward compatibility validation)
+                    // We can reuse the school profile endpoint or just a lightweight check
+                    try {
+                        // Use the school-by-user or similar if accessible, or a direct query
+                        // Since we have schoolId, let's use a specific check if possible, or just fetch the profile
+                        // We will check if we can get the profile data. 
+                        // The user might be viewing another school (Audit), so we need an endpoint by School ID.
+                        // Let's use the public/shared endpoint if available, or just assume if teacherList is empty we might need to check.
+                        // Actually, let's try to fetch the profile data using the endpoint that returns all data including spec_ fields.
+
+                        // NOTE: We don't have a direct 'get-school-profile-by-id' that returns everything publicly unless authenticated?
+                        // But we are authenticated.
+                        // Let's try fetching `/api/school-by-user/${user.uid}` if it's our school, but that doesn't work for audit.
+                        // Let's use `/api/school-resources/${user.uid}`? No, that's by UID.
+
+                        // Let's just Add a new endpoint or use an existing one?
+                        // Wait, we can use `/api/print/school-profile/:schoolId`? That returns the profile.
+                        // Or `/api/school-summary/:schoolId`?
+
+                        // Quickest way: Add a small check in the same effect?
+                        // Let's assume there's an endpoint or I'll just skip this check if I can't find one easily?
+                        // No, I MUST implement it.
+
+                        // Let's use a known endpoint that returns school_profiles data.
+                        // I see `/api/school-by-user/:uid` returns data.
+                        // If I am the user, I can use that.
+                        // If I am checking another school (Audit), I might need another way.
+                        // But for now, let's try to assume the user is the owner or check if we can get it.
+
+                        // Actually, I will add a fetch to `/api/school-profile-legacy/${targetId}` (I'll create this if needed, or use a raw query if I could).
+                        // Better: Use `fetch('/api/school-profile/' + targetId)`?
+
+                        // Let's just add the logic to check `spec_` fields if `teacherList` is empty.
+                        // I will add a fetch to `/api/check-legacy-specialization/${targetId}`.
+                        const legacyRes = await fetch(`/api/check-legacy-specialization/${targetId}`);
+                        if (legacyRes.ok) {
+                            const legacyData = await legacyRes.json();
+                            if (legacyData.hasLegacyData) {
+                                setLegacyHasData(true);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Legacy check failed", e);
+                    }
+
                 } catch (err) {
                     console.error("Fetch error:", err);
                 } finally {
@@ -149,32 +243,22 @@ const TeacherSpecialization = ({ embedded }) => {
         let cleanVal = value;
 
         if (field === 'load_hours') {
-            // Remove leading zeros
             cleanVal = value.replace(/^0+/, '');
-
-            // Limit to 10
-            if (cleanVal && parseInt(cleanVal, 10) > 10) {
-                cleanVal = '10';
-            }
+            if (cleanVal && parseInt(cleanVal, 10) > 10) cleanVal = '10';
         } else if (field === 'load_minutes') {
-            // Limit to 2 digits, remove leading zeros
             cleanVal = value.slice(0, 2).replace(/^0+/, '');
-
-            // Limit to 59
-            if (cleanVal && parseInt(cleanVal, 10) > 59) {
-                cleanVal = '59';
-            }
+            if (cleanVal && parseInt(cleanVal, 10) > 59) cleanVal = '59';
         }
 
-        const updated = [...formData];
+        const updated = [...teacherList];
         updated[index] = { ...updated[index], [field]: cleanVal };
-        setFormData(updated);
+        setTeacherList(updated);
     };
 
     const handleDeleteTeacher = (index) => {
         if (window.confirm("Are you sure you want to remove this teacher from the list?")) {
-            const updated = formData.filter((_, i) => i !== index);
-            setFormData(updated);
+            const updated = teacherList.filter((_, i) => i !== index);
+            setTeacherList(updated);
         }
     };
 
@@ -194,10 +278,10 @@ const TeacherSpecialization = ({ embedded }) => {
             teaching_load: 0,
             load_hours: 0,
             load_minutes: 0,
-            iern: null // Will be handled by backend/trigger
+            iern: null
         };
 
-        setFormData([...formData, toAdd]);
+        setTeacherList([...teacherList, toAdd]);
         setNewTeacher({ full_name: '', position: '', specialization: 'GENERAL EDUCATION' });
         setShowAddModal(false);
     };
@@ -207,8 +291,8 @@ const TeacherSpecialization = ({ embedded }) => {
         setIsSaving(true);
         const user = auth.currentUser;
 
-        // Prepare Payload: Recalculate decimals
-        const teachersPayload = formData.map(t => {
+        // 1. Prepare TEACHER LIST Payload
+        const teachersPayload = teacherList.map(t => {
             const h = parseInt(t.load_hours || 0, 10);
             const m = parseInt(t.load_minutes || 0, 10);
             return {
@@ -217,10 +301,25 @@ const TeacherSpecialization = ({ embedded }) => {
             };
         });
 
-        const payload = {
+        // 2. Prepare LEGACY AGGREGATE Payload
+        // Count occurrences per mapped specialization
+        const aggregateData = {};
+        teacherList.forEach(t => {
+            const dbColumn = ACADEMIC_MAP[t.specialization];
+            if (dbColumn) {
+                aggregateData[dbColumn] = (aggregateData[dbColumn] || 0) + 1;
+            }
+        });
+
+        const listPayload = {
             uid: user.uid,
             schoolId: schoolId,
             teachers: teachersPayload
+        };
+
+        const legacyPayload = {
+            schoolId: schoolId,
+            data: aggregateData
         };
 
         const handleOfflineSave = async () => {
@@ -229,10 +328,10 @@ const TeacherSpecialization = ({ embedded }) => {
                     type: 'TEACHER_SPECIALIZATION',
                     label: 'Teacher Specialization',
                     url: '/api/save-teacher-personnel',
-                    payload: payload
+                    payload: listPayload
                 });
                 setShowOfflineModal(true);
-                setOriginalData([...formData]);
+                setOriginalData([...teacherList]);
                 setIsLocked(true);
             } catch (e) { alert("Offline save failed."); }
         };
@@ -244,22 +343,30 @@ const TeacherSpecialization = ({ embedded }) => {
         }
 
         try {
-            const res = await fetch('/api/save-teacher-personnel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            // DUAL SAVE: PARALLEL REQUESTS
+            const [resList, resLegacy] = await Promise.all([
+                fetch('/api/save-teacher-personnel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(listPayload)
+                }),
+                fetch('/api/save-teacher-specialization-legacy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(legacyPayload)
+                })
+            ]);
 
-            if (res.ok) {
+            if (resList.ok && resLegacy.ok) {
                 setShowSuccessModal(true);
-                setOriginalData([...formData]);
+                setOriginalData([...teacherList]);
                 setIsLocked(true);
             } else {
-                const err = await res.json();
+                const err = await resList.json();
                 throw new Error(err.error || "Save failed");
             }
         } catch (e) {
-            console.log("Network error, moving to outbox...");
+            console.log("Network error, moving to outbox...", e);
             await handleOfflineSave();
         } finally {
             setIsSaving(false);
@@ -267,12 +374,18 @@ const TeacherSpecialization = ({ embedded }) => {
     };
 
     const isFormValid = () => {
-        if (formData.length === 0) return false;
-        // Check if at least one teacher is "complete" (has specialization and load > 0)
-        return formData.some(t =>
+        // 1. New Check: Teacher List
+        const hasValidTeacher = teacherList.length > 0 && teacherList.some(t =>
             t.specialization &&
             ((parseInt(t.load_hours || 0) > 0) || (parseInt(t.load_minutes || 0) > 0))
         );
+
+        if (hasValidTeacher) return true;
+
+        // 2. Legacy Check:
+        if (legacyHasData) return true;
+
+        return false;
     };
 
     if (loading) return (
@@ -306,6 +419,40 @@ const TeacherSpecialization = ({ embedded }) => {
 
             <div className={`px-5 relative z-20 max-w-5xl mx-auto space-y-6 ${embedded ? '' : '-mt-12'}`}>
 
+                {/* --- NEW: SUMMARY DASHBOARD --- */}
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                            <FiPieChart size={18} />
+                        </div>
+                        <h2 className="text-lg font-bold text-slate-800">School Specialization Summary</h2>
+                    </div>
+
+                    {summaryStats.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">No specialization data yet.</p>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 pb-4">
+                            {summaryStats.map((stat) => (
+                                <div key={stat.name} className="w-full bg-blue-50/50 border border-blue-100 p-4 rounded-2xl">
+                                    <div className="text-[10px] font-bold text-blue-600 uppercase mb-2 line-clamp-2 h-8">
+                                        {stat.name}
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex justify-between items-center text-slate-700 text-xs font-medium">
+                                            <span>Teachers:</span>
+                                            <span className="font-bold">{stat.count}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-slate-700 text-xs font-medium">
+                                            <span>Total Load:</span>
+                                            <span className="font-bold">{Number(stat.load).toFixed(1)} h</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
                 {/* TEACHER LIST CARD */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="p-6 border-b border-slate-50 flex items-center justify-between">
@@ -315,7 +462,7 @@ const TeacherSpecialization = ({ embedded }) => {
                             </div>
                             <div>
                                 <h2 className="text-slate-800 font-bold text-lg">Teacher List</h2>
-                                <p className="text-xs text-slate-400 font-medium">{formData.length} Record(s) Found</p>
+                                <p className="text-xs text-slate-400 font-medium">{teacherList.length} Record(s) Found</p>
                             </div>
                         </div>
 
@@ -327,11 +474,11 @@ const TeacherSpecialization = ({ embedded }) => {
                     </div>
 
                     <div className="p-4 space-y-4 bg-slate-50/50">
-                        {formData.length === 0 ? (
+                        {teacherList.length === 0 ? (
                             <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-dashed border-slate-200">
                                 No teachers found. Click "Add Teacher" to start.
                             </div>
-                        ) : formData.map((teacher, index) => (
+                        ) : teacherList.map((teacher, index) => (
                             <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
 
                                 {/* Row 1: Name & Delete */}
