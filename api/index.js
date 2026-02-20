@@ -6045,6 +6045,80 @@ app.get('/api/check-legacy-specialization/:schoolId', async (req, res) => {
   }
 });
 
+// --- 21b. POST: Single Teacher Upsert (Fast Auto-Save) ---
+app.post('/api/save-single-teacher', async (req, res) => {
+  const { schoolId, teacher } = req.body;
+  if (!schoolId || !teacher || !teacher.control_num) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // UPSERT Logic
+    await client.query(`
+      INSERT INTO teacher_specialization_details (
+        control_num, school_id, full_name, position, position_group, 
+        specialization, teaching_load, iern, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE')
+      ON CONFLICT (control_num) 
+      DO UPDATE SET 
+        full_name = EXCLUDED.full_name,
+        position = EXCLUDED.position,
+        specialization = EXCLUDED.specialization,
+        teaching_load = EXCLUDED.teaching_load,
+        status = 'ACTIVE'
+    `, [
+      teacher.control_num,
+      schoolId,
+      teacher.full_name,
+      teacher.position,
+      teacher.position_group || 'TBD',
+      teacher.specialization,
+      teacher.teaching_load || 0,
+      teacher.iern || null
+    ]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Teacher saved" });
+
+    // Background: Update Progress (Fire and Forget)
+    calculateSchoolProgress(schoolId, pool).catch(err => console.error("Background Progress Calc Error:", err));
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Single Teacher Save Error:", err);
+    res.status(500).json({ error: "Failed to save teacher" });
+  } finally {
+    client.release();
+  }
+});
+
+// --- 21c. DELETE: Remove Teacher Personnel ---
+app.delete('/api/delete-teacher-personnel/:schoolId/:controlNum', async (req, res) => {
+  const { schoolId, controlNum } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM teacher_specialization_details WHERE school_id = $1 AND control_num = $2 RETURNING *',
+      [schoolId, controlNum]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Teacher not found or already deleted" });
+    }
+
+    res.json({ success: true, message: "Teacher deleted successfully" });
+
+    // Background: Update Progress
+    calculateSchoolProgress(schoolId, pool).catch(err => console.error("Background Progress Calc Error:", err));
+
+  } catch (err) {
+    console.error("Delete Teacher Error:", err);
+    res.status(500).json({ error: "Failed to delete teacher" });
+  }
+});
+
 // --- 21b. GET: Fetch e-Cart Batches ---
 app.get('/api/ecart-batches/:schoolId', async (req, res) => {
   const { schoolId } = req.params;

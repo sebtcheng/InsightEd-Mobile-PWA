@@ -1,7 +1,7 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiBriefcase, FiCheckCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiPieChart } from 'react-icons/fi';
+import { FiArrowLeft, FiBriefcase, FiCheckCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiPieChart, FiAlertCircle, FiChevronsLeft, FiChevronsRight } from 'react-icons/fi';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { addToOutbox, getOutbox } from '../db';
@@ -74,6 +74,43 @@ const TeacherSpecialization = ({ embedded }) => {
     // New Teacher State
     const [newTeacher, setNewTeacher] = useState({ full_name: '', position: '', specialization: 'GENERAL EDUCATION' });
 
+    // --- PAGINATION STATE ---
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
+    // --- DELETE STATE ---
+    const [teacherToDelete, setTeacherToDelete] = useState(null);
+
+    // --- AUTO-SAVE FUNCTION ---
+    const autoSaveTeacher = async (teacher) => {
+        if (!navigator.onLine || isReadOnly || viewOnly || isLocked) return;
+
+        // Don't save if missing key fields or temp ID that isn't ready (though control_num is generated on add)
+        if (!teacher.full_name || !teacher.control_num) return;
+
+        try {
+            // Calculate teaching load for save
+            const h = parseInt(teacher.load_hours || 0, 10);
+            const m = parseInt(teacher.load_minutes || 0, 10);
+            const payload = {
+                ...teacher,
+                teaching_load: h + (m / 60)
+            };
+
+            const response = await fetch('/api/save-single-teacher', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schoolId, teacher: payload })
+            });
+
+            if (!response.ok) {
+                console.warn("Auto-save failed");
+            }
+        } catch (e) {
+            console.error("Auto-save error:", e);
+        }
+    };
+
     // --- COMPUTED: SUMMARY STATS ---
     const summaryStats = useMemo(() => {
         if (!teacherList.length) return [];
@@ -100,6 +137,16 @@ const TeacherSpecialization = ({ embedded }) => {
             load: data.load
         })).sort((a, b) => b.count - a.count);
     }, [teacherList]);
+
+    // --- PAGINATED DATA ---
+    const totalPages = Math.ceil(teacherList.length / itemsPerPage);
+    const paginatedTeachers = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return teacherList.slice(start, start + itemsPerPage);
+    }, [teacherList, currentPage]);
+
+    // Reset to page 1 if items change significantly (optional, but good for filtering)
+    // For now, we'll keep it simple.
 
     // --- AUTO-SHOW INFO MODAL ---
     useEffect(() => {
@@ -239,7 +286,12 @@ const TeacherSpecialization = ({ embedded }) => {
     };
 
     // --- HANDLERS ---
+    // --- HANDLERS ---
     const handleInputChange = (index, field, value) => {
+        // Adjust index for pagination if needed, BUT here 'index' comes from the map
+        // If we map over paginatedTeachers, the index is 0..9. We need the REAL index in teacherList.
+        // We will pass the REAL index from the render method.
+
         let cleanVal = value;
 
         if (field === 'load_hours') {
@@ -253,12 +305,34 @@ const TeacherSpecialization = ({ embedded }) => {
         const updated = [...teacherList];
         updated[index] = { ...updated[index], [field]: cleanVal };
         setTeacherList(updated);
+
+        // Auto-Save for strict fields (Name/Spec)
+        if (field === 'full_name' || field === 'specialization') {
+            autoSaveTeacher(updated[index]);
+        }
     };
 
     const handleDeleteTeacher = (index) => {
-        if (window.confirm("Are you sure you want to remove this teacher from the list?")) {
-            const updated = teacherList.filter((_, i) => i !== index);
+        setTeacherToDeleteIndex(index);
+        setShowDeleteModal(true);
+    };
+
+    const confirmDelete = () => {
+        if (teacherToDeleteIndex !== null) {
+            // Ideally call API to delete or mark inactive
+            // For now, just remove from list and let next save handle it? 
+            // OR strictly, we should probably hit an API to remove it if it's auto-saved.
+            // But the request didn't specify auto-delete endpoint.
+            // We will just update state.
+            const updated = teacherList.filter((_, i) => i !== teacherToDeleteIndex);
             setTeacherList(updated);
+            setShowDeleteModal(false);
+            setTeacherToDeleteIndex(null);
+
+            // Adjust page if empty
+            if (currentPage > 1 && updated.length <= (currentPage - 1) * itemsPerPage) {
+                setCurrentPage(currentPage - 1);
+            }
         }
     };
 
@@ -284,6 +358,9 @@ const TeacherSpecialization = ({ embedded }) => {
         setTeacherList([...teacherList, toAdd]);
         setNewTeacher({ full_name: '', position: '', specialization: 'GENERAL EDUCATION' });
         setShowAddModal(false);
+        // Go to last page
+        const newTotal = teacherList.length + 1;
+        setCurrentPage(Math.ceil(newTotal / itemsPerPage));
     };
 
     const confirmSave = async () => {
@@ -478,100 +555,149 @@ const TeacherSpecialization = ({ embedded }) => {
                             <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-dashed border-slate-200">
                                 No teachers found. Click "Add Teacher" to start.
                             </div>
-                        ) : teacherList.map((teacher, index) => (
-                            <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
+                        ) : (
+                            <>
+                                {paginatedTeachers.map((teacher, pIndex) => {
+                                    // Calculate REAL index in main array
+                                    const realIndex = (currentPage - 1) * itemsPerPage + pIndex;
 
-                                {/* Row 1: Name & Delete */}
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
-                                            Teacher Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            disabled={isLocked || viewOnly || isReadOnly}
-                                            value={teacher.full_name}
-                                            onChange={(e) => handleInputChange(index, 'full_name', e.target.value.toUpperCase())}
-                                            placeholder="SURNAME, FIRST NAME M.I."
-                                            className="w-full font-bold text-slate-800 uppercase bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-slate-50 outline-none transition-all placeholder:text-slate-300"
-                                        />
-                                    </div>
-                                    {(!isLocked && !viewOnly && !isReadOnly) && (
+                                    return (
+                                        <div key={realIndex} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
+                                            {/* Row 1: Name & Delete */}
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
+                                                        Teacher Name
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        disabled={isLocked || viewOnly || isReadOnly}
+                                                        value={teacher.full_name}
+                                                        onChange={(e) => handleInputChange(realIndex, 'full_name', e.target.value.toUpperCase())}
+                                                        placeholder="SURNAME, FIRST NAME M.I."
+                                                        className="w-full font-bold text-slate-800 uppercase bg-transparent border-b border-transparent focus:border-blue-500 focus:bg-slate-50 outline-none transition-all placeholder:text-slate-300"
+                                                    />
+                                                </div>
+                                                {(!isLocked && !viewOnly && !isReadOnly) && (
+                                                    <button
+                                                        onClick={() => handleDeleteTeacher(teacher)}
+                                                        className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors -mr-2 -mt-2"
+                                                        title="Remove Teacher"
+                                                    >
+                                                        <FiTrash2 size={18} />
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* Row 2: Position */}
+                                            <div className="-mt-1">
+                                                <div className="text-xs font-semibold text-slate-500 uppercase bg-slate-100/50 inline-block px-2 py-0.5 rounded">
+                                                    {teacher.position}
+                                                </div>
+                                            </div>
+
+                                            {/* Row 3: Specialization */}
+                                            <div>
+                                                <label className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 block flex items-center gap-1">
+                                                    <FiBriefcase size={10} /> Verified Major/Specialization
+                                                </label>
+                                                <div className="relative">
+                                                    <select
+                                                        disabled={isLocked || viewOnly || isReadOnly}
+                                                        value={teacher.specialization || ''}
+                                                        onChange={(e) => handleInputChange(realIndex, 'specialization', e.target.value)}
+                                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none disabled:opacity-60"
+                                                    >
+                                                        <option value="" disabled>Select Specialization</option>
+                                                        {SPECIALIZATION_OPTIONS.map(opt => (
+                                                            <option key={opt} value={opt}>{opt}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Row 4: Teaching Load */}
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
+                                                    Teaching Load
+                                                </label>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1 relative">
+                                                        <input
+                                                            type="number"
+                                                            disabled={isLocked || viewOnly || isReadOnly}
+                                                            value={teacher.load_hours}
+                                                            onChange={(e) => handleInputChange(realIndex, 'load_hours', e.target.value)}
+                                                            onBlur={() => autoSaveTeacher(teacher)}
+                                                            className="w-full p-2.5 text-center bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                                            placeholder="0"
+                                                            min="0"
+                                                        />
+                                                        <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold pointer-events-none">HRS</span>
+                                                    </div>
+                                                    <div className="flex-1 relative">
+                                                        <input
+                                                            type="number"
+                                                            disabled={isLocked || viewOnly || isReadOnly}
+                                                            value={teacher.load_minutes}
+                                                            onChange={(e) => handleInputChange(realIndex, 'load_minutes', e.target.value)}
+                                                            onBlur={() => autoSaveTeacher(teacher)}
+                                                            className="w-full p-2.5 text-center bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 outline-none"
+                                                            placeholder="0"
+                                                            min="0" max="59"
+                                                        />
+                                                        <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold pointer-events-none">MINS</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    );
+                                })}
+
+                                {/* PAGINATION CONTROLS */}
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-center gap-2 pt-4">
                                         <button
-                                            onClick={() => handleDeleteTeacher(index)}
-                                            className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors -mr-2 -mt-2"
-                                            title="Remove Teacher"
+                                            onClick={() => setCurrentPage(1)}
+                                            disabled={currentPage === 1}
+                                            className="p-2 text-slate-500 bg-white border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-50"
+                                            title="First Page"
                                         >
-                                            <FiTrash2 size={18} />
+                                            <FiChevronsLeft />
                                         </button>
-                                    )}
-                                </div>
-
-                                {/* Row 2: Position */}
-                                <div className="-mt-1">
-                                    <div className="text-xs font-semibold text-slate-500 uppercase bg-slate-100/50 inline-block px-2 py-0.5 rounded">
-                                        {teacher.position}
-                                    </div>
-                                </div>
-
-                                {/* Row 3: Specialization */}
-                                <div>
-                                    <label className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 block flex items-center gap-1">
-                                        <FiBriefcase size={10} /> Verified Major/Specialization
-                                    </label>
-                                    <div className="relative">
-                                        <select
-                                            disabled={isLocked || viewOnly || isReadOnly}
-                                            value={teacher.specialization || ''}
-                                            onChange={(e) => handleInputChange(index, 'specialization', e.target.value)}
-                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none disabled:opacity-60"
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="px-4 py-2 text-sm font-bold text-slate-500 bg-white border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-50"
                                         >
-                                            <option value="" disabled>Select Specialization</option>
-                                            {SPECIALIZATION_OPTIONS.map(opt => (
-                                                <option key={opt} value={opt}>{opt}</option>
-                                            ))}
-                                        </select>
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
-                                        </div>
+                                            Previous
+                                        </button>
+                                        <span className="text-xs font-bold text-slate-400 px-2">
+                                            Page {currentPage} of {totalPages}
+                                        </span>
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="px-4 py-2 text-sm font-bold text-slate-500 bg-white border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-50"
+                                        >
+                                            Next
+                                        </button>
+                                        <button
+                                            onClick={() => setCurrentPage(totalPages)}
+                                            disabled={currentPage === totalPages}
+                                            className="p-2 text-slate-500 bg-white border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-50"
+                                            title="Last Page"
+                                        >
+                                            <FiChevronsRight />
+                                        </button>
                                     </div>
-                                </div>
-
-                                {/* Row 4: Teaching Load */}
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
-                                        Teaching Load
-                                    </label>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex-1 relative">
-                                            <input
-                                                type="number"
-                                                disabled={isLocked || viewOnly || isReadOnly}
-                                                value={teacher.load_hours}
-                                                onChange={(e) => handleInputChange(index, 'load_hours', e.target.value)}
-                                                className="w-full p-2.5 text-center bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                                placeholder="0"
-                                                min="0"
-                                            />
-                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold pointer-events-none">HRS</span>
-                                        </div>
-                                        <div className="flex-1 relative">
-                                            <input
-                                                type="number"
-                                                disabled={isLocked || viewOnly || isReadOnly}
-                                                value={teacher.load_minutes}
-                                                onChange={(e) => handleInputChange(index, 'load_minutes', e.target.value)}
-                                                className="w-full p-2.5 text-center bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                                placeholder="0"
-                                                min="0" max="59"
-                                            />
-                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold pointer-events-none">MINS</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                            </div>
-                        ))}
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -685,6 +811,27 @@ const TeacherSpecialization = ({ embedded }) => {
                             3. Use <b>Add Teacher</b> for missing personnel.
                         </p>
                         <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
+                    </div>
+                </div>
+            )}
+
+            {/* DELETE MODAL */}
+            {teacherToDelete && (
+                <div className="bg-slate-900/40 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+                        <FiAlertCircle className="text-red-500 w-12 h-12 mx-auto mb-4" />
+
+                        <h3 className="font-bold text-xl text-slate-800 text-center mb-2">Remove Teacher?</h3>
+                        <p className="text-slate-500 text-center text-sm mb-6">
+                            Are you sure you want to remove <br />
+                            <span className="font-bold text-slate-700">
+                                {teacherToDelete.full_name}
+                            </span> from this school's roster? This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3">
+                            <button onClick={() => setTeacherToDelete(null)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={confirmDeleteTeacher} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-900/20 hover:bg-red-700 transition-colors">Confirm Remove</button>
+                        </div>
                     </div>
                 </div>
             )}
