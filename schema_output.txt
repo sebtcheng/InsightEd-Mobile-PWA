@@ -1,178 +1,37 @@
-[
-  {
-    "column_name": "lgu_project_id",
-    "data_type": "integer"
-  },
-  {
-    "column_name": "region",
-    "data_type": "text"
-  },
-  {
-    "column_name": "division",
-    "data_type": "text"
-  },
-  {
-    "column_name": "district",
-    "data_type": "text"
-  },
-  {
-    "column_name": "legislative_district",
-    "data_type": "text"
-  },
-  {
-    "column_name": "school_id",
-    "data_type": "text"
-  },
-  {
-    "column_name": "school_name",
-    "data_type": "text"
-  },
-  {
-    "column_name": "project_name",
-    "data_type": "text"
-  },
-  {
-    "column_name": "total_funds",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "fund_released",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "date_of_release",
-    "data_type": "date"
-  },
-  {
-    "column_name": "liquidated_amount",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "liquidation_date",
-    "data_type": "date"
-  },
-  {
-    "column_name": "percentage_liquidated",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "created_at",
-    "data_type": "timestamp without time zone"
-  },
-  {
-    "column_name": "source_agency",
-    "data_type": "text"
-  },
-  {
-    "column_name": "contractor_name",
-    "data_type": "text"
-  },
-  {
-    "column_name": "lsb_resolution_no",
-    "data_type": "text"
-  },
-  {
-    "column_name": "moa_ref_no",
-    "data_type": "text"
-  },
-  {
-    "column_name": "moa_date",
-    "data_type": "date"
-  },
-  {
-    "column_name": "validity_period",
-    "data_type": "text"
-  },
-  {
-    "column_name": "contract_duration",
-    "data_type": "text"
-  },
-  {
-    "column_name": "date_approved_pow",
-    "data_type": "date"
-  },
-  {
-    "column_name": "approved_contract_budget",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "schedule_of_fund_release",
-    "data_type": "text"
-  },
-  {
-    "column_name": "number_of_tranches",
-    "data_type": "integer"
-  },
-  {
-    "column_name": "amount_per_tranche",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "mode_of_procurement",
-    "data_type": "text"
-  },
-  {
-    "column_name": "philgeps_ref_no",
-    "data_type": "text"
-  },
-  {
-    "column_name": "pcab_license_no",
-    "data_type": "text"
-  },
-  {
-    "column_name": "date_contract_signing",
-    "data_type": "date"
-  },
-  {
-    "column_name": "date_notice_of_award",
-    "data_type": "date"
-  },
-  {
-    "column_name": "bid_amount",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "latitude",
-    "data_type": "text"
-  },
-  {
-    "column_name": "longitude",
-    "data_type": "text"
-  },
-  {
-    "column_name": "pow_pdf",
-    "data_type": "text"
-  },
-  {
-    "column_name": "dupa_pdf",
-    "data_type": "text"
-  },
-  {
-    "column_name": "contract_pdf",
-    "data_type": "text"
-  },
-  {
-    "column_name": "project_status",
-    "data_type": "text"
-  },
-  {
-    "column_name": "accomplishment_percentage",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "status_as_of_date",
-    "data_type": "date"
-  },
-  {
-    "column_name": "amount_utilized",
-    "data_type": "numeric"
-  },
-  {
-    "column_name": "nature_of_delay",
-    "data_type": "text"
-  },
-  {
-    "column_name": "created_by_uid",
-    "data_type": "text"
-  }
-]
+Columns in teachers_list:
+Unnamed: 0
+school.id
+school.name
+region
+old.region
+division
+district
+modified.coc
+control_num
+tin
+first
+middle
+last
+position
+position_group
+corrected.degree
+specialization.final
+
+Sample Row Keys:
+Unnamed: 0
+school.id
+school.name
+region
+old.region
+division
+district
+modified.coc
+control_num
+tin
+first
+middle
+last
+position
+position_group
+corrected.degree
+specialization.final

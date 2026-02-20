@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 import { exec } from 'child_process';
 
 
-// Load environment variables11111111111111
+// Load environment variables
 dotenv.config();
 
 // --- EMAIL TRANSPORTER ---
@@ -1124,6 +1124,193 @@ app.post('/api/validate-school-health', async (req, res) => {
   });
 });
 
+// --- HELPER: Auto-Fill Teachers from Master List ---
+const autoFillSchoolTeachers = async (schoolId) => {
+  try {
+    console.log(`🤖 [Auto-Fill] Filling Teachers for School: ${schoolId}...`);
+
+    // 1. Get the newly generated IERN from school_profiles
+    const schoolRes = await pool.query("SELECT iern FROM school_profiles WHERE school_id = $1", [schoolId]);
+    const schoolIern = schoolRes.rows.length > 0 ? schoolRes.rows[0].iern : null;
+
+    if (!schoolIern) {
+      console.warn(`⚠️ [Auto-Fill] No IERN found for school ${schoolId}. Proceeding with NULL IERN.`);
+    }
+
+    // 2. Insert from teachers_list using correct columns
+    const res = await pool.query(`
+        INSERT INTO teacher_specialization_details (
+            iern, control_num, school_id, full_name, position, position_group, 
+            specialization, teaching_load, created_at, updated_at
+        )
+        SELECT 
+            $2, 
+            "control_num", 
+            "school.id", 
+            TRIM(CONCAT("first", ' ', "middle", ' ', "last")), 
+            "position", 
+            "position_group", 
+            "specialization.final", 
+            0, 
+            NOW(), 
+            NOW()
+        FROM teachers_list 
+        WHERE "school.id" = $1
+        ON CONFLICT (control_num) DO NOTHING
+    `, [schoolId, schoolIern]);
+
+    console.log(`✅ [Auto-Fill] Success! Copied ${res.rowCount} teachers for school ${schoolId}.`);
+
+  } catch (err) {
+    console.error("❌ Auto-Fill Teachers Failed:", err.message);
+  }
+};
+
+// --- TEACHER PERSONNEL ENDPOINTS ---
+
+// GET: Fetch Teachers by School ID
+app.get('/api/teacher-personnel/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM teacher_specialization_details WHERE school_id = $1 ORDER BY full_name`,
+      [schoolId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Error fetching teachers:", err);
+    res.status(500).json({ error: "Failed to fetch teachers" });
+  }
+});
+
+// POST: Save (Upsert/Delete) Teacher Personnel
+app.post('/api/save-teacher-personnel', async (req, res) => {
+  const { schoolId, teachers } = req.body; // teachers is an array of objects
+
+  if (!schoolId || !Array.isArray(teachers)) {
+    return res.status(400).json({ error: "Invalid payload. 'schoolId' and 'teachers' array are required." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Get List of Incoming Control Numbers (to identify deletions)
+    const incomingControlNums = teachers.map(t => t.control_num).filter(Boolean);
+
+    // 2. DELETE: Remove teachers for this school that are NOT in the incoming list
+    if (incomingControlNums.length > 0) {
+      await client.query(
+        `DELETE FROM teacher_specialization_details 
+                 WHERE school_id = $1 AND control_num NOT IN(${incomingControlNums.map((_, i) => `$${i + 2}`).join(',')})`,
+        [schoolId, ...incomingControlNums]
+      );
+    } else {
+      // If incoming list is empty, delete ALL teachers for this school (User cleared the list)
+      await client.query(`DELETE FROM teacher_specialization_details WHERE school_id = $1`, [schoolId]);
+    }
+
+    // 3. UPSERT: Insert or Update each teacher
+    for (const t of teachers) {
+      await client.query(`
+                INSERT INTO teacher_specialization_details(
+    iern, control_num, school_id, full_name, position, position_group,
+    specialization, teaching_load, updated_at
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                ON CONFLICT(control_num) 
+                DO UPDATE SET
+specialization = EXCLUDED.specialization,
+  teaching_load = EXCLUDED.teaching_load,
+  full_name = EXCLUDED.full_name,
+  updated_at = NOW();
+`, [
+        t.iern,
+        t.control_num,
+        schoolId, // Ensure we use the schools ID from the payload or session context
+        t.full_name,
+        t.position,
+        t.position_group,
+        t.specialization,
+        t.teaching_load
+      ]);
+    }
+
+    // 4. SYNC: Update school_profiles for frontend status compatibility
+    // We update 'spec_general_teaching' with the total count of teachers, 
+    // ensuring SchoolForms.jsx sees a value > 0 to mark the form as "Completed".
+    await client.query(`
+      UPDATE school_profiles 
+      SET spec_general_teaching = (
+        SELECT COUNT(*)::int FROM teacher_specialization_details WHERE school_id = $1
+      )
+      WHERE school_id = $1
+    `, [schoolId]);
+
+    // 5. UPDATE PROGRESS
+    await calculateSchoolProgress(schoolId, client);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Teacher personnel saved successfully." });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Save Teacher Personnel Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    client.release();
+  }
+});
+
+// POST: Save Legacy Specialization Aggregates
+app.post('/api/save-teacher-specialization-legacy', async (req, res) => {
+  const { schoolId, data } = req.body; // data contains spec_english_major: 5, etc.
+
+  if (!schoolId || !data) {
+    return res.status(400).json({ error: "Invalid payload. 'schoolId' and 'data' object are required." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // List of legacy columns to update
+    const fields = [
+      'spec_general_teaching', 'spec_ece_teaching',
+      'spec_english_major', 'spec_filipino_major', 'spec_math_major',
+      'spec_science_major', 'spec_ap_major', 'spec_mapeh_major',
+      'spec_esp_major', 'spec_tle_major', 'spec_bio_sci_major',
+      'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
+    ];
+
+    const updates = [];
+    const values = [schoolId];
+
+    // Build dynamic UPDATE query
+    fields.forEach((field, index) => {
+      // Use the value from data, default to 0
+      updates.push(`${field} = $${index + 2}`);
+      values.push(data[field] ? parseInt(data[field]) : 0);
+    });
+
+    const query = `UPDATE school_profiles SET ${updates.join(', ')} WHERE school_id = $1`;
+
+    await client.query(query, values);
+
+    // Trigger progress update just in case
+    await calculateSchoolProgress(schoolId, client);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Legacy specialization data saved." });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Save Legacy Spec Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  } finally {
+    client.release();
+  }
+});
+
 // --- DEBUG: RECALCULATE ALL ENDPOINT ---
 app.get('/api/debug/recalculate-all', async (req, res) => {
   try {
@@ -1157,7 +1344,7 @@ app.get('/api/debug/recalculate-all', async (req, res) => {
 app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) => {
   // 1. Security Check
   const authHeader = req.headers.authorization;
-  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET} `) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -1172,7 +1359,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
     const now = new Date();
     const diffDays = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
 
-    console.log(`ðŸ“… Deadline: ${deadlineVal}, Days Left: ${diffDays}`);
+    console.log(`ðŸ“… Deadline: ${deadlineVal}, Days Left: ${diffDays} `);
 
     // Check Criteria (0 to 3 days left)
     if (diffDays <= 3 && diffDays >= 0) {
@@ -1187,7 +1374,7 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
             title: diffDays === 0 ? "Deadline is TODAY!" : "Deadline Reminder",
             body: diffDays === 0
               ? "Submission closes today. Please finalize your reports."
-              : `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''}! Please finalize your forms.`
+              : `Submission is due in ${diffDays} day${diffDays > 1 ? 's' : ''} !Please finalize your forms.`
           },
           tokens: tokens
         };
@@ -1208,8 +1395,8 @@ app.get(['/api/cron/check-deadline', '/cron/check-deadline'], async (req, res) =
         return res.json({ message: 'No device tokens found.' });
       }
     } else {
-      console.log(`â„¹ï¸ Skipping: ${diffDays} days remaining (Not within 0-3 range).`);
-      return res.json({ message: `Not within reminder window (0-3 days). Days: ${diffDays}` });
+      console.log(`â„¹ï¸ Skipping: ${diffDays} days remaining(Not within 0 - 3 range).`);
+      return res.json({ message: `Not within reminder window(0 - 3 days).Days: ${diffDays} ` });
     }
   } catch (error) {
     console.error('âŒ Cron Error:', error);
@@ -1224,20 +1411,20 @@ app.post('/api/save-token', async (req, res) => {
 
   try {
     await pool.query(`
-            INSERT INTO user_device_tokens (uid, fcm_token, updated_at)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
-            ON CONFLICT (uid)
+            INSERT INTO user_device_tokens(uid, fcm_token, updated_at)
+VALUES($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT(uid)
             DO UPDATE SET fcm_token = $2, updated_at = CURRENT_TIMESTAMP
-        `, [uid, token]);
+  `, [uid, token]);
 
     // --- DUAL WRITE: SAVE DEVICE TOKEN ---
     if (poolNew) {
       poolNew.query(`
-            INSERT INTO user_device_tokens (uid, fcm_token, updated_at)
-            VALUES ($1, $2, CURRENT_TIMESTAMP)
-            ON CONFLICT (uid)
+            INSERT INTO user_device_tokens(uid, fcm_token, updated_at)
+VALUES($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT(uid)
             DO UPDATE SET fcm_token = $2, updated_at = CURRENT_TIMESTAMP
-        `, [uid, token]).catch(e => console.error("Dual-Write Token Err:", e.message));
+  `, [uid, token]).catch(e => console.error("Dual-Write Token Err:", e.message));
     }
 
     res.json({ success: true });
@@ -1273,11 +1460,11 @@ app.post('/api/finance/projects', async (req, res) => {
 
     // A. Insert into Finance Table
     const financeQuery = `
-      INSERT INTO finance_projects 
-      (region, division, district, legislative_district, municipality, school_id, school_name, project_name, total_funds, fund_released, date_of_release)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO finance_projects
+  (region, division, district, legislative_district, municipality, school_id, school_name, project_name, total_funds, fund_released, date_of_release)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING finance_id;
-    `;
+`;
     const financeRes = await client.query(financeQuery, [
       region, division, district, legislative_district, municipality,
       school_id, school_name, project_name,
@@ -1287,16 +1474,16 @@ app.post('/api/finance/projects', async (req, res) => {
 
     // B. Duplicate to LGU Table (lgu_projects) - LINKED
     const lguQuery = `
-      INSERT INTO lgu_projects 
-      (
-        finance_id, municipality,
-        region, division, district, legislative_district, school_id, school_name, project_name, 
-        total_funds, fund_released, date_of_release,
-        project_status
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Not Yet Started')
+      INSERT INTO lgu_projects
+  (
+    finance_id, municipality,
+    region, division, district, legislative_district, school_id, school_name, project_name,
+    total_funds, fund_released, date_of_release,
+    project_status
+  )
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Not Yet Started')
       RETURNING lgu_project_id;
-    `;
+`;
 
     await client.query(lguQuery, [
       financeId, municipality,
@@ -1364,33 +1551,33 @@ app.post('/api/lgu/projects', async (req, res) => {
     };
 
     const query = `
-      INSERT INTO lgu_projects 
-      (
-        region, division, district, legislative_district, municipality, school_id, school_name, project_name, 
-        total_funds, fund_released, date_of_release,
-        source_agency, contractor_name, lsb_resolution_no, moa_ref_no, moa_date,
-        validity_period, contract_duration, date_approved_pow, approved_contract_budget,
-        schedule_of_fund_release, number_of_tranches, amount_per_tranche,
-        mode_of_procurement, philgeps_ref_no, pcab_license_no,
-        date_contract_signing, date_notice_of_award, bid_amount,
-        latitude, longitude,
-        project_status, accomplishment_percentage, status_as_of_date, amount_utilized, nature_of_delay,
-        created_by_uid
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, 
-        $9, $10, $11,
-        $12, $13, $14, $15, $16,
-        $17, $18, $19, $20,
-        $21, $22, $23,
-        $24, $25, $26,
-        $27, $28, $29,
-        $30, $31,
-        $32, $33, $34, $35, $36,
-        $37
-      )
+      INSERT INTO lgu_projects
+  (
+    region, division, district, legislative_district, municipality, school_id, school_name, project_name,
+    total_funds, fund_released, date_of_release,
+    source_agency, contractor_name, lsb_resolution_no, moa_ref_no, moa_date,
+    validity_period, contract_duration, date_approved_pow, approved_contract_budget,
+    schedule_of_fund_release, number_of_tranches, amount_per_tranche,
+    mode_of_procurement, philgeps_ref_no, pcab_license_no,
+    date_contract_signing, date_notice_of_award, bid_amount,
+    latitude, longitude,
+    project_status, accomplishment_percentage, status_as_of_date, amount_utilized, nature_of_delay,
+    created_by_uid
+  )
+VALUES(
+  $1, $2, $3, $4, $5, $6, $7, $8,
+  $9, $10, $11,
+  $12, $13, $14, $15, $16,
+  $17, $18, $19, $20,
+  $21, $22, $23,
+  $24, $25, $26,
+  $27, $28, $29,
+  $30, $31,
+  $32, $33, $34, $35, $36,
+  $37
+)
       RETURNING lgu_project_id;
-    `;
+`;
 
     const result = await client.query(query, [
       region, division, district, legislative_district, municipality, school_id, school_name, project_name,
@@ -1430,7 +1617,7 @@ app.get('/api/lgu/projects', async (req, res) => {
     let query = 'SELECT * FROM lgu_projects';
     let params = [];
     let whereClauses = [];
-
+ 
     // Check User Role & Municipality
     if (uid) {
       const userRes = await pool.query('SELECT role, city FROM users WHERE uid = $1', [uid]);
@@ -1439,21 +1626,21 @@ app.get('/api/lgu/projects', async (req, res) => {
         // If user is LGU, filter by municipality (city)
         // Assuming role 'LGU' or checking if city is present
         if (user.city) {
-          whereClauses.push(`municipality = $${params.length + 1}`);
+          whereClauses.push(`municipality = $${ params.length + 1 } `);
           params.push(user.city);
         }
       }
       // Also allow filtering by creator if needed, but for now municipality is the main filter
-      // whereClauses.push(`created_by_uid = $${params.length + 1}`);
+      // whereClauses.push(`created_by_uid = $${ params.length + 1 } `);
       // params.push(uid);
     }
-
+ 
     if (whereClauses.length > 0) {
       query += ' WHERE ' + whereClauses.join(' AND ');
     }
-
+ 
     query += ' ORDER BY created_at DESC';
-
+ 
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
@@ -1498,28 +1685,28 @@ app.put('/api/lgu/projects/:id', async (req, res) => {
       let pct = 0;
       if (totalFunds > 0) pct = parseFloat(((liq / totalFunds) * 100).toFixed(2));
 
-      updates.push(`liquidated_amount = $${idx++}`); values.push(liq);
-      updates.push(`percentage_liquidated = $${idx++}`); values.push(pct);
+      updates.push(`liquidated_amount = $${idx++} `); values.push(liq);
+      updates.push(`percentage_liquidated = $${idx++} `); values.push(pct);
 
       if (liquidation_date) {
-        updates.push(`liquidation_date = $${idx++}`); values.push(liquidation_date);
+        updates.push(`liquidation_date = $${idx++} `); values.push(liquidation_date);
       }
     }
 
     // Progress Logic
-    if (project_status !== undefined) { updates.push(`project_status = $${idx++}`); values.push(project_status); }
+    if (project_status !== undefined) { updates.push(`project_status = $${idx++} `); values.push(project_status); }
     if (accomplishment_percentage !== undefined) {
       let acc = accomplishment_percentage;
       if (typeof acc === 'string') acc = parseFloat(acc.replace(/,/g, ''));
-      updates.push(`accomplishment_percentage = $${idx++}`); values.push(acc);
+      updates.push(`accomplishment_percentage = $${idx++} `); values.push(acc);
     }
-    if (status_as_of_date !== undefined) { updates.push(`status_as_of_date = $${idx++}`); values.push(status_as_of_date); }
+    if (status_as_of_date !== undefined) { updates.push(`status_as_of_date = $${idx++} `); values.push(status_as_of_date); }
     if (amount_utilized !== undefined) {
       let util = amount_utilized;
       if (typeof util === 'string') util = parseFloat(util.replace(/,/g, ''));
-      updates.push(`amount_utilized = $${idx++}`); values.push(util);
+      updates.push(`amount_utilized = $${idx++} `); values.push(util);
     }
-    if (nature_of_delay !== undefined) { updates.push(`nature_of_delay = $${idx++}`); values.push(nature_of_delay); }
+    if (nature_of_delay !== undefined) { updates.push(`nature_of_delay = $${idx++} `); values.push(nature_of_delay); }
 
     if (updates.length === 0) {
       return res.json({ success: true, message: "No changes detected." });
@@ -1530,8 +1717,8 @@ app.put('/api/lgu/projects/:id', async (req, res) => {
       UPDATE lgu_projects
       SET ${updates.join(', ')}
       WHERE lgu_project_id = $${idx}
-      RETURNING *;
-    `;
+RETURNING *;
+`;
     const result = await pool.query(query, values);
 
     res.json({ success: true, project: result.rows[0] });
@@ -1572,8 +1759,8 @@ app.put('/api/lgu/projects/:id/liquidation', async (req, res) => {
       UPDATE lgu_forms
       SET liquidated_amount = $1, liquidation_date = $2, percentage_liquidated = $3
       WHERE project_id = $4
-      RETURNING *;
-    `;
+RETURNING *;
+`;
     const result = await pool.query(query, [liquidated_amount, liquidation_date, percentage, id]);
 
     if (result.rows.length === 0) {
@@ -1630,12 +1817,12 @@ const initOtpTable_OLD = async () => {
 
   try {
     await pool.query(`
-            CREATE TABLE IF NOT EXISTS verification_codes (
-                email VARCHAR(255) PRIMARY KEY,
-                code VARCHAR(10) NOT NULL,
-                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
-            );
-        `);
+            CREATE TABLE IF NOT EXISTS verification_codes(
+  email VARCHAR(255) PRIMARY KEY,
+  code VARCHAR(10) NOT NULL,
+  expires_at TIMESTAMP DEFAULT(NOW() + INTERVAL '10 minutes')
+);
+`);
     console.log("âœ… OTP Table Initialized");
   } catch (err) {
     console.error("âŒ Failed to init OTP table:", err);
@@ -1656,18 +1843,18 @@ const startServer = async () => {
       // --- INIT NOTIFICATIONS TABLE ---
       try {
         await client.query(`
-            CREATE TABLE IF NOT EXISTS notifications (
-                id SERIAL PRIMARY KEY,
-                recipient_uid TEXT NOT NULL,
-                sender_uid TEXT,
-                sender_name TEXT,
-                title TEXT NOT NULL,
-                message TEXT NOT NULL,
-                type TEXT DEFAULT 'alert',
-                is_read BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+            CREATE TABLE IF NOT EXISTS notifications(
+  id SERIAL PRIMARY KEY,
+  recipient_uid TEXT NOT NULL,
+  sender_uid TEXT,
+  sender_name TEXT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT DEFAULT 'alert',
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`);
         console.log('âœ… Notifications Table Initialized');
       } catch (tableErr) {
         console.error('âŒ Failed to init notifications table:', tableErr.message);
@@ -1678,7 +1865,7 @@ const startServer = async () => {
         await client.query(`
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS email TEXT;
-        `);
+`);
         console.log('âœ… Checked/Added email column to school_profiles');
       } catch (migErr) {
         console.error('âŒ Failed to migrate school_profiles:', migErr.message);
@@ -1687,12 +1874,12 @@ const startServer = async () => {
       // --- MIGRATION: USER DEVICE TOKENS ---
       try {
         await client.query(`
-            CREATE TABLE IF NOT EXISTS user_device_tokens (
-                uid TEXT PRIMARY KEY,
-                fcm_token TEXT NOT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+            CREATE TABLE IF NOT EXISTS user_device_tokens(
+  uid TEXT PRIMARY KEY,
+  fcm_token TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`);
         console.log('âœ… Checked/Created user_device_tokens table');
       } catch (tokenErr) {
         console.error('âŒ Failed to init user_device_tokens:', tokenErr.message);
@@ -1703,7 +1890,7 @@ const startServer = async () => {
         await client.query(`
           ALTER TABLE lgu_projects 
           ADD COLUMN IF NOT EXISTS created_by_uid TEXT;
-        `);
+`);
         console.log('✅ Checked/Added created_by_uid column to lgu_projects');
       } catch (migErr) {
         console.error('❌ Failed to migrate lgu_projects privacy:', migErr.message);
@@ -1717,7 +1904,7 @@ const startServer = async () => {
       await client.query(`
             ALTER TABLE school_profiles 
             ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
-        `);
+`);
       console.log('âœ… Checked/Added curricular_offering column to school_profiles');
     } catch (migErr) {
       console.error('âŒ Failed to migrate curricular_offering:', migErr.message);
@@ -1726,39 +1913,39 @@ const startServer = async () => {
     // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
     try {
       await client.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                uid TEXT PRIMARY KEY,
-                email TEXT,
-                role TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                first_name TEXT,
-                last_name TEXT,
-                region TEXT,
-                division TEXT,
-                province TEXT,
-                city TEXT,
-                barangay TEXT,
-                office TEXT,
-                position TEXT,
-                disabled BOOLEAN DEFAULT FALSE
-            );
-        `);
+            CREATE TABLE IF NOT EXISTS users(
+  uid TEXT PRIMARY KEY,
+  email TEXT,
+  role TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  first_name TEXT,
+  last_name TEXT,
+  region TEXT,
+  division TEXT,
+  province TEXT,
+  city TEXT,
+  barangay TEXT,
+  office TEXT,
+  position TEXT,
+  disabled BOOLEAN DEFAULT FALSE
+);
+`);
       // --- 1e. FORGOT PASSWORD (CUSTOM) ---
 
       // If table exists, ensure columns exist
       await client.query(`
             ALTER TABLE users 
             ADD COLUMN IF NOT EXISTS first_name TEXT,
-            ADD COLUMN IF NOT EXISTS last_name TEXT,
-            ADD COLUMN IF NOT EXISTS region TEXT,
-            ADD COLUMN IF NOT EXISTS division TEXT,
-            ADD COLUMN IF NOT EXISTS province TEXT,
-            ADD COLUMN IF NOT EXISTS city TEXT,
+  ADD COLUMN IF NOT EXISTS last_name TEXT,
+    ADD COLUMN IF NOT EXISTS region TEXT,
+      ADD COLUMN IF NOT EXISTS division TEXT,
+        ADD COLUMN IF NOT EXISTS province TEXT,
+          ADD COLUMN IF NOT EXISTS city TEXT,
             ADD COLUMN IF NOT EXISTS barangay TEXT,
-            ADD COLUMN IF NOT EXISTS office TEXT,
-            ADD COLUMN IF NOT EXISTS position TEXT,
-            ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
-        `);
+              ADD COLUMN IF NOT EXISTS office TEXT,
+                ADD COLUMN IF NOT EXISTS position TEXT,
+                  ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
+`);
       console.log('âœ… Checked/Extended users table schema');
     } catch (migErr) {
       console.error('âŒ Failed to migrate users table:', migErr.message);
@@ -1768,8 +1955,8 @@ const startServer = async () => {
       await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS sha_category TEXT;
-      `);
+  ADD COLUMN IF NOT EXISTS sha_category TEXT;
+`);
       console.log('âœ… Checked/Added new School Resources columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate resources columns:', migErr.message);
@@ -1778,107 +1965,107 @@ const startServer = async () => {
     // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
     try {
       await client.query(`
-        ALTER TABLE school_profiles 
-        -- Site & Utils
+        ALTER TABLE school_profiles
+--Site & Utils
         ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
-        ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
-        ADD COLUMN IF NOT EXISTS res_water_source TEXT,
-        
-        -- Toilets & Labs
+  ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
+    ADD COLUMN IF NOT EXISTS res_water_source TEXT,
+
+      --Toilets & Labs
         ADD COLUMN IF NOT EXISTS res_toilets_pwd INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_sci_labs INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_com_labs INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_tvl_workshops INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS res_sci_labs INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS res_com_labs INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS res_tvl_workshops INTEGER DEFAULT 0,
 
-        -- Seats Analysis
+        --Seats Analysis
         ADD COLUMN IF NOT EXISTS seats_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_3 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS seats_grade_1 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS seats_grade_2 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS seats_grade_3 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS seats_grade_4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_6 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_7 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_8 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_9 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_10 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_12 INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS seats_grade_5 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS seats_grade_6 INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS seats_grade_7 INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS seats_grade_8 INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS seats_grade_9 INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS seats_grade_10 INTEGER DEFAULT 0,
+                      ADD COLUMN IF NOT EXISTS seats_grade_11 INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS seats_grade_12 INTEGER DEFAULT 0,
 
-        -- Organized Classes (Counters)
+                          --Organized Classes(Counters)
         ADD COLUMN IF NOT EXISTS classes_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_3 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS classes_grade_1 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS classes_grade_2 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS classes_grade_3 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS classes_grade_4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_6 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_7 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_8 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_9 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_10 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_12 INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS classes_grade_5 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS classes_grade_6 INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS classes_grade_7 INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS classes_grade_8 INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS classes_grade_9 INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS classes_grade_10 INTEGER DEFAULT 0,
+                      ADD COLUMN IF NOT EXISTS classes_grade_11 INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS classes_grade_12 INTEGER DEFAULT 0,
 
-        -- Class Size Analysis
+                          --Class Size Analysis
         ADD COLUMN IF NOT EXISTS cnt_less_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g1 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS cnt_within_kinder INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS cnt_above_kinder INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS cnt_less_g1 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS cnt_within_g1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g6 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g6 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g6 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g7 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g7 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g7 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g8 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g8 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g8 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g9 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g9 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g9 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g10 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g10 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g10 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_less_g12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_above_g12 INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS cnt_above_g1 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS cnt_less_g2 INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS cnt_within_g2 INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS cnt_above_g2 INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS cnt_less_g3 INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS cnt_within_g3 INTEGER DEFAULT 0,
+                      ADD COLUMN IF NOT EXISTS cnt_above_g3 INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS cnt_less_g4 INTEGER DEFAULT 0,
+                          ADD COLUMN IF NOT EXISTS cnt_within_g4 INTEGER DEFAULT 0,
+                            ADD COLUMN IF NOT EXISTS cnt_above_g4 INTEGER DEFAULT 0,
+                              ADD COLUMN IF NOT EXISTS cnt_less_g5 INTEGER DEFAULT 0,
+                                ADD COLUMN IF NOT EXISTS cnt_within_g5 INTEGER DEFAULT 0,
+                                  ADD COLUMN IF NOT EXISTS cnt_above_g5 INTEGER DEFAULT 0,
+                                    ADD COLUMN IF NOT EXISTS cnt_less_g6 INTEGER DEFAULT 0,
+                                      ADD COLUMN IF NOT EXISTS cnt_within_g6 INTEGER DEFAULT 0,
+                                        ADD COLUMN IF NOT EXISTS cnt_above_g6 INTEGER DEFAULT 0,
+                                          ADD COLUMN IF NOT EXISTS cnt_less_g7 INTEGER DEFAULT 0,
+                                            ADD COLUMN IF NOT EXISTS cnt_within_g7 INTEGER DEFAULT 0,
+                                              ADD COLUMN IF NOT EXISTS cnt_above_g7 INTEGER DEFAULT 0,
+                                                ADD COLUMN IF NOT EXISTS cnt_less_g8 INTEGER DEFAULT 0,
+                                                  ADD COLUMN IF NOT EXISTS cnt_within_g8 INTEGER DEFAULT 0,
+                                                    ADD COLUMN IF NOT EXISTS cnt_above_g8 INTEGER DEFAULT 0,
+                                                      ADD COLUMN IF NOT EXISTS cnt_less_g9 INTEGER DEFAULT 0,
+                                                        ADD COLUMN IF NOT EXISTS cnt_within_g9 INTEGER DEFAULT 0,
+                                                          ADD COLUMN IF NOT EXISTS cnt_above_g9 INTEGER DEFAULT 0,
+                                                            ADD COLUMN IF NOT EXISTS cnt_less_g10 INTEGER DEFAULT 0,
+                                                              ADD COLUMN IF NOT EXISTS cnt_within_g10 INTEGER DEFAULT 0,
+                                                                ADD COLUMN IF NOT EXISTS cnt_above_g10 INTEGER DEFAULT 0,
+                                                                  ADD COLUMN IF NOT EXISTS cnt_less_g11 INTEGER DEFAULT 0,
+                                                                    ADD COLUMN IF NOT EXISTS cnt_within_g11 INTEGER DEFAULT 0,
+                                                                      ADD COLUMN IF NOT EXISTS cnt_above_g11 INTEGER DEFAULT 0,
+                                                                        ADD COLUMN IF NOT EXISTS cnt_less_g12 INTEGER DEFAULT 0,
+                                                                          ADD COLUMN IF NOT EXISTS cnt_within_g12 INTEGER DEFAULT 0,
+                                                                            ADD COLUMN IF NOT EXISTS cnt_above_g12 INTEGER DEFAULT 0,
 
-        -- Equipment Inventory
+                                                                              --Equipment Inventory
         ADD COLUMN IF NOT EXISTS res_ecart_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_ecart_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_laptop_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_laptop_nonfunc INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS res_ecart_nonfunc INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS res_laptop_func INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS res_laptop_nonfunc INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS res_tv_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_tv_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_printer_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_printer_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_desk_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_desk_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_armchair_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_armchair_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_toilet_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_toilet_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
-      `);
+          ADD COLUMN IF NOT EXISTS res_tv_nonfunc INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS res_printer_func INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS res_printer_nonfunc INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS res_desk_func INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS res_desk_nonfunc INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS res_armchair_func INTEGER DEFAULT 0,
+                      ADD COLUMN IF NOT EXISTS res_armchair_nonfunc INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS res_toilet_func INTEGER DEFAULT 0,
+                          ADD COLUMN IF NOT EXISTS res_toilet_nonfunc INTEGER DEFAULT 0,
+                            ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
+                              ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
+`);
       console.log('âœ… Checked/Added ALL missing School Resources & Class Analysis columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate extra columns:', migErr.message);
@@ -1887,22 +2074,22 @@ const startServer = async () => {
     // --- MIGRATION: E-CART BATCHES TABLE ---
     try {
       await pool.query(`
-        CREATE TABLE IF NOT EXISTS ecart_batches (
-          id SERIAL PRIMARY KEY,
-          school_id TEXT NOT NULL,
-          batch_no VARCHAR(100),
-          year_received INTEGER,
-          source_fund VARCHAR(100),
-          ecart_qty_laptops INTEGER DEFAULT 0,
-          ecart_condition_laptops VARCHAR(50),
-          ecart_has_smart_tv BOOLEAN DEFAULT false,
-          ecart_tv_size VARCHAR(50),
-          ecart_condition_tv VARCHAR(50),
-          ecart_condition_charging VARCHAR(50),
-          ecart_condition_cabinet VARCHAR(100),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+        CREATE TABLE IF NOT EXISTS ecart_batches(
+  id SERIAL PRIMARY KEY,
+  school_id TEXT NOT NULL,
+  batch_no VARCHAR(100),
+  year_received INTEGER,
+  source_fund VARCHAR(100),
+  ecart_qty_laptops INTEGER DEFAULT 0,
+  ecart_condition_laptops VARCHAR(50),
+  ecart_has_smart_tv BOOLEAN DEFAULT false,
+  ecart_tv_size VARCHAR(50),
+  ecart_condition_tv VARCHAR(50),
+  ecart_condition_charging VARCHAR(50),
+  ecart_condition_cabinet VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`);
       console.log('âœ… ecart_batches table ready');
     } catch (ecartErr) {
       console.error('âŒ Failed to create ecart_batches table:', ecartErr.message);
@@ -1913,42 +2100,42 @@ const startServer = async () => {
       await client.query(`
         ALTER TABLE school_profiles 
         ADD COLUMN IF NOT EXISTS spec_english_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_english_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_filipino_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_filipino_teaching INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spec_english_teaching INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS spec_filipino_major INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS spec_filipino_teaching INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_math_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_math_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_science_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_science_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ap_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ap_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_mapeh_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_mapeh_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_esp_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_esp_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_tle_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_tle_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_guidance INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_librarian INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0,
-        -- General Education for Elementary
+          ADD COLUMN IF NOT EXISTS spec_math_teaching INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS spec_science_major INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS spec_science_teaching INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS spec_ap_major INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS spec_ap_teaching INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS spec_mapeh_major INTEGER DEFAULT 0,
+                      ADD COLUMN IF NOT EXISTS spec_mapeh_teaching INTEGER DEFAULT 0,
+                        ADD COLUMN IF NOT EXISTS spec_esp_major INTEGER DEFAULT 0,
+                          ADD COLUMN IF NOT EXISTS spec_esp_teaching INTEGER DEFAULT 0,
+                            ADD COLUMN IF NOT EXISTS spec_tle_major INTEGER DEFAULT 0,
+                              ADD COLUMN IF NOT EXISTS spec_tle_teaching INTEGER DEFAULT 0,
+                                ADD COLUMN IF NOT EXISTS spec_guidance INTEGER DEFAULT 0,
+                                  ADD COLUMN IF NOT EXISTS spec_librarian INTEGER DEFAULT 0,
+                                    ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
+                                      ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0,
+                                        --General Education for Elementary
         ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
-        -- New Elementary Field
+  ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
+    --New Elementary Field
         ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0,
-        -- New Secondary Fields
+  ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0,
+    --New Secondary Fields
         ADD COLUMN IF NOT EXISTS spec_bio_sci_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_bio_sci_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_phys_sci_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_phys_sci_teaching INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS spec_bio_sci_teaching INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS spec_phys_sci_major INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS spec_phys_sci_teaching INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS spec_agri_fishery_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_agri_fishery_teaching INTEGER DEFAULT 0,
-        -- New Others Field
+          ADD COLUMN IF NOT EXISTS spec_agri_fishery_teaching INTEGER DEFAULT 0,
+            --New Others Field
         ADD COLUMN IF NOT EXISTS spec_others_major INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
-      `);
+  ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
+`);
       console.log('âœ… Checked/Added Teacher Specialization columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate specialization columns:', migErr.message);
@@ -1958,51 +2145,51 @@ const startServer = async () => {
     try {
       // First ensure the table exists (it should, but safety first)
       await client.query(`
-            CREATE TABLE IF NOT EXISTS engineer_form (
-                project_id SERIAL PRIMARY KEY,
-                school_name TEXT,
-                project_name TEXT,
-                school_id TEXT,
-                region TEXT,
-                division TEXT,
-                status TEXT,
-                accomplishment_percentage INTEGER,
-                status_as_of TIMESTAMP,
-                target_completion_date TIMESTAMP,
-                actual_completion_date TIMESTAMP,
-                notice_to_proceed TIMESTAMP,
-                contractor_name TEXT,
-                project_allocation NUMERIC,
-                batch_of_funds TEXT,
-                other_remarks TEXT,
-                engineer_id TEXT,
-                validation_status TEXT,
-                validation_remarks TEXT,
-                validated_by TEXT
-            );
-        `);
+            CREATE TABLE IF NOT EXISTS engineer_form(
+  project_id SERIAL PRIMARY KEY,
+  school_name TEXT,
+  project_name TEXT,
+  school_id TEXT,
+  region TEXT,
+  division TEXT,
+  status TEXT,
+  accomplishment_percentage INTEGER,
+  status_as_of TIMESTAMP,
+  target_completion_date TIMESTAMP,
+  actual_completion_date TIMESTAMP,
+  notice_to_proceed TIMESTAMP,
+  contractor_name TEXT,
+  project_allocation NUMERIC,
+  batch_of_funds TEXT,
+  other_remarks TEXT,
+  engineer_id TEXT,
+  validation_status TEXT,
+  validation_remarks TEXT,
+  validated_by TEXT
+);
+`);
 
       await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
-        `);
+`);
       console.log('âœ… Checked/Added IPC column to engineer_form');
 
       // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
       await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS latitude TEXT,
-            ADD COLUMN IF NOT EXISTS longitude TEXT;
-        `);
+  ADD COLUMN IF NOT EXISTS longitude TEXT;
+`);
       console.log('âœ… Checked/Added Latitude & Longitude to engineer_form');
 
       // --- MIGRATION: ADD CONSTRUCTION DETAILS TO ENGINEER FORM ---
       await client.query(`
             ALTER TABLE engineer_form 
             ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
-            ADD COLUMN IF NOT EXISTS project_category TEXT,
-            ADD COLUMN IF NOT EXISTS scope_of_work TEXT;
-        `);
+  ADD COLUMN IF NOT EXISTS project_category TEXT,
+    ADD COLUMN IF NOT EXISTS scope_of_work TEXT;
+`);
       console.log('âœ… Checked/Added Construction Details to engineer_form');
 
     } catch (migErr) {
@@ -2012,28 +2199,28 @@ const startServer = async () => {
     // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
     try {
       await client.query(`
-        ALTER TABLE school_profiles 
-        -- ARAL (Grades 1-6)
+        ALTER TABLE school_profiles
+--ARAL(Grades 1 - 6)
         ADD COLUMN IF NOT EXISTS aral_math_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aral_math_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aral_math_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aral_math_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g4 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS aral_math_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g2 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS aral_math_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g3 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS aral_math_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g4 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS aral_math_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aral_math_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g6 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aral_total INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS aral_math_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g6 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS aral_total INTEGER DEFAULT 0,
 
-        -- Teaching Experience
+              --Teaching Experience
         ADD COLUMN IF NOT EXISTS teach_exp_0_1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_2_5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_6_10 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_11_15 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS teach_exp_2_5 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS teach_exp_6_10 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS teach_exp_11_15 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS teach_exp_16_20 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_21_25 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_26_30 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_31_35 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
-      `);
+          ADD COLUMN IF NOT EXISTS teach_exp_21_25 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS teach_exp_26_30 INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS teach_exp_31_35 INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
+`);
       console.log('âœ… Checked/Added ARAL and Teaching Experience columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate ARAL/Exp columns:', migErr.message);
@@ -2045,14 +2232,14 @@ const startServer = async () => {
       await client.query(`
           ALTER TABLE engineer_form 
           ADD COLUMN IF NOT EXISTS engineer_name TEXT;
-        `);
+`);
       console.log('âœ… Checked/Added engineer_name and created_at columns');
 
       // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
       await client.query(`
           ALTER TABLE engineer_form 
-          DROP CONSTRAINT IF EXISTS engineer_form_ipc_key; 
-        `);
+          DROP CONSTRAINT IF EXISTS engineer_form_ipc_key;
+`);
       console.log('âœ… Dropped UNIQUE constraint on IPC (if existed)');
 
     } catch (migErr) {
@@ -2063,54 +2250,54 @@ const startServer = async () => {
     // --- MIGRATION: DETAILED ENROLLMENT COLUMNS ---
     try {
       await client.query(`
-        ALTER TABLE school_profiles 
-        -- Elementary
+        ALTER TABLE school_profiles
+--Elementary
         ADD COLUMN IF NOT EXISTS grade_kinder INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_2 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_3 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS grade_1 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS grade_2 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS grade_3 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS grade_4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_5 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_6 INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS grade_5 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS grade_6 INTEGER DEFAULT 0,
 
-        -- JHS
+              --JHS
         ADD COLUMN IF NOT EXISTS grade_7 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_8 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_9 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_10 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS grade_8 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS grade_9 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS grade_10 INTEGER DEFAULT 0,
 
-        -- SHS Grade 11
+        --SHS Grade 11
         ADD COLUMN IF NOT EXISTS abm_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS stem_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS humss_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS gas_11 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS stem_11 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS humss_11 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS gas_11 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS tvl_ict_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_he_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_ia_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_afa_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS arts_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS sports_11 INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tvl_he_11 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS tvl_ia_11 INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS tvl_afa_11 INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS arts_11 INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS sports_11 INTEGER DEFAULT 0,
 
-        -- SHS Grade 12
+                    --SHS Grade 12
         ADD COLUMN IF NOT EXISTS abm_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS stem_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS humss_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS gas_12 INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS stem_12 INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS humss_12 INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS gas_12 INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS tvl_ict_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_he_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_ia_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_afa_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS arts_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS sports_12 INTEGER DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS tvl_he_12 INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS tvl_ia_12 INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS tvl_afa_12 INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS arts_12 INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS sports_12 INTEGER DEFAULT 0,
 
-        -- Totals
+                    --Totals
         ADD COLUMN IF NOT EXISTS es_enrollment INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS jhs_enrollment INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS shs_enrollment INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS total_enrollment INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS jhs_enrollment INTEGER DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS shs_enrollment INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS total_enrollment INTEGER DEFAULT 0,
         ADD COLUMN IF NOT EXISTS grade_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_12 INTEGER DEFAULT 0;
-      `);
+          ADD COLUMN IF NOT EXISTS grade_12 INTEGER DEFAULT 0;
+`);
       console.log('âœ… Checked/Added Detailed Enrollment columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate enrollment columns:', migErr.message);
@@ -2121,7 +2308,7 @@ const startServer = async () => {
       await client.query(`
         ALTER TABLE school_profiles 
         ALTER COLUMN res_buildable_space TYPE TEXT;
-      `);
+`);
       console.log('âœ… Ensured res_buildable_space is TEXT');
     } catch (migErr) {
       console.log('â„¹ï¸  res_buildable_space type check skipped/validated');
@@ -2130,13 +2317,13 @@ const startServer = async () => {
     // --- MIGRATION: SYSTEM SETTINGS TABLE ---
     try {
       await client.query(`
-          CREATE TABLE IF NOT EXISTS system_settings (
-            setting_key TEXT PRIMARY KEY,
-            setting_value TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_by TEXT
-          );
-        `);
+          CREATE TABLE IF NOT EXISTS system_settings(
+  setting_key TEXT PRIMARY KEY,
+  setting_value TEXT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_by TEXT
+);
+`);
       console.log('âœ… Checked/Created system_settings table');
     } catch (tableErr) {
       console.error('âŒ Failed to init system_settings table:', tableErr.message);
@@ -2147,7 +2334,7 @@ const startServer = async () => {
       await client.query(`
           ALTER TABLE users 
           ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
-        `);
+`);
       console.log('âœ… Checked/Added disabled column to users table');
       /* ... (previous migrations omitted) ... */
     } catch (migErr) {
@@ -2159,18 +2346,18 @@ const startServer = async () => {
       await client.query(`
           ALTER TABLE school_profiles 
           ADD COLUMN IF NOT EXISTS forms_completed_count INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f1_profile INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f2_head INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f3_enrollment INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS f1_profile INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS f2_head INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS f3_enrollment INTEGER DEFAULT 0,
           ADD COLUMN IF NOT EXISTS f4_classes INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f5_teachers INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f6_specialization INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f7_resources INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f8_facilities INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f9_shifting INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f10_stats INTEGER DEFAULT 0;
-        `);
+            ADD COLUMN IF NOT EXISTS f5_teachers INTEGER DEFAULT 0,
+              ADD COLUMN IF NOT EXISTS f6_specialization INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS f7_resources INTEGER DEFAULT 0,
+                  ADD COLUMN IF NOT EXISTS f8_facilities INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS f9_shifting INTEGER DEFAULT 0,
+                      ADD COLUMN IF NOT EXISTS f10_stats INTEGER DEFAULT 0;
+`);
       console.log('âœ… Checked/Added Monitoring Granular Snapshot columns');
     } catch (migErr) {
       console.error('âŒ Failed to migrate snapshot columns:', migErr.message);
@@ -2244,7 +2431,7 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
       ? username[0] + '*'.repeat(username.length - 1)
       : username[0] + '*'; // Fallback for short names
 
-    const maskedEmail = `${maskedUsername}@${domain}`;
+    const maskedEmail = `${maskedUsername} @${domain} `;
     res.json({ found: true, maskedEmail });
   } catch (err) {
     console.error("Lookup Error:", err);
@@ -2274,10 +2461,10 @@ app.post('/api/forgot-password', async (req, res) => {
       return res.status(400).json({ error: "No contact email found for this School ID." });
     }
 
-    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail}`);
+    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail} `);
 
     // 3. Generate Reset Link for the FAKE Auth Email
-    const fakeAuthEmail = `${schoolId}@insighted.app`;
+    const fakeAuthEmail = `${schoolId} @insighted.app`;
     const actionCodeSettings = {
       url: 'https://insight-ed-mobile-pwa.vercel.app', // OR your local URL if dev
       handleCodeInApp: false,
@@ -2289,21 +2476,21 @@ app.post('/api/forgot-password', async (req, res) => {
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: `"InsightEd Support" <${process.env.EMAIL_USER}>`,
+      from: `"InsightEd Support" < ${process.env.EMAIL_USER}> `,
       to: realEmail,
       subject: 'InsightEd Password Reset',
       html: `
-                <h3>Password Reset Request</h3>
+  < h3 > Password Reset Request</h3 >
                 <p>We received a request to reset the password for School ID: <b>${schoolId}</b>.</p>
                 <p>Click the link below to verify your email and invoke the reset logic:</p>
                 <a href="${link}">Reset Password</a>
                 <p>If you did not request this, please ignore this email.</p>
-            `
+`
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`âœ… Password reset email sent successfully to ${realEmail}`);
-    res.json({ success: true, message: `Reset link sent to ${realEmail}` });
+    console.log(`âœ… Password reset email sent successfully to ${realEmail} `);
+    res.json({ success: true, message: `Reset link sent to ${realEmail} ` });
 
   } catch (error) {
     console.error("Forgot Password Error:", error);
@@ -2331,7 +2518,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     }
 
     if (masterPassword !== correctMasterPassword) {
-      console.warn(`âš ï¸ Failed master password attempt for: ${email}`);
+      console.warn(`âš ï¸ Failed master password attempt for: ${email} `);
       return res.status(403).json({ error: "Invalid master password." });
     }
 
@@ -2341,7 +2528,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     // If School ID provided (no @), use DB Lookup to find the real email
     if (!targetEmail.includes('@') && /^\d+$/.test(targetEmail)) {
       // Try USERS table first
-      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail}@%`]);
+      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail} @% `]);
       if (lookupResult.rows.length > 0) {
         targetEmail = lookupResult.rows[0].email;
       } else {
@@ -2351,20 +2538,20 @@ app.post('/api/auth/master-login', async (req, res) => {
           targetEmail = lookupResult.rows[0].email;
         } else {
           // Last resort: default to @deped.gov.ph
-          targetEmail = `${targetEmail}@deped.gov.ph`;
+          targetEmail = `${targetEmail} @deped.gov.ph`;
         }
       }
 
       // Check Firebase for @insighted.app (Priority Override)
       try {
         const originalId = email.trim();
-        const fbUser = await admin.auth().getUserByEmail(`${originalId}@insighted.app`);
+        const fbUser = await admin.auth().getUserByEmail(`${originalId} @insighted.app`);
         targetEmail = fbUser.email;
       } catch (fbErr) {
         // Ignore
       }
 
-      console.log(`[Master Login] Resolved School ID to email: ${targetEmail}`);
+      console.log(`[Master Login] Resolved School ID to email: ${targetEmail} `);
     }
 
     // Query Firebase for user
@@ -2373,7 +2560,7 @@ app.post('/api/auth/master-login', async (req, res) => {
       userRecord = await admin.auth().getUserByEmail(targetEmail);
     } catch (authErr) {
       if (authErr.code === 'auth/user-not-found') {
-        return res.status(404).json({ error: `User not found in Firebase for email: ${targetEmail}` });
+        return res.status(404).json({ error: `User not found in Firebase for email: ${targetEmail} ` });
       }
       throw authErr;
     }
@@ -2411,15 +2598,15 @@ app.post('/api/auth/master-login', async (req, res) => {
 
     // 5. Log the master password access
     await pool.query(`
-      INSERT INTO activity_logs (user_uid, user_name, role, action_type, target_entity, details)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO activity_logs(user_uid, user_name, role, action_type, target_entity, details)
+VALUES($1, $2, $3, $4, $5, $6)
     `, [
       userRecord.uid,
-      `${userData.first_name || ''} ${userData.last_name || ''}`.trim() || 'Unknown',
+      `${userData.first_name || ''} ${userData.last_name || ''} `.trim() || 'Unknown',
       'MASTER_ACCESS',
       'MASTER_LOGIN',
       userData.email,
-      `Account accessed via master password at ${new Date().toISOString()}`
+      `Account accessed via master password at ${new Date().toISOString()} `
     ]);
 
     console.log(`âœ… Master password login successful for: ${userData.email} (${userRecord.uid})`);
@@ -2484,7 +2671,7 @@ const getUserFullName = async (uid) => {
 
     if (res.rows.length > 0) {
       const { first_name, last_name } = res.rows[0];
-      const fullName = `${first_name || ''} ${last_name || ''}`.trim();
+      const fullName = `${first_name || ''} ${last_name || ''} `.trim();
       console.log("âœ… Resolved Full Name:", fullName);
       return fullName || null;
     } else {
@@ -2499,9 +2686,9 @@ const getUserFullName = async (uid) => {
 /** Log Activity Helper */
 const logActivity = async (userUid, userName, role, actionType, targetEntity, details, superUserContext = null) => {
   const query = `
-        INSERT INTO activity_logs (user_uid, user_name, role, action_type, target_entity, details)
-        VALUES ($1, $2, $3, $4, $5, $6)
-    `;
+        INSERT INTO activity_logs(user_uid, user_name, role, action_type, target_entity, details)
+VALUES($1, $2, $3, $4, $5, $6)
+  `;
   try {
     let dbDetails = details;
     if (superUserContext) {
@@ -2509,7 +2696,7 @@ const logActivity = async (userUid, userName, role, actionType, targetEntity, de
     }
 
     await pool.query(query, [userUid, userName, role, actionType, targetEntity, dbDetails]);
-    console.log(`ðŸ“ Audit Logged: ${actionType} - ${targetEntity}`);
+    console.log(`ðŸ“ Audit Logged: ${actionType} - ${targetEntity} `);
 
     // --- DUAL WRITE: LOG ACTIVITY ---
     if (poolNew) {
@@ -2554,7 +2741,7 @@ const updateSchoolSummary = async (schoolId, db) => {
       (sp.res_armchair_func || 0) + (sp.res_desk_func || 0)
     );
 
-    console.log(`[InstantUpdate] Stats for ${schoolId}: Learners=${totalEnrollment}, Teachers=${totalTeachers}, Rooms=${totalClassrooms}`);
+    console.log(`[InstantUpdate] Stats for ${schoolId}: Learners = ${totalEnrollment}, Teachers = ${totalTeachers}, Rooms = ${totalClassrooms} `);
 
     if (totalEnrollment > 0) {
       if (totalTeachers === 0) issues.push("Critical missing data. No teachers have been reported.");
@@ -2571,9 +2758,9 @@ const updateSchoolSummary = async (schoolId, db) => {
       score = 40; // Critical
       description = "Critical";
       formsToRecheck = issues.join("; ");
-      console.log(`[InstantUpdate] Issues Found: ${formsToRecheck}`);
+      console.log(`[InstantUpdate] Issues Found: ${formsToRecheck} `);
     } else {
-      console.log(`[InstantUpdate] No Issues. Score: 100`);
+      console.log(`[InstantUpdate] No Issues.Score: 100`);
     }
 
     // 4. Update school_summary (Upsert)
@@ -2581,59 +2768,59 @@ const updateSchoolSummary = async (schoolId, db) => {
     // NOTE: This query duplicates the Python fields to ensure instant sync.
     // Python script will later overwrite this with more advanced analysis (Outliers, etc.)
     const summaryQuery = `
-      INSERT INTO school_summary (
-        school_id, school_name, iern, region, division, district,
-        total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
-        data_health_score, data_health_description, issues, last_updated
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11,
-        $12, $13, $14, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT (school_id) DO UPDATE SET
-        school_name = EXCLUDED.school_name,
-        iern = EXCLUDED.iern,
-        region = EXCLUDED.region,
-        division = EXCLUDED.division,
-        district = EXCLUDED.district,
-        total_learners = EXCLUDED.total_learners,
-        total_teachers = EXCLUDED.total_teachers,
-        total_classrooms = EXCLUDED.total_classrooms,
-        total_toilets = EXCLUDED.total_toilets,
-        total_seats = EXCLUDED.total_seats,
-        data_health_score = EXCLUDED.data_health_score,
-        data_health_description = EXCLUDED.data_health_description,
-        issues = EXCLUDED.issues,
-        last_updated = CURRENT_TIMESTAMP
+      INSERT INTO school_summary(
+    school_id, school_name, iern, region, division, district,
+    total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
+    data_health_score, data_health_description, issues, last_updated
+  ) VALUES(
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11,
+    $12, $13, $14, CURRENT_TIMESTAMP
+  )
+      ON CONFLICT(school_id) DO UPDATE SET
+school_name = EXCLUDED.school_name,
+  iern = EXCLUDED.iern,
+  region = EXCLUDED.region,
+  division = EXCLUDED.division,
+  district = EXCLUDED.district,
+  total_learners = EXCLUDED.total_learners,
+  total_teachers = EXCLUDED.total_teachers,
+  total_classrooms = EXCLUDED.total_classrooms,
+  total_toilets = EXCLUDED.total_toilets,
+  total_seats = EXCLUDED.total_seats,
+  data_health_score = EXCLUDED.data_health_score,
+  data_health_description = EXCLUDED.data_health_description,
+  issues = EXCLUDED.issues,
+  last_updated = CURRENT_TIMESTAMP
     `;
 
     // Simple implementation: Just overwrite for now. Python will refine it later.
     // If Python is running concurrently, it might overwrite this, which is fine.
     await db.query(`
-      INSERT INTO school_summary (
-        school_id, school_name, iern, region, division, district,
-        total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
-        data_health_score, data_health_description, issues, last_updated
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11,
-        $12, $13, $14, CURRENT_TIMESTAMP
-      )
-      ON CONFLICT (school_id) DO UPDATE SET
-        school_name = EXCLUDED.school_name,
-        iern = EXCLUDED.iern,
-        region = EXCLUDED.region,
-        division = EXCLUDED.division,
-        district = EXCLUDED.district,
-        total_learners = EXCLUDED.total_learners,
-        total_teachers = EXCLUDED.total_teachers,
-        total_classrooms = EXCLUDED.total_classrooms,
-        total_toilets = EXCLUDED.total_toilets,
-        total_seats = EXCLUDED.total_seats,
-        data_health_score = EXCLUDED.data_health_score,
-        data_health_description = EXCLUDED.data_health_description,
-        issues = EXCLUDED.issues,
-        last_updated = CURRENT_TIMESTAMP
+      INSERT INTO school_summary(
+      school_id, school_name, iern, region, division, district,
+      total_learners, total_teachers, total_classrooms, total_toilets, total_seats,
+      data_health_score, data_health_description, issues, last_updated
+    ) VALUES(
+      $1, $2, $3, $4, $5, $6,
+      $7, $8, $9, $10, $11,
+      $12, $13, $14, CURRENT_TIMESTAMP
+    )
+      ON CONFLICT(school_id) DO UPDATE SET
+school_name = EXCLUDED.school_name,
+  iern = EXCLUDED.iern,
+  region = EXCLUDED.region,
+  division = EXCLUDED.division,
+  district = EXCLUDED.district,
+  total_learners = EXCLUDED.total_learners,
+  total_teachers = EXCLUDED.total_teachers,
+  total_classrooms = EXCLUDED.total_classrooms,
+  total_toilets = EXCLUDED.total_toilets,
+  total_seats = EXCLUDED.total_seats,
+  data_health_score = EXCLUDED.data_health_score,
+  data_health_description = EXCLUDED.data_health_description,
+  issues = EXCLUDED.issues,
+  last_updated = CURRENT_TIMESTAMP
     `, [
       sp.school_id, sp.school_name, sp.school_id, sp.region, sp.division, sp.district, // iern is usually ID
       totalEnrollment, totalTeachers, totalClassrooms, totalToilets, totalSeats,
@@ -2699,13 +2886,30 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     if (f5) completed++;
 
     // --- FORM 6: Specialization ---
-    // Criteria: Any specialization field > 0
-    const specFields = [
-      'spec_general_teaching', 'spec_ece_teaching', 'spec_english_major', 'spec_filipino_major', 'spec_math_major',
-      'spec_science_major', 'spec_ap_major', 'spec_mapeh_major', 'spec_esp_major', 'spec_tle_major',
-      'spec_bio_sci_major', 'spec_phys_sci_major', 'spec_agri_fishery_major', 'spec_others_major'
-    ];
-    const f6 = specFields.some(f => (sp[f] || 0) > 0) ? 1 : 0;
+    // Criteria: At least one record in the new teacher_specialization_details table
+    // OR legacy aggregate columns have data
+    const resultSpec = await dbClientOrPool.query(
+      'SELECT id FROM teacher_specialization_details WHERE school_id = $1 LIMIT 1',
+      [schoolId]
+    );
+
+    let f6 = resultSpec.rows.length > 0 ? 1 : 0;
+
+    if (!f6) {
+      // Fallback: Check Legacy Columns
+      // Columns: spec_general_teaching, spec_english_major, etc.
+      // We check if ANY of them are greater than 0
+      const legacyCols = [
+        'spec_general_teaching', 'spec_ece_teaching', 'spec_english_major', 'spec_filipino_major',
+        'spec_math_major', 'spec_science_major', 'spec_ap_major', 'spec_tle_major',
+        'spec_mapeh_major', 'spec_esp_major', 'spec_bio_sci_major', 'spec_phys_sci_major',
+        'spec_agri_fishery_major', 'spec_others_major'
+      ];
+      // Check if any col in sp is > 0
+      const hasLegacy = legacyCols.some(col => (sp[col] || 0) > 0);
+      if (hasLegacy) f6 = 1;
+    }
+
     if (f6) completed++;
 
     // --- FORM 7: Resources ---
@@ -2741,7 +2945,7 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     if (f10) completed++;
     else {
       // It's normal to be incomplete, reduce log spam or clarify message
-      // console.log(`[DEBUG] School ${schoolId} F10 Incomplete. Keys checked: ${Object.keys(sp).filter(k => k.startsWith('stat_')).length}, HasStats: ${hasStats}`);
+      // console.log(`[DEBUG] School ${ schoolId } F10 Incomplete.Keys checked: ${ Object.keys(sp).filter(k => k.startsWith('stat_')).length }, HasStats: ${ hasStats } `);
     }
 
 
@@ -2754,22 +2958,22 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
        This allows granular "Table View" as requested.
     */
     await dbClientOrPool.query(`
-      UPDATE school_profiles 
-      SET 
-        forms_completed_count = $1, 
-        completion_percentage = $2,
-        f1_profile = $4,
-        f2_head = $5,
-        f3_enrollment = $6,
-        f4_classes = $7,
-        f5_teachers = $8,
-        f6_specialization = $9,
-        f7_resources = $10,
-        f8_facilities = $11,
-        f9_shifting = $12,
-        f10_stats = $13
+      UPDATE school_profiles
+SET
+forms_completed_count = $1,
+  completion_percentage = $2,
+  f1_profile = $4,
+  f2_head = $5,
+  f3_enrollment = $6,
+  f4_classes = $7,
+  f5_teachers = $8,
+  f6_specialization = $9,
+  f7_resources = $10,
+  f8_facilities = $11,
+  f9_shifting = $12,
+  f10_stats = $13
       WHERE school_id = $3
-    `, [
+  `, [
       completed, percentage, schoolId,
       f1, f2, f3, f4, f5, f6, f7, f8, f9, f10
     ]);
@@ -3065,6 +3269,107 @@ app.get('/api/sdo/location-options', async (req, res) => {
 });
 
 // POST - SDO Submit New School
+// GET - Master List of Schools (For Converted/Transferred Schools)
+// GET - Search Single School by ID (For Converted/Transferred Schools)
+app.get('/api/master-list/school/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM schools WHERE school_id = $1', [id]);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.status(404).json({ error: "School not found" });
+    }
+  } catch (err) {
+    console.error("Fetch Master School Error:", err);
+    res.status(500).json({ error: "Failed to fetch school details" });
+  }
+});
+
+// POST - Submit Converted School
+app.post('/api/sdo/convert-school', async (req, res) => {
+  const { school_id, ...newDetails } = req.body;
+  console.log("Received convert-school request for ID:", school_id); // DEBUG LOG
+
+  if (!school_id) {
+    return res.status(400).json({ error: "School ID is required" });
+  }
+
+  try {
+    // 1. Fetch Original Data
+    console.log(`Querying original school data for ID: ${school_id}`); // DEBUG LOG
+    const originalRes = await pool.query('SELECT * FROM schools WHERE school_id = $1', [school_id]);
+    console.log(`Original school query found rows: ${originalRes.rows.length}`); // DEBUG LOG
+
+    if (originalRes.rows.length === 0) {
+      console.error(`Original school record not found for ID: ${school_id}`); // DEBUG LOG
+      return res.status(404).json({ error: "Original school record not found" });
+    }
+    const originalData = originalRes.rows[0];
+
+    // 2. Insert into converted_schools table
+    // Ensure table exists (simple check/create if not exists for now)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS converted_schools (
+        id SERIAL PRIMARY KEY,
+        school_id VARCHAR(50) NOT NULL,
+        original_data JSONB,
+        new_data JSONB,
+        submitted_by VARCHAR(100),
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(50) DEFAULT 'Pending'
+      )
+    `);
+
+    await pool.query(
+      `INSERT INTO converted_schools (school_id, original_data, new_data, submitted_by, status)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        school_id,
+        originalData,
+        newDetails,
+        newDetails.submitted_by,
+        'Pending'
+      ]
+    );
+
+    res.json({ message: "Converted school application submitted successfully" });
+  } catch (err) {
+    console.error("Convert School Error:", err);
+    res.status(500).json({ error: "Failed to submit converted school application" });
+  }
+});
+
+// GET - Master List of Schools (DEPRECATED)
+app.get('/api/master-list/schools-deprecated', async (req, res) => {
+  const { division, region } = req.query;
+
+  if (!division) {
+    return res.status(400).json({ error: "Division is required" });
+  }
+
+  try {
+    // Fetch all schools in the division from the master 'schools' table
+    // We select all columns to allow full autofill
+    const query = `
+      SELECT * 
+      FROM schools 
+      WHERE division = $1 
+      ORDER BY school_name ASC
+    `;
+
+    // Optional: Filter by region if provided for extra safety, though division is usually unique enough
+    // const query = `SELECT * FROM schools WHERE division = $1 AND region = $2 ORDER BY school_name ASC`;
+
+    const result = await pool.query(query, [division]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Master Schools Error:", err);
+    res.status(500).json({ error: "Failed to fetch master school list" });
+  }
+});
+
 app.post('/api/sdo/submit-school', async (req, res) => {
   const {
     school_id,
@@ -3912,6 +4217,10 @@ app.post('/api/register-school', async (req, res) => {
 
     await client.query(insertQuery, values);
     await client.query('COMMIT');
+
+    // --- AUTO-FILL TEACHERS (Helper) ---
+    // Trigger auto-fill of teachers from master list
+    await autoFillSchoolTeachers(schoolData.school_id);
 
     // --- DUAL WRITE: REGISTER SCHOOL ---
     if (poolNew) {
@@ -6100,6 +6409,108 @@ app.get('/api/school-resources/:uid', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- 21a. GET: Check Legacy Specialization Data ---
+app.get('/api/check-legacy-specialization/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT 
+        spec_general_teaching, spec_ece_teaching, spec_english_major, spec_filipino_major,
+        spec_math_major, spec_science_major, spec_ap_major, spec_tle_major,
+        spec_mapeh_major, spec_esp_major, spec_bio_sci_major, spec_phys_sci_major,
+        spec_agri_fishery_major, spec_others_major
+       FROM school_profiles WHERE school_id = $1`,
+      [schoolId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.json({ hasLegacyData: false });
+    }
+
+    const row = result.rows[0];
+    const hasData = Object.values(row).some(val => (val || 0) > 0);
+
+    res.json({ hasLegacyData: hasData });
+  } catch (err) {
+    console.error("Check Legacy Spec Error:", err);
+    res.status(500).json({ error: "Failed to check legacy data" });
+  }
+});
+
+// --- 21b. POST: Single Teacher Upsert (Fast Auto-Save) ---
+app.post('/api/save-single-teacher', async (req, res) => {
+  const { schoolId, teacher } = req.body;
+  if (!schoolId || !teacher || !teacher.control_num) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // UPSERT Logic
+    await client.query(`
+      INSERT INTO teacher_specialization_details (
+        control_num, school_id, full_name, position, position_group, 
+        specialization, teaching_load, iern, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE')
+      ON CONFLICT (control_num) 
+      DO UPDATE SET 
+        full_name = EXCLUDED.full_name,
+        position = EXCLUDED.position,
+        specialization = EXCLUDED.specialization,
+        teaching_load = EXCLUDED.teaching_load,
+        status = 'ACTIVE'
+    `, [
+      teacher.control_num,
+      schoolId,
+      teacher.full_name,
+      teacher.position,
+      teacher.position_group || 'TBD',
+      teacher.specialization,
+      teacher.teaching_load || 0,
+      teacher.iern || null
+    ]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: "Teacher saved" });
+
+    // Background: Update Progress (Fire and Forget)
+    calculateSchoolProgress(schoolId, pool).catch(err => console.error("Background Progress Calc Error:", err));
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error("Single Teacher Save Error:", err);
+    res.status(500).json({ error: "Failed to save teacher" });
+  } finally {
+    client.release();
+  }
+});
+
+// --- 21c. DELETE: Remove Teacher Personnel ---
+app.delete('/api/delete-teacher-personnel/:schoolId/:controlNum', async (req, res) => {
+  const { schoolId, controlNum } = req.params;
+  try {
+    const result = await pool.query(
+      'DELETE FROM teacher_specialization_details WHERE school_id = $1 AND control_num = $2 RETURNING *',
+      [schoolId, controlNum]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Teacher not found or already deleted" });
+    }
+
+    res.json({ success: true, message: "Teacher deleted successfully" });
+
+    // Background: Update Progress
+    calculateSchoolProgress(schoolId, pool).catch(err => console.error("Background Progress Calc Error:", err));
+
+  } catch (err) {
+    console.error("Delete Teacher Error:", err);
+    res.status(500).json({ error: "Failed to delete teacher" });
+  }
+});
+
 // --- 21b. GET: Fetch e-Cart Batches ---
 app.get('/api/ecart-batches/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
@@ -7443,13 +7854,21 @@ app.get('/api/monitoring/division-stats', async (req, res) => {
 
 // --- 27. GET: District Stats (Within Division) ---
 app.get('/api/monitoring/district-stats', async (req, res) => {
-  const { region, division } = req.query;
-  console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division);
+  const { region, division, groupBy } = req.query;
+  // console.log("DEBUG: FETCHING DISTRICT STATS FOR:", region, division, groupBy); // Original line
+  // console.log("District Stats Query:", { region, division, groupBy }); // DEBUG LOG
+
+  let groupCol = 's.district';
+  if (groupBy === 'legislative') groupCol = 's.leg_district';
+  if (groupBy === 'municipality') groupCol = 's.municipality';
+
+  // console.log("Grouping By:", groupCol); // DEBUG LOG
+
   try {
     // REFACTOR: Use 'schools' table as base
     const query = `
       SELECT 
-        s.district, 
+        ${groupCol} as district, 
         COUNT(s.school_id) as total_schools, 
         COUNT(CASE WHEN sp.completion_percentage = 100 THEN 1 END) as completed_schools,
         COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END) as validated_schools,
@@ -7972,8 +8391,8 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
       WHERE TRIM(s.region) = TRIM($1) AND TRIM(s.division) = TRIM($2)
-      GROUP BY s.district
-      ORDER BY s.district ASC
+      GROUP BY ${groupCol}
+      ORDER BY ${groupCol} ASC
     `;
 
     const result = await pool.query(query, [region, division]);
@@ -9588,11 +10007,9 @@ app.get('/api/facility-repairs/:iern', async (req, res) => {
   }
 });
 
-// --- SERVER LISTEN ---
-// --- SERVER LISTEN ---
 
-
-if (isMainModule || process.env.START_SERVER === 'true') {
+// Force start for PM2 (since isMainModule is false in PM2 fork mode)
+if (true) {
   const PORT = process.env.PORT || 3000;
   const server = app.listen(PORT, () => {
     console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
