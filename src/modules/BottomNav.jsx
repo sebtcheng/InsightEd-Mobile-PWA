@@ -74,6 +74,11 @@ const BottomNav = ({ userRole }) => {
             { label: 'Home', path: '/finance-dashboard', icon: TbHomeEdit },
             { label: 'Settings', path: '/profile', icon: FiSettings },
         ],
+        'PSIP III': [
+            { label: 'Home', path: '/psip', state: { activeTab: 'home' }, icon: TbHomeEdit },
+            { label: 'Data', path: '/psip', state: { activeTab: 'data' }, icon: TbChartBar },
+            { label: 'Settings', path: '/profile', state: { activeTab: 'settings' }, icon: FiSettings },
+        ],
 
     };
 
