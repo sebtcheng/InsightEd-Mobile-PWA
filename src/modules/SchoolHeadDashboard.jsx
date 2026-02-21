@@ -167,7 +167,7 @@ const SchoolHeadDashboard = () => {
             }, 1000);
             return () => clearTimeout(timer);
         }
-    }, [schoolProfile?.school_id]); // Only run when school_id changes (initial load)
+    }, [schoolProfile?.school_id, location.state?.refreshTrigger]); // Run on initial load and when Home tab is clicked
 
     // --- SEARCH & QUICK ACTION ITEMS (10 FORMS) ---
     const SEARCHABLE_ITEMS = [
@@ -674,14 +674,14 @@ const SchoolHeadDashboard = () => {
 
                             {/* Data Health Score Highlight */}
                             <div className={`col-span-1 p-4 rounded-2xl shadow-xl flex flex-col justify-center items-center text-center text-white relative overflow-hidden ${isValidating
-                                    ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
-                                    : schoolProfile?.data_health_score === 100
-                                        ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-600 dark:to-emerald-800 shadow-emerald-900/20'
-                                        : schoolProfile?.data_health_score >= 80
-                                            ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
-                                            : schoolProfile?.data_health_score >= 50
-                                                ? 'bg-gradient-to-br from-amber-500 to-amber-700 dark:from-amber-600 dark:to-amber-800 shadow-amber-900/20'
-                                                : 'bg-gradient-to-br from-red-500 to-red-700 dark:from-red-600 dark:to-red-800 shadow-red-900/20'
+                                ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
+                                : schoolProfile?.data_health_score === 100
+                                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-600 dark:to-emerald-800 shadow-emerald-900/20'
+                                    : schoolProfile?.data_health_score >= 80
+                                        ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
+                                        : schoolProfile?.data_health_score >= 50
+                                            ? 'bg-gradient-to-br from-amber-500 to-amber-700 dark:from-amber-600 dark:to-amber-800 shadow-amber-900/20'
+                                            : 'bg-gradient-to-br from-red-500 to-red-700 dark:from-red-600 dark:to-red-800 shadow-red-900/20'
                                 }`}>
                                 <div className="absolute top-0 right-0 p-2 opacity-10">
                                     <FiCheckSquare size={40} />

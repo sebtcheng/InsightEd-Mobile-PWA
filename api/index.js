@@ -127,15 +127,17 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS engineer_id TEXT;
     `);
 
-    // --- MIGRATION: ADD FRAUD DETECTION COLUMNS TO SCHOOL_PROFILES ---
+    // --- MIGRATION: REMOVE FRAUD DETECTION COLUMNS FROM SCHOOL_PROFILES ---
+    // User requested these be exclusively in school_summary
     await pool.query(`
       ALTER TABLE school_profiles
-      ADD COLUMN IF NOT EXISTS school_head_validation BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS data_health_score FLOAT DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS data_health_description TEXT,
-      ADD COLUMN IF NOT EXISTS forms_to_recheck TEXT;
+      DROP COLUMN IF EXISTS school_head_validation,
+      DROP COLUMN IF EXISTS data_health_score,
+      DROP COLUMN IF EXISTS data_health_description,
+      DROP COLUMN IF EXISTS forms_to_recheck;
     `);
-    console.log("✅ DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
+    console.log("✅ DB Init: Schema verified (dropped health columns from school_profiles).");
+
 
     // --- MIGRATION: LGU FORMS AND IMAGES (REMOVED) ---
     /*
@@ -4701,7 +4703,18 @@ app.post('/api/save-school', async (req, res) => {
 app.get('/api/school-profile/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const query = `
+      SELECT 
+        p.*, 
+        s.data_health_score, 
+        s.data_health_description, 
+        s.issues as data_quality_issues, 
+        s.school_head_validation 
+      FROM school_profiles p 
+      LEFT JOIN school_summary s ON p.school_id = s.school_id 
+      WHERE p.submitted_by = $1
+    `;
+    const result = await pool.query(query, [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     // Return standard format expected by frontend
     res.json({
@@ -4737,7 +4750,18 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const query = `
+      SELECT 
+        p.*, 
+        s.data_health_score, 
+        s.data_health_description, 
+        s.issues as data_quality_issues, 
+        s.school_head_validation 
+      FROM school_profiles p 
+      LEFT JOIN school_summary s ON p.school_id = s.school_id 
+      WHERE p.submitted_by = $1
+    `;
+    const result = await pool.query(query, [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({
       exists: true,
@@ -5027,7 +5051,7 @@ app.post('/api/school/validate-data', async (req, res) => {
 
   try {
     const query = `
-      UPDATE school_profiles
+      UPDATE school_summary
       SET school_head_validation = true
       WHERE school_id = $1
       RETURNING school_id;

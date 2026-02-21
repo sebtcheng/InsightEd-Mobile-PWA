@@ -394,12 +394,12 @@ def calculate_final_scores(df):
         
         # Description - STRICTER per user feedback
         # Excellent = 100 (Perfect, no issues)
-        # Good = 80-99 (Minor issues like 1 outlier)
-        # Fair = 50-79
+        # Good = 90-99 (Minor issues like 1 outlier)
+        # Fair = 50-89
         # Critical < 50
         
         if score == 100: desc = "Excellent"
-        elif score >= 80: desc = "Good"
+        elif score >= 90: desc = "Good"
         elif score >= 50: desc = "Fair"
         else: desc = "Critical"
         
@@ -414,7 +414,7 @@ def calculate_final_scores(df):
     
     # NEW: School Head Validation
     # Logic:
-    # 1. Algorithmic: True if Score >= 80 ("Excellent" or "Good")
+    # 1. Algorithmic: True if Score >= 90 ("Excellent" or "Good")
     # 2. Manual Override: If 'school_head_validation' is ALREADY True in DB, keep it True.
     
     algo_validation = score_cols['data_health_description'].isin(["Excellent", "Good"])
@@ -1113,6 +1113,10 @@ def main():
     
     # 4. Update Summary Table (with aggregates from school_profiles)
     update_school_summary_table(df, engine, target_school_id)
+    
+    # 5. Update the School Profiles table which the UI relies on
+    # CAUTION: PER USER REQUEST NO LONGER WRITING TO SCHOOL PROFILES
+    # update_database(df, engine, target_school_id)
     
     # === PHASE 2: Fraud Detection on School Summary ===
     # Run analysis on the populated summary table
