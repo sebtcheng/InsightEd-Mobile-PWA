@@ -523,7 +523,7 @@ const AdminDashboard = () => {
                 />
             </div>
 
-            {schools.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((school) => (
+            {schools.filter(s => (s.name || "").toLowerCase().includes((searchTerm || "").toLowerCase())).map((school) => (
                 <div key={school.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
                     <div>
                         <h4 className="font-bold text-gray-800 text-sm">{school.name}</h4>
@@ -581,8 +581,8 @@ const AdminDashboard = () => {
     const renderAuditTable = () => {
         // Reusing the table logic from previous step, but simplified for this view
         const filtered = auditLogs.filter(log =>
-            log.details.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            log.user_name.toLowerCase().includes(searchTerm.toLowerCase())
+            (log.details || "").toLowerCase().includes((searchTerm || "").toLowerCase()) ||
+            (log.user_name || "").toLowerCase().includes((searchTerm || "").toLowerCase())
         );
 
         return (

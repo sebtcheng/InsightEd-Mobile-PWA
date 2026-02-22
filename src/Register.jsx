@@ -642,9 +642,9 @@ const Register = () => {
                                         onChange={handleRoleChange}
                                         className="w-full bg-white border border-blue-200 rounded-xl px-4 py-3 text-blue-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
                                     >
-                                        <option value="Central Office">Central Office</option>
-                                        <option value="Regional Office">Regional Office</option>
-                                        <option value="School Division Office">School Division Office</option>
+                                        <option value="Central Office">CO Personnel</option>
+                                        <option value="Regional Office">RO Personnel</option>
+                                        <option value="School Division Office">SDO Personnel</option>
                                         <option value="School Head">School Head</option>
                                         <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
