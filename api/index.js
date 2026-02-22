@@ -485,24 +485,33 @@ const initMasterlistDB = async () => {
           "in_masterlist_with_gov" character varying(50),
           "school_name" text,
           "municipality" character varying(100),
-          "leg_district" character varying(100),
+          "legislative_district" character varying(100),
           "priority_index" numeric,
           "cl_requirement" integer,
-          "estimated_classroom_shortage" integer,
+          "est_classroom_shortage" integer,
           "no_of_sites" integer,
-          "proposed_no_of_classrooms" integer,
+          "proposed_no_of_cl" integer,
           "no_of_unit" integer,
-          "sty" integer,
-          "cl" integer,
+          "sty_count" integer,
+          "cl_count" integer,
           "proposed_scope_of_work" text,
           "number_of_workshops" text,
           "workshop_types" text,
           "other_design_configurations" text,
           "proposed_funding_year" integer,
-          "est_cost_of_classrooms" numeric,
+          "est_classroom_cost" numeric,
           "project_implementor" character varying(255),
           "cl_sty_ratio" character varying(50)
       );
+    `);
+    // Migration: Rename leg_district to legislative_district if it exists
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'masterlist_26_30' AND column_name = 'leg_district') THEN
+          ALTER TABLE masterlist_26_30 RENAME COLUMN leg_district TO legislative_district;
+        END IF;
+      END $$;
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_region ON masterlist_26_30("region");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_masterlist_funding_year ON masterlist_26_30("proposed_funding_year");`);
@@ -636,7 +645,7 @@ const initMasterlistDB = async () => {
       const query = `
         INSERT INTO psip_masterlist (
           congressman, governor, mayor, region, division, school_id, school_name,
-          municipality, leg_district, priority_index, cl_requirement, estimated_shortage,
+          municipality, legislative_district, priority_index, cl_requirement, estimated_shortage,
           no_of_sites, proposed_classrooms, no_of_units, storeys, classrooms,
           scope_of_work, workshops, workshop_types, funding_year, estimated_cost, cl_per_storey
         ) VALUES ${rebuildPlaceholders.join(',')}
@@ -667,11 +676,11 @@ app.get('/api/debug-integrity', async (req, res) => {
     const client = await pool.connect();
     const results = {
       count: (await client.query('SELECT COUNT(*) FROM masterlist_26_30')).rows[0].count,
-      shortage_sum: (await client.query('SELECT SUM(estimated_classroom_shortage) as val FROM masterlist_26_30')).rows[0].val,
+      shortage_sum: (await client.query('SELECT SUM(est_classroom_shortage) as val FROM masterlist_26_30')).rows[0].val,
       duplicates: (await client.query(`
-                SELECT "school_id", "sty", "cl", "proposed_funding_year", COUNT(*)
+                SELECT "school_id", "sty_count", "cl_count", "proposed_funding_year", COUNT(*)
                 FROM masterlist_26_30
-                GROUP BY "school_id", "sty", "cl", "proposed_funding_year"
+                GROUP BY "school_id", "sty_count", "cl_count", "proposed_funding_year"
                 HAVING COUNT(*) > 1
                 LIMIT 5
             `)).rows
@@ -685,7 +694,7 @@ app.get('/api/debug-integrity', async (req, res) => {
 
 // Helper for dynamic WHERE clause
 const buildMasterlistQuery = (baseQuery, filters) => {
-  const { region, division, municipality, leg_district } = filters;
+  const { region, division, municipality, legislative_district } = filters;
   let where = [];
   let params = [];
   let pIdx = 1;
@@ -693,7 +702,7 @@ const buildMasterlistQuery = (baseQuery, filters) => {
   if (region) { where.push(`"region" = $${pIdx++}`); params.push(region); }
   if (division) { where.push(`"division" = $${pIdx++}`); params.push(division); }
   if (municipality) { where.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
-  if (leg_district) { where.push(`"leg_district" = $${pIdx++}`); params.push(leg_district); }
+  if (legislative_district) { where.push(`"legislative_district" = $${pIdx++}`); params.push(legislative_district); }
 
   const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
   return { query: `${baseQuery}${whereClause ? ' ' + whereClause : ''}`, params };
@@ -707,7 +716,7 @@ app.get('/api/masterlist/filters', async (req, res) => {
     let query, params;
     if (municipality) {
       // Fetch Leg Districts for Municipality
-      query = 'SELECT DISTINCT "leg_district" FROM masterlist_26_30 WHERE "municipality" = $1 ORDER BY "leg_district"';
+      query = 'SELECT DISTINCT "legislative_district" FROM masterlist_26_30 WHERE "municipality" = $1 ORDER BY "legislative_district"';
       params = [municipality];
     } else if (division) {
       // Fetch Municipalities for Division
@@ -738,9 +747,10 @@ app.get('/api/masterlist/summary', async (req, res) => {
       SELECT
         COUNT(*) as total_projects,
         COUNT(DISTINCT "school_id") as total_schools,
-        COALESCE(SUM("proposed_no_of_classrooms"), 0) as total_classrooms,
-        COALESCE(SUM("est_cost_of_classrooms"), 0) as total_cost,
-        COALESCE(SUM("estimated_classroom_shortage"), 0) as total_shortage,
+        COALESCE(SUM("proposed_no_of_cl"), 0) as total_classrooms,
+        COALESCE(SUM("est_classroom_cost"), 0) as total_cost,
+        COALESCE(SUM("est_classroom_shortage"), 0) as total_shortage,
+        COALESCE(SUM("no_of_sites"), 0) as total_sites,
         COUNT(DISTINCT "region") as total_regions,
         COUNT(DISTINCT "congressman") as total_congressmen,
         COUNT(DISTINCT "governor") as total_governors,
@@ -764,9 +774,9 @@ app.get('/api/masterlist/by-region', async (req, res) => {
         "region" as region,
         COUNT(*) as projects,
         COUNT(DISTINCT "school_id") as schools,
-        COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
-        COALESCE(SUM("est_cost_of_classrooms"), 0) as cost,
-        COALESCE(SUM("estimated_classroom_shortage"), 0) as shortage
+        COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms,
+        COALESCE(SUM("est_classroom_cost"), 0) as cost,
+        COALESCE(SUM("est_classroom_shortage"), 0) as shortage
       FROM masterlist_26_30
     `;
     const { query, params } = buildMasterlistQuery(base, req.query);
@@ -786,8 +796,8 @@ app.get('/api/masterlist/by-funding-year', async (req, res) => {
       SELECT
         "proposed_funding_year" as funding_year,
         COUNT(*) as projects,
-        COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
-        COALESCE(SUM("est_cost_of_classrooms"), 0) as cost
+        COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms,
+        COALESCE(SUM("est_classroom_cost"), 0) as cost
       FROM masterlist_26_30
     `;
     const { query, params } = buildMasterlistQuery(base, req.query);
@@ -805,18 +815,51 @@ app.get('/api/masterlist/by-storey', async (req, res) => {
   try {
     const base = `
       SELECT
-        "sty" as storeys,
+        "sty_count" as storeys,
         COUNT(*) as projects,
-        COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
-        COALESCE(SUM("est_cost_of_classrooms"), 0) as cost
+        COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms,
+        COALESCE(SUM("est_classroom_cost"), 0) as cost
       FROM masterlist_26_30
     `;
     const { query, params } = buildMasterlistQuery(base, req.query);
-    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "sty" > 0 GROUP BY "sty" ORDER BY "sty"`;
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "sty_count" > 0 GROUP BY "sty_count" ORDER BY "sty_count"`;
     const result = await pool.query(finalQuery, params);
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Masterlist By Storey Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Distribution Chart API (Dynamic Grouping Strategy)
+app.get('/api/masterlist/distribution', async (req, res) => {
+  try {
+    const { groupBy, region, division, municipality, legislative_district } = req.query;
+
+    // Validate groupBy to prevent SQL injection issues
+    const validGroupBys = ['region', 'division', 'municipality', 'legislative_district'];
+    const groupField = validGroupBys.includes(groupBy) ? groupBy : 'region';
+
+    const base = `
+      SELECT
+        "${groupField}" as name,
+        COUNT(*) as projects,
+        COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms,
+        COALESCE(SUM("est_classroom_cost"), 0) as cost,
+        COUNT(DISTINCT "school_id") as schools,
+        COALESCE(SUM("est_classroom_shortage"), 0) as shortage,
+        COALESCE(SUM("no_of_sites"), 0) as sites
+      FROM masterlist_26_30
+    `;
+    const { query, params } = buildMasterlistQuery(base, { region, division, municipality, legislative_district });
+
+    // Need to exclude nulls from grouping
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "${groupField}" IS NOT NULL GROUP BY "${groupField}" ORDER BY classrooms DESC`;
+
+    const result = await pool.query(finalQuery, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Masterlist Distribution Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -826,13 +869,13 @@ app.get('/api/masterlist/storey-breakdown', async (req, res) => {
   try {
     const base = `
       SELECT
-        "sty" as storey,
-        "cl" as classrooms,
+        "sty_count" as storey,
+        "cl_count" as classrooms,
         COUNT(*) as count
       FROM masterlist_26_30
     `;
     const { query, params } = buildMasterlistQuery(base, req.query);
-    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "sty" IS NOT NULL AND "cl" IS NOT NULL GROUP BY "sty", "cl" ORDER BY "sty", "cl"`;
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "sty_count" IS NOT NULL AND "cl_count" IS NOT NULL GROUP BY "sty_count", "cl_count" ORDER BY "sty_count", "cl_count"`;
     const result = await pool.query(finalQuery, params);
     res.json(result.rows);
   } catch (err) {
@@ -841,51 +884,184 @@ app.get('/api/masterlist/storey-breakdown', async (req, res) => {
   }
 });
 
+// Get schools for a specific storey breakdown (prototype)
+app.get('/api/masterlist/prototype-schools', async (req, res) => {
+  try {
+    const { sty, cl, region, division, municipality, legislative_district } = req.query;
+
+    let baseWhere = [`"sty_count" = $1`, `"cl_count" = $2`];
+    let pIdx = 3;
+    let params = [Number(sty), Number(cl)];
+
+    if (region) { baseWhere.push(`"region" = $${pIdx++}`); params.push(region); }
+    if (division) { baseWhere.push(`"division" = $${pIdx++}`); params.push(division); }
+    if (municipality && municipality !== 'undefined') { baseWhere.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
+    if (legislative_district && legislative_district !== 'undefined') { baseWhere.push(`"legislative_district" = $${pIdx++}`); params.push(legislative_district); }
+
+    const query = `
+      SELECT 
+        "school_id", 
+        "school_name", 
+        "proposed_no_of_cl" as classrooms, 
+        "est_classroom_shortage" as shortage,
+        "est_classroom_cost" as cost
+      FROM masterlist_26_30 
+      WHERE ${baseWhere.join(' AND ')}
+      ORDER BY classrooms DESC
+    `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Masterlist Prototype Schools Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Partnerships (Congressman / Governor / Mayor)
 app.get('/api/masterlist/partnerships', async (req, res) => {
   try {
-    const { region, division, municipality, leg_district } = req.query;
+    const { region, division, municipality, legislative_district } = req.query;
     const { query: whereBase, params } = buildMasterlistQuery('', req.query);
     const whereClause = whereBase.trim() ? `AND ${whereBase.replace('WHERE', '').trim()}` : '';
 
-    const [congRes, govRes, mayorRes] = await Promise.all([
+    const [pgoRes, mgoRes, cgoRes, dpwhRes, depedRes, csoRes, forDecisionRes] = await Promise.all([
       pool.query(`
-        SELECT "congressman" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
-        FROM masterlist_26_30 WHERE "congressman" IS NOT NULL ${whereClause}
-        GROUP BY "congressman" ORDER BY classrooms DESC LIMIT 20
-      `, params),
-      pool.query(`
-        SELECT "governor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
-        FROM masterlist_26_30 WHERE "governor" IS NOT NULL ${whereClause}
+        SELECT "governor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 WHERE prov_implemented = true ${whereClause}
         GROUP BY "governor" ORDER BY classrooms DESC LIMIT 20
       `, params),
       pool.query(`
-        SELECT "mayor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
-        FROM masterlist_26_30 WHERE "mayor" IS NOT NULL ${whereClause}
+        SELECT "mayor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 WHERE muni_implemented = true ${whereClause}
         GROUP BY "mayor" ORDER BY classrooms DESC LIMIT 20
+      `, params),
+      pool.query(`
+        SELECT "mayor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 WHERE city_implemented = true ${whereClause}
+        GROUP BY "mayor" ORDER BY classrooms DESC LIMIT 20
+      `, params),
+      pool.query(`
+        SELECT 'DPWH' as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 WHERE dpwh_implemented = true ${whereClause}
+      `, params),
+      pool.query(`
+        SELECT 'DepEd' as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 WHERE deped_implemented = true ${whereClause}
+      `, params),
+      pool.query(`
+        SELECT 'CSO/NGO' as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 WHERE cso_ngo_implemented = true ${whereClause}
+      `, params),
+      pool.query(`
+        SELECT 'Multiple Agencies' as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        FROM masterlist_26_30 
+        WHERE (
+          COALESCE(prov_implemented::int, 0) + 
+          COALESCE(muni_implemented::int, 0) + 
+          COALESCE(city_implemented::int, 0) + 
+          COALESCE(dpwh_implemented::int, 0) + 
+          COALESCE(deped_implemented::int, 0) + 
+          COALESCE(cso_ngo_implemented::int, 0)
+        ) > 1 AND (resolved_partnership IS NULL OR resolved_partnership = '') ${whereClause}
       `, params)
     ]);
 
-    // Also get totals per category
-    const totalsBase = `
-      SELECT
-        COUNT(DISTINCT "congressman") as congressman_count,
-        COUNT(DISTINCT "governor") as governor_count,
-        COUNT(DISTINCT "mayor") as mayor_count,
-        COALESCE(SUM("proposed_no_of_classrooms"), 0) as total_classrooms
-      FROM masterlist_26_30
-    `;
-    const { query: tQuery, params: tParams } = buildMasterlistQuery(totalsBase, req.query);
-    const totals = await pool.query(tQuery, tParams);
+    // Format single-row results (DPWH, DepEd, CSO, For Decision)
+    const formatSingle = (resArr) => {
+      const row = resArr.rows[0];
+      return row && Number(row.projects) > 0 ? [row] : [];
+    };
 
     res.json({
-      congressman: congRes.rows,
-      governor: govRes.rows,
-      mayor: mayorRes.rows,
-      totals: totals.rows[0]
+      totals: {
+        governor_count: pgoRes.rows.length,
+        mayor_count: mgoRes.rows.length + cgoRes.rows.length
+      },
+      pgo: pgoRes.rows,
+      mgo: mgoRes.rows,
+      cgo: cgoRes.rows,
+      dpwh: formatSingle(dpwhRes),
+      deped: formatSingle(depedRes),
+      cso: formatSingle(csoRes),
+      forDecision: formatSingle(forDecisionRes)
     });
   } catch (err) {
     console.error('❌ Masterlist Partnerships Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Resolve a partnership overlap
+app.post('/api/masterlist/resolve-partnership', async (req, res) => {
+  try {
+    const { school_id, resolved_partnership } = req.body;
+    if (!school_id) return res.status(400).json({ error: 'school_id is required' });
+
+    await pool.query(
+      `UPDATE masterlist_26_30 SET resolved_partnership = $1 WHERE school_id = $2`,
+      [resolved_partnership || null, school_id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Resolve Partnership Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get schools for a specific partnership
+app.get('/api/masterlist/partnership-schools', async (req, res) => {
+  try {
+    const { type, name, region, division, municipality, legislative_district } = req.query;
+
+    let baseWhere = [];
+    if (type === 'PGO') baseWhere.push(`"governor" = $1`);
+    else if (type === 'MGO') baseWhere.push(`"mayor" = $1 AND "municipality" NOT ILIKE '%City%'`);
+    else if (type === 'CGO') baseWhere.push(`"mayor" = $1 AND "municipality" ILIKE '%City%'`);
+    else if (type === 'DPWH') baseWhere.push(`dpwh_implemented = true`);
+    else if (type === 'DEPED') baseWhere.push(`deped_implemented = true`);
+    else if (type === 'CSO') baseWhere.push(`cso_ngo_implemented = true`);
+    else if (type === 'FOR_DECISION') baseWhere.push(`(
+        COALESCE(prov_implemented::int, 0) + 
+        COALESCE(muni_implemented::int, 0) + 
+        COALESCE(city_implemented::int, 0) + 
+        COALESCE(dpwh_implemented::int, 0) + 
+        COALESCE(deped_implemented::int, 0) + 
+        COALESCE(cso_ngo_implemented::int, 0)
+      ) > 1 AND (resolved_partnership IS NULL OR resolved_partnership = '')`);
+    else return res.json([]);
+
+    let pIdx = 1;
+    let params = [];
+
+    // Add name param ONLY for the governor/mayor queries that use $1
+    if (['PGO', 'MGO', 'CGO'].includes(type)) {
+      params.push(name);
+      pIdx = 2;
+    }
+
+    if (region) { baseWhere.push(`"region" = $${pIdx++}`); params.push(region); }
+    if (division) { baseWhere.push(`"division" = $${pIdx++}`); params.push(division); }
+    if (municipality && municipality !== 'undefined') { baseWhere.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
+    if (legislative_district && legislative_district !== 'undefined') { baseWhere.push(`"legislative_district" = $${pIdx++}`); params.push(legislative_district); }
+
+    const query = `
+      SELECT 
+        "school_id", 
+        "school_name", 
+        "proposed_no_of_cl" as classrooms, 
+        "est_classroom_shortage" as shortage,
+        "est_classroom_cost" as cost
+      FROM masterlist_26_30 
+      WHERE ${baseWhere.join(' AND ')}
+      ORDER BY classrooms DESC
+    `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Masterlist Partnership Schools Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -909,10 +1085,10 @@ app.post('/api/masterlist/ai-query', async (req, res) => {
       - region (text)
       - division (text)
       - municipality (text)
-      - leg_district (text)
-      - proposed_no_of_classrooms (numeric)
-      - est_cost_of_classrooms (numeric)
-      - estimated_classroom_shortage (numeric)
+      - legislative_district (text)
+      - proposed_no_of_cl (numeric)
+      - est_classroom_cost (numeric)
+      - est_classroom_shortage (numeric)
       - sty (numeric, storeys)
       - cl (numeric, classrooms per building)
       - proposed_funding_year (numeric)
@@ -923,7 +1099,7 @@ app.post('/api/masterlist/ai-query', async (req, res) => {
       Task: Translate the following user request into a single PostgreSQL SELECT query.
       Return ONLY THE RAW SQL query. NO MARKDOWN, NO EXPLANATION, NO BACKTICKS.
       The query MUST be read-only (SELECT only).
-      Example: SELECT school_name, estimated_classroom_shortage FROM masterlist_26_30 WHERE region = 'REGION I' ORDER BY estimated_classroom_shortage DESC LIMIT 10;
+      Example: SELECT school_name, est_classroom_shortage FROM masterlist_26_30 WHERE region = 'REGION I' ORDER BY est_classroom_shortage DESC LIMIT 10;
       
       User Request: "${prompt}"
     `;
@@ -1147,7 +1323,7 @@ app.get('/api/debug/seed-schools', async (req, res) => {
                 school_name TEXT,
                 region TEXT,
                 division TEXT,
-                leg_district TEXT,
+                legislative_district TEXT,
                 province TEXT,
                 municipality TEXT,
                 barangay TEXT,
@@ -2066,15 +2242,16 @@ app.post('/api/forgot-password', async (req, res) => {
       return res.status(404).json({ error: "School ID not found." });
     }
 
-    const realEmail = profileRes.rows[0].email;
+    let realEmail = profileRes.rows[0].email;
     if (!realEmail) {
       return res.status(400).json({ error: "No contact email found for this School ID." });
     }
+    realEmail = realEmail.trim().replace(/\s/g, '');
 
-    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail} `);
+    console.log(`Reset requested for School ID: ${schoolId}, sending to: ${realEmail}`);
 
     // 3. Generate Reset Link for the FAKE Auth Email
-    const fakeAuthEmail = `${schoolId} @insighted.app`;
+    const fakeAuthEmail = `${schoolId}@insighted.app`;
     const actionCodeSettings = {
       url: 'https://insight-ed-mobile-pwa.vercel.app', // OR your local URL if dev
       handleCodeInApp: false,
@@ -2887,7 +3064,7 @@ app.get('/api/sdo/location-options', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT DISTINCT 
-        province, municipality, district, leg_district, barangay
+        province, municipality, district, legislative_district, barangay
       FROM schools
       WHERE region = $1 AND division = $2
       ORDER BY province, municipality, district, barangay
@@ -3011,7 +3188,7 @@ app.post('/api/sdo/submit-school', async (req, res) => {
     district,
     province,
     municipality,
-    leg_district,
+    legislative_district,
     barangay,
     street_address,
     mother_school_id,
@@ -3031,14 +3208,14 @@ app.post('/api/sdo/submit-school', async (req, res) => {
   try {
     const result = await pool.query(`
       INSERT INTO pending_schools (
-        school_id, school_name, region, division, district, province, municipality, leg_district,
+        school_id, school_name, region, division, district, province, municipality, legislative_district,
         barangay, street_address, mother_school_id, curricular_offering,
         latitude, longitude, submitted_by, submitted_by_name, special_order
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING pending_id
     `, [
-      school_id, school_name, region, division, district, province, municipality, leg_district,
+      school_id, school_name, region, division, district, province, municipality, legislative_district,
       barangay, street_address, mother_school_id, curricular_offering,
       latitude, longitude, submitted_by, submitted_by_name, special_order
     ]);
@@ -3125,7 +3302,7 @@ app.get('/api/sdo/first-school-location', async (req, res) => {
     console.log('ðŸ” FIRST-SCHOOL-LOCATION ENDPOINT HIT');
     console.log('Query params:', req.query);
 
-    const { region, division, province, municipality, district, leg_district } = req.query;
+    const { region, division, province, municipality, district, legislative_district } = req.query;
 
     let query = `
             SELECT latitude as lat, longitude as lng 
@@ -3220,14 +3397,14 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
     // 2. Insert into schools table
     await pool.query(`
       INSERT INTO schools (
-        school_id, school_name, region, division, district, province, municipality, leg_district,
+        school_id, school_name, region, division, district, province, municipality, legislative_district,
         barangay, street_address, mother_school_id, curricular_offering, latitude, longitude, special_order
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       ON CONFLICT (school_id) DO NOTHING
     `, [
       school.school_id, school.school_name, school.region, school.division, school.district,
-      school.province, school.municipality, school.leg_district, school.barangay,
+      school.province, school.municipality, school.legislative_district, school.barangay,
       school.street_address, school.mother_school_id, school.curricular_offering,
       school.latitude, school.longitude, school.special_order
     ]);
@@ -3820,7 +3997,7 @@ app.post('/api/register-school', async (req, res) => {
     const insertQuery = `
         INSERT INTO school_profiles (
             school_id, school_name, region, province, division, district, 
-            municipality, leg_district, barangay, mother_school_id, 
+            municipality, legislative_district, barangay, mother_school_id, 
             latitude, longitude, 
             submitted_by, iern, email, curricular_offering, submitted_at
         ) VALUES (
@@ -3836,7 +4013,7 @@ app.post('/api/register-school', async (req, res) => {
       schoolData.division,
       schoolData.district,
       schoolData.municipality,
-      schoolData.leg_district || schoolData.legislative,
+      schoolData.legislative_district || schoolData.legislative,
       schoolData.barangay,
       schoolData.mother_school_id || 'NA',
       schoolData.latitude,
@@ -4051,6 +4228,7 @@ app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
     }
 
     if (email) {
+      email = email.trim().replace(/\s/g, ''); // Fix malformed database emails with rogue spaces
       // Mask the email (e.g., 3*****5@deped.gov.ph)
       const parts = email.split('@');
       const name = parts[0];
@@ -4170,7 +4348,7 @@ app.post('/api/save-school', async (req, res) => {
         division: 'division',
         district: 'district',
         municipality: 'municipality',
-        legDistrict: 'leg_district',
+        legDistrict: 'legislative_district',
         barangay: 'barangay',
         motherSchoolId: 'mother_school_id',
         latitude: 'latitude',
@@ -4230,7 +4408,7 @@ app.post('/api/save-school', async (req, res) => {
     const query = `
       INSERT INTO school_profiles (
         school_id, school_name, region, province, division, district, 
-        municipality, leg_district, barangay, mother_school_id, 
+        municipality, legislative_district, barangay, mother_school_id, 
         latitude, longitude, submitted_by, submitted_at, 
         curricular_offering,
         history_logs,
@@ -4249,7 +4427,7 @@ app.post('/api/save-school', async (req, res) => {
         division = EXCLUDED.division,
         district = EXCLUDED.district,
         municipality = EXCLUDED.municipality,
-        leg_district = EXCLUDED.leg_district,
+        legislative_district = EXCLUDED.legislative_district,
         barangay = EXCLUDED.barangay,
         mother_school_id = EXCLUDED.mother_school_id,
         latitude = EXCLUDED.latitude,
@@ -4612,7 +4790,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
         barangay = $5,
         division = $6,
         district = $7,
-        leg_district = $8,
+        legislative_district = $8,
         mother_school_id = $9,
         latitude = $10,
         longitude = $11,
@@ -4627,7 +4805,7 @@ app.post('/api/sdo/update-school-profile', async (req, res) => {
       profileData.barangay,
       profileData.division,
       profileData.district,
-      profileData.leg_district || profileData.legDistrict,
+      profileData.legislative_district || profileData.legDistrict,
       profileData.mother_school_id || profileData.motherSchoolId,
       profileData.latitude,
       profileData.longitude,
@@ -7552,7 +7730,7 @@ app.get('/api/monitoring/district-stats', async (req, res) => {
   // console.log("District Stats Query:", { region, division, groupBy }); // DEBUG LOG
 
   let groupCol = 's.district';
-  if (groupBy === 'legislative') groupCol = 's.leg_district';
+  if (groupBy === 'legislative') groupCol = 's.legislative_district';
   if (groupBy === 'municipality') groupCol = 's.municipality';
 
   // console.log("Grouping By:", groupCol); // DEBUG LOG
@@ -9783,4 +9961,6 @@ if (isMainModule || process.env.START_SERVER || true) {
 
 
 export default app;
+
+
 
