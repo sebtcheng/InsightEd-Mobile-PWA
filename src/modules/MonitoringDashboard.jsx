@@ -2994,11 +2994,15 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Shifting: {
-                                                insightsShiftingGrade === 'k' ? 'Kindergarten' : `Grade ${insightsShiftingGrade.replace('g', '')}`
-                                            }
-                                            {insightsShiftingCategory !== 'total' && ` (${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift)`}
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Shifting: {
+                                                    insightsShiftingGrade === 'k' ? 'Kindergarten' : `Grade ${insightsShiftingGrade.replace('g', '')}`
+                                                }
+                                                {insightsShiftingCategory !== 'total' && ` (${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift)`}
+                                            </h3>
                                         <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3130,11 +3134,15 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Learning Delivery: {
-                                                insightsDeliveryGrade === 'k' ? 'Kindergarten' : `Grade ${insightsDeliveryGrade.replace('g', '')}`
-                                            }
-                                            {insightsDeliveryCategory !== 'total' && ` (${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning)`}
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg text-teal-600 dark:text-teal-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Learning Delivery: {
+                                                    insightsDeliveryGrade === 'k' ? 'Kindergarten' : `Grade ${insightsDeliveryGrade.replace('g', '')}`
+                                                }
+                                                {insightsDeliveryCategory !== 'total' && ` (${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning)`}
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3226,12 +3234,16 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Emergency ADM: {
-                                                insightsAdmType === 'mdl' ? 'Modular Distance (MDL)' :
-                                                    insightsAdmType === 'odl' ? 'Online Distance (ODL)' :
-                                                        insightsAdmType === 'tvi' ? 'TV/Radio (TVI/RBI)' : 'Blended Learning'
-                                            }
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Emergency ADM: {
+                                                    insightsAdmType === 'mdl' ? 'Modular Distance (MDL)' :
+                                                        insightsAdmType === 'odl' ? 'Online Distance (ODL)' :
+                                                            insightsAdmType === 'tvi' ? 'TV/Radio (TVI/RBI)' : 'Blended Learning'
+                                                }
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3323,8 +3335,12 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Teacher Count: {insightsTeacherGrade === 'total' ? 'All Grades' : insightsTeacherGrade === 'k' ? 'Kindergarten' : `Grade ${insightsTeacherGrade.replace('g', '')}`}
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Teacher Count: {insightsTeacherGrade === 'total' ? 'All Grades' : insightsTeacherGrade === 'k' ? 'Kindergarten' : `Grade ${insightsTeacherGrade.replace('g', '')}`}
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3419,8 +3435,12 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Multigrade Teachers: {insightsMultigradeCategory === '1_2' ? 'Grades 1 & 2' : insightsMultigradeCategory === '3_4' ? 'Grades 3 & 4' : 'Grades 5 & 6'}
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Multigrade Teachers: {insightsMultigradeCategory === '1_2' ? 'Grades 1 & 2' : insightsMultigradeCategory === '3_4' ? 'Grades 3 & 4' : 'Grades 5 & 6'}
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3511,8 +3531,12 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Teaching Experience: {insightsExperienceCategory.replace('_', '-')} Years
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Teaching Experience: {insightsExperienceCategory.replace('_', '-')} Years
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3601,18 +3625,22 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Specialization: {
-                                                insightsSpecializationSubject === 'math' ? 'Mathematics' :
-                                                    insightsSpecializationSubject === 'sci' ? 'Science' :
-                                                        insightsSpecializationSubject === 'eng' ? 'English' :
-                                                            insightsSpecializationSubject === 'fil' ? 'Filipino' :
-                                                                insightsSpecializationSubject === 'ap' ? 'Araling Panlipunan' :
-                                                                    insightsSpecializationSubject === 'mapeh' ? 'MAPEH' :
-                                                                        insightsSpecializationSubject === 'esp' ? 'Edukasyon sa Pagpapakatao' :
-                                                                            insightsSpecializationSubject === 'tle' ? 'TLE' :
-                                                                                insightsSpecializationSubject === 'gen' ? 'General Education' : 'Early Childhood'
-                                            }
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Specialization: {
+                                                    insightsSpecializationSubject === 'math' ? 'Mathematics' :
+                                                        insightsSpecializationSubject === 'sci' ? 'Science' :
+                                                            insightsSpecializationSubject === 'eng' ? 'English' :
+                                                                insightsSpecializationSubject === 'fil' ? 'Filipino' :
+                                                                    insightsSpecializationSubject === 'ap' ? 'Araling Panlipunan' :
+                                                                        insightsSpecializationSubject === 'mapeh' ? 'MAPEH' :
+                                                                            insightsSpecializationSubject === 'esp' ? 'Edukasyon sa Pagpapakatao' :
+                                                                                insightsSpecializationSubject === 'tle' ? 'TLE' :
+                                                                                    insightsSpecializationSubject === 'gen' ? 'General Education' : 'Early Childhood'
+                                                }
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3836,12 +3864,16 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Classrooms: {
-                                                insightsClassroomCondition === 'good' ? 'Good Condition' :
-                                                    insightsClassroomCondition === 'new' ? 'Newly Built' :
-                                                        insightsClassroomCondition === 'repair' ? 'Needs Major Repairs' : 'For Demolition/Condemned'
-                                            }
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Classrooms: {
+                                                    insightsClassroomCondition === 'good' ? 'Good Condition' :
+                                                        insightsClassroomCondition === 'new' ? 'Newly Built' :
+                                                            insightsClassroomCondition === 'repair' ? 'Needs Major Repairs' : 'For Demolition/Condemned'
+                                                }
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -3934,11 +3966,15 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Specialized Rooms: {
-                                                insightsRoomType === 'sci' ? 'Science Lab' :
-                                                    insightsRoomType === 'com' ? 'Computer Lab' : 'TVL Workshop'
-                                            }
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg text-violet-600 dark:text-violet-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Specialized Rooms: {
+                                                    insightsRoomType === 'sci' ? 'Science Lab' :
+                                                        insightsRoomType === 'com' ? 'Computer Lab' : 'TVL Workshop'
+                                                }
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -4030,20 +4066,24 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Site & Utilities: {
-                                                (insightsSiteCategory === 'elec' ? 'Electricity' :
-                                                    insightsSiteCategory === 'water' ? 'Water' :
-                                                        insightsSiteCategory === 'build' ? 'Buildable Space' : 'SHA / Hardship') + ' - ' +
-                                                (insightsSiteSubOption === 'grid' ? 'Grid Supply' :
-                                                    insightsSiteSubOption === 'offgrid' ? 'Off-Grid' :
-                                                        insightsSiteSubOption === 'piped' ? 'Piped Water' :
-                                                            insightsSiteSubOption === 'natural' ? 'Natural Resources' :
-                                                                insightsSiteSubOption === 'yes' ? 'Yes' :
-                                                                    insightsSiteSubOption === 'no' ? 'No' :
-                                                                        insightsSiteSubOption === 'hardship' ? 'Hardship Post' :
-                                                                            insightsSiteSubOption === 'multi' ? 'Pure Multigrade' : 'None/No Source')
-                                            }
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg text-teal-600 dark:text-teal-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Site & Utilities: {
+                                                    (insightsSiteCategory === 'elec' ? 'Electricity' :
+                                                        insightsSiteCategory === 'water' ? 'Water' :
+                                                            insightsSiteCategory === 'build' ? 'Buildable Space' : 'SHA / Hardship') + ' - ' +
+                                                    (insightsSiteSubOption === 'grid' ? 'Grid Supply' :
+                                                        insightsSiteSubOption === 'offgrid' ? 'Off-Grid' :
+                                                            insightsSiteSubOption === 'piped' ? 'Piped Water' :
+                                                                insightsSiteSubOption === 'natural' ? 'Natural Resources' :
+                                                                    insightsSiteSubOption === 'yes' ? 'Yes' :
+                                                                        insightsSiteSubOption === 'no' ? 'No' :
+                                                                            insightsSiteSubOption === 'hardship' ? 'Hardship Post' :
+                                                                                insightsSiteSubOption === 'multi' ? 'Pure Multigrade' : 'None/No Source')
+                                                }
+                                            </h3>
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
@@ -4144,24 +4184,28 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            Learner Demographic: {
-                                                insightsDemographicCategory === 'sned' ? 'SNED' :
-                                                    insightsDemographicCategory === 'disability' ? 'Learners with Disability' :
-                                                        insightsDemographicCategory === 'als' ? 'ALS' :
-                                                            insightsDemographicCategory === 'muslim' ? 'Muslim' :
-                                                                insightsDemographicCategory === 'ip' ? 'Indigenous People' :
-                                                                    insightsDemographicCategory === 'displaced' ? 'Displaced' :
-                                                                        insightsDemographicCategory === 'repetition' ? 'Repetition' :
-                                                                            insightsDemographicCategory === 'overage' ? 'Overage' : 'Dropouts'
-                                            } ({
-                                                insightsDemographicGrade === 'total' ? 'Total' :
-                                                    insightsDemographicGrade === 'es' ? 'Elementary' :
-                                                        insightsDemographicGrade === 'jhs' ? 'Junior High' :
-                                                            insightsDemographicGrade === 'shs' ? 'Senior High' :
-                                                                insightsDemographicGrade === 'k' ? 'Kindergarten' :
-                                                                    `Grade ${insightsDemographicGrade.replace('g', '')}`
-                                            })
-                                        </h3>
+                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+                                                <div className="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
+                                                    <FiPieChart />
+                                                </div>
+                                                Learner Demographic: {
+                                                    insightsDemographicCategory === 'sned' ? 'SNED' :
+                                                        insightsDemographicCategory === 'disability' ? 'Learners with Disability' :
+                                                            insightsDemographicCategory === 'als' ? 'ALS' :
+                                                                insightsDemographicCategory === 'muslim' ? 'Muslim' :
+                                                                    insightsDemographicCategory === 'ip' ? 'Indigenous People' :
+                                                                        insightsDemographicCategory === 'displaced' ? 'Displaced' :
+                                                                            insightsDemographicCategory === 'repetition' ? 'Repetition' :
+                                                                                insightsDemographicCategory === 'overage' ? 'Overage' : 'Dropouts'
+                                                } ({
+                                                    insightsDemographicGrade === 'total' ? 'Total' :
+                                                        insightsDemographicGrade === 'es' ? 'Elementary' :
+                                                            insightsDemographicGrade === 'jhs' ? 'Junior High' :
+                                                                insightsDemographicGrade === 'shs' ? 'Senior High' :
+                                                                    insightsDemographicGrade === 'k' ? 'Kindergarten' :
+                                                                        `Grade ${insightsDemographicGrade.replace('g', '')}`
+                                                })
+                                            </h3>
 
                                         <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
