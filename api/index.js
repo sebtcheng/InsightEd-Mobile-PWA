@@ -929,7 +929,10 @@ app.get('/api/debug/scan/:uid', async (req, res) => {
 
     // F7
     const hasRes = (sp.res_electricity_source || sp.res_water_source || sp.res_buildable_space || sp.sha_category ||
-      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 || (sp.res_toilets_male || 0) > 0);
+      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 ||
+      (sp.res_toilets_male || 0) > 0 ||
+      (sp.female_bowls_func || 0) > 0 || (sp.male_bowls_func || 0) > 0 ||
+      (sp.male_urinals_func || 0) > 0 || (sp.pwd_bowls_func || 0) > 0);
     report.forms.f7_resources = { passed: !!hasRes, reason: "Utility/Infra set or Inventory > 0. Elec: " + sp.res_electricity_source };
     if (report.forms.f7_resources.passed) completed++;
 
@@ -2415,7 +2418,10 @@ const calculateSchoolProgress = async (schoolId, dbClientOrPool) => {
     // --- FORM 7: Resources ---
     // Criteria: Any key infrastructure/utility field is set OR any inventory count > 0
     const f7 = (sp.res_electricity_source || sp.res_water_source || sp.res_buildable_space || sp.sha_category ||
-      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 || (sp.res_toilets_male || 0) > 0) ? 1 : 0;
+      (sp.res_armchair_func || 0) > 0 || (sp.res_armchairs_good || 0) > 0 ||
+      (sp.res_toilets_male || 0) > 0 ||
+      (sp.female_bowls_func || 0) > 0 || (sp.male_bowls_func || 0) > 0 ||
+      (sp.male_urinals_func || 0) > 0 || (sp.pwd_bowls_func || 0) > 0) ? 1 : 0;
     if (f7) completed++;
 
     // --- FORM 8: Facilities ---
@@ -6032,27 +6038,30 @@ app.post('/api/save-school-resources', async (req, res) => {
   try {
     const query = `
             UPDATE school_profiles SET 
-                res_toilets_male=$2, res_toilets_female=$3, res_toilets_common=$4, res_toilets_pwd=$5,
-                res_water_source=$6, res_tvl_workshops=$7, res_electricity_source=$8, 
-                res_buildable_space=$9, sha_category=$10,
+                res_water_source=$2, res_tvl_workshops=$3, res_electricity_source=$4, 
+                res_buildable_space=$5, sha_category=$6,
                 
-                res_sci_labs=$11, res_com_labs=$12,
+                res_sci_labs=$7, res_com_labs=$8,
                 
-                res_ecart_func=$13, res_ecart_nonfunc=$14,
-                res_laptop_func=$15, res_laptop_nonfunc=$16,
-                res_tv_func=$17, res_tv_nonfunc=$18,
-                res_printer_func=$19, res_printer_nonfunc=$20,
-                res_desk_func=$21, res_desk_nonfunc=$22,
-                res_armchair_func=$23, res_armchair_nonfunc=$24,
-                res_toilet_func=$25, res_toilet_nonfunc=$26,
-                res_handwash_func=$27, res_handwash_nonfunc=$28,
+                res_ecart_func=$9, res_ecart_nonfunc=$10,
+                res_laptop_func=$11, res_laptop_nonfunc=$12,
+                res_tv_func=$13, res_tv_nonfunc=$14,
+                res_printer_func=$15, res_printer_nonfunc=$16,
+                res_desk_func=$17, res_desk_nonfunc=$18,
+                res_armchair_func=$19, res_armchair_nonfunc=$20,
+                res_handwash_func=$21, res_handwash_nonfunc=$22,
                 
-                seats_kinder=$29, seats_grade_1=$30, seats_grade_2=$31, seats_grade_3=$32,
-                seats_grade_4=$33, seats_grade_5=$34, seats_grade_6=$35,
-                seats_grade_7=$36, seats_grade_8=$37, seats_grade_9=$38, seats_grade_10=$39,
-                seats_grade_11=$40, seats_grade_12=$41,
+                seats_kinder=$23, seats_grade_1=$24, seats_grade_2=$25, seats_grade_3=$26,
+                seats_grade_4=$27, seats_grade_5=$28, seats_grade_6=$29,
+                seats_grade_7=$30, seats_grade_8=$31, seats_grade_9=$32, seats_grade_10=$33,
+                seats_grade_11=$34, seats_grade_12=$35,
 
-                has_buildable_space=$42::BOOLEAN,
+                has_buildable_space=$36::BOOLEAN,
+
+                female_bowls_func=$37, female_bowls_nonfunc=$38,
+                male_bowls_func=$39, male_bowls_nonfunc=$40,
+                male_urinals_func=$41, male_urinals_nonfunc=$42,
+                pwd_bowls_func=$43, pwd_bowls_nonfunc=$44,
 
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
@@ -6060,28 +6069,32 @@ app.post('/api/save-school-resources', async (req, res) => {
 
     const values = [
       data.schoolId,
-      data.res_toilets_male, data.res_toilets_female, data.res_toilets_common, data.res_toilets_pwd,
       data.res_water_source, data.res_tvl_workshops, data.res_electricity_source,
       data.res_buildable_space, data.sha_category,
 
       data.res_sci_labs, data.res_com_labs,
 
-      data.res_ecart_func, data.res_ecart_nonfunc,
-      data.res_laptop_func, data.res_laptop_nonfunc,
-      data.res_tv_func, data.res_tv_nonfunc,
-      data.res_printer_func, data.res_printer_nonfunc,
-      data.res_desk_func, data.res_desk_nonfunc,
-      data.res_armchair_func, data.res_armchair_nonfunc,
-      data.res_toilet_func, data.res_toilet_nonfunc,
-      data.res_handwash_func, data.res_handwash_nonfunc,
+      data.res_ecart_func || 0, data.res_ecart_nonfunc || 0,
+      data.res_laptop_func || 0, data.res_laptop_nonfunc || 0,
+      data.res_tv_func || 0, data.res_tv_nonfunc || 0,
+      data.res_printer_func || 0, data.res_printer_nonfunc || 0,
+      data.res_desk_func || 0, data.res_desk_nonfunc || 0,
+      data.res_armchair_func || 0, data.res_armchair_nonfunc || 0,
+      data.res_handwash_func || 0, data.res_handwash_nonfunc || 0,
 
-      data.seats_kinder, data.seats_grade_1, data.seats_grade_2, data.seats_grade_3,
-      data.seats_grade_4, data.seats_grade_5, data.seats_grade_6,
-      data.seats_grade_7, data.seats_grade_8, data.seats_grade_9, data.seats_grade_10,
-      data.seats_grade_11, data.seats_grade_12,
+      data.seats_kinder || 0, data.seats_grade_1 || 0, data.seats_grade_2 || 0, data.seats_grade_3 || 0,
+      data.seats_grade_4 || 0, data.seats_grade_5 || 0, data.seats_grade_6 || 0,
+      data.seats_grade_7 || 0, data.seats_grade_8 || 0, data.seats_grade_9 || 0, data.seats_grade_10 || 0,
+      data.seats_grade_11 || 0, data.seats_grade_12 || 0,
 
-      // $42
-      data.res_buildable_space === 'Yes'
+      // $36
+      data.res_buildable_space === 'Yes',
+
+      // $37-$44: New sanitation fixture counts
+      data.female_bowls_func || 0, data.female_bowls_nonfunc || 0,
+      data.male_bowls_func || 0, data.male_bowls_nonfunc || 0,
+      data.male_urinals_func || 0, data.male_urinals_nonfunc || 0,
+      data.pwd_bowls_func || 0, data.pwd_bowls_nonfunc || 0
     ];
 
     await pool.query(query, values);

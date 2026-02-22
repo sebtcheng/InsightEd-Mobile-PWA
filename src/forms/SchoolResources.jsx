@@ -193,7 +193,7 @@ const SchoolResources = ({ embedded }) => {
     // --- SAVE TIMER EFFECTS ---
 
     const [userRole, setUserRole] = useState("School Head");
-    const [crType, setCrType] = useState('Segmented'); // 'Segmented' or 'Shared'
+
 
     const [schoolId, setSchoolId] = useState(null);
     const [iern, setIern] = useState(null); // [NEW] IERN State
@@ -346,10 +346,6 @@ const SchoolResources = ({ embedded }) => {
 
     // --- NEON SCHEMA MAPPING ---
     const initialFields = {
-        res_toilets_male: 0,
-        res_toilets_female: 0,
-        res_toilets_common: 0, // [NEW] Common CR
-        res_toilets_pwd: 0,
         res_water_source: '',
         res_tvl_workshops: 0,
         res_electricity_source: '',
@@ -365,8 +361,13 @@ const SchoolResources = ({ embedded }) => {
         res_printer_func: 0, res_printer_nonfunc: 0,
         res_desk_func: 0, res_desk_nonfunc: 0,
         res_armchair_func: 0, res_armchair_nonfunc: 0,
-        res_toilet_func: 0, res_toilet_nonfunc: 0,
         res_handwash_func: 0, res_handwash_nonfunc: 0,
+
+        // SANITATION: Specific Fixture Counts
+        female_bowls_func: 0, female_bowls_nonfunc: 0,
+        male_bowls_func: 0, male_bowls_nonfunc: 0,
+        male_urinals_func: 0, male_urinals_nonfunc: 0,
+        pwd_bowls_func: 0, pwd_bowls_nonfunc: 0,
 
         // SEATS
         seats_kinder: 0, seats_grade_1: 0, seats_grade_2: 0, seats_grade_3: 0,
@@ -885,7 +886,7 @@ const SchoolResources = ({ embedded }) => {
                                 <ResourceAuditRow label="Printers" funcName="res_printer_func" nonFuncName="res_printer_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                 <ResourceAuditRow label="Desks" funcName="res_desk_func" nonFuncName="res_desk_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                 <ResourceAuditRow label="Arm Chairs" funcName="res_armchair_func" nonFuncName="res_armchair_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                <ResourceAuditRow label="Toilets" funcName="res_toilet_func" nonFuncName="res_toilet_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+
                                 <ResourceAuditRow label="Hand Washing Stn" funcName="res_handwash_func" nonFuncName="res_handwash_nonfunc" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                             </tbody>
                         </table>
@@ -1254,44 +1255,171 @@ const SchoolResources = ({ embedded }) => {
                     </div>
                 </div>
 
+                {/* SANITATION & COMFORT ROOMS */}
                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                    <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-50">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
-                                <FiDroplet size={20} />
-                            </div>
-                            <div>
-                                <h2 className="text-slate-800 font-bold text-lg">Comfort Rooms</h2>
-                                <p className="text-xs text-slate-400 font-medium">Count TOILET SEATS/BOWLS, not rooms/doors</p>
-                            </div>
+                    <div className="flex items-center gap-3 mb-2 pb-4 border-b border-slate-50">
+                        <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-teal-600">
+                            <FiDroplet size={20} />
                         </div>
-
-                        <div className="flex bg-slate-100 p-1 rounded-xl">
-                            <button
-                                onClick={() => !viewOnly && !isLocked && !isDummy && !isReadOnly && setCrType('Segmented')}
-                                className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${crType === 'Segmented' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Male/Female
-                            </button>
-                            <button
-                                onClick={() => !viewOnly && !isLocked && !isDummy && !isReadOnly && setCrType('Shared')}
-                                className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${crType === 'Shared' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Common/Shared
-                            </button>
+                        <div>
+                            <h2 className="text-slate-800 font-bold text-lg">Toilet &amp; Sanitation</h2>
+                            <p className="text-[10px] text-slate-400 font-medium">Fixture Count</p>
                         </div>
                     </div>
+                    <p className="text-[10px] text-teal-600 bg-teal-50 rounded-xl px-3 py-2 mb-5 font-medium border border-teal-100">
+                        ℹ️ Please count the individual fixtures (bowls/urinals), <strong>NOT</strong> the number of rooms.
+                    </p>
 
-                    <div className="grid gap-4">
-                        {crType === 'Segmented' ? (
-                            <div className="grid grid-cols-2 gap-4">
-                                <InputField label="Male Toilets" name="res_toilets_male" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                <InputField label="Female Toilets" name="res_toilets_female" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                        {/* Female Toilets */}
+                        <div className="bg-pink-50/60 border border-pink-100 rounded-2xl p-4">
+                            <p className="text-[10px] font-extrabold text-pink-600 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                <span>🚺</span> Female Toilets
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiCheckCircle size={10} /> Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="female_bowls_func"
+                                        value={formData.female_bowls_func ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-emerald-700 bg-white border border-emerald-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.female_bowls_func === 0 && handleChange({ target: { name: 'female_bowls_func', value: '' } })}
+                                        onBlur={() => (formData.female_bowls_func === '' || formData.female_bowls_func === null) && handleChange({ target: { name: 'female_bowls_func', value: 0 } })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiXCircle size={10} /> Non-Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="female_bowls_nonfunc"
+                                        value={formData.female_bowls_nonfunc ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-rose-600 bg-white border border-rose-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.female_bowls_nonfunc === 0 && handleChange({ target: { name: 'female_bowls_nonfunc', value: '' } })}
+                                        onBlur={() => (formData.female_bowls_nonfunc === '' || formData.female_bowls_nonfunc === null) && handleChange({ target: { name: 'female_bowls_nonfunc', value: 0 } })}
+                                    />
+                                </div>
                             </div>
-                        ) : (
-                            <InputField label="Common/Shared Toilets" name="res_toilets_common" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                        )}
-                        <InputField label="PWD Toilets" name="res_toilets_pwd" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                        </div>
+
+                        {/* Male Toilets (Bowls) */}
+                        <div className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4">
+                            <p className="text-[10px] font-extrabold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                <span>🚹</span> Male Toilets (Bowls)
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiCheckCircle size={10} /> Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="male_bowls_func"
+                                        value={formData.male_bowls_func ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-emerald-700 bg-white border border-emerald-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.male_bowls_func === 0 && handleChange({ target: { name: 'male_bowls_func', value: '' } })}
+                                        onBlur={() => (formData.male_bowls_func === '' || formData.male_bowls_func === null) && handleChange({ target: { name: 'male_bowls_func', value: 0 } })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiXCircle size={10} /> Non-Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="male_bowls_nonfunc"
+                                        value={formData.male_bowls_nonfunc ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-rose-600 bg-white border border-rose-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.male_bowls_nonfunc === 0 && handleChange({ target: { name: 'male_bowls_nonfunc', value: '' } })}
+                                        onBlur={() => (formData.male_bowls_nonfunc === '' || formData.male_bowls_nonfunc === null) && handleChange({ target: { name: 'male_bowls_nonfunc', value: 0 } })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Male Urinals */}
+                        <div className="bg-sky-50/60 border border-sky-100 rounded-2xl p-4">
+                            <p className="text-[10px] font-extrabold text-sky-600 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                <span>🚹</span> Male Urinals
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiCheckCircle size={10} /> Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="male_urinals_func"
+                                        value={formData.male_urinals_func ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-emerald-700 bg-white border border-emerald-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.male_urinals_func === 0 && handleChange({ target: { name: 'male_urinals_func', value: '' } })}
+                                        onBlur={() => (formData.male_urinals_func === '' || formData.male_urinals_func === null) && handleChange({ target: { name: 'male_urinals_func', value: 0 } })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiXCircle size={10} /> Non-Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="male_urinals_nonfunc"
+                                        value={formData.male_urinals_nonfunc ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-rose-600 bg-white border border-rose-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.male_urinals_nonfunc === 0 && handleChange({ target: { name: 'male_urinals_nonfunc', value: '' } })}
+                                        onBlur={() => (formData.male_urinals_nonfunc === '' || formData.male_urinals_nonfunc === null) && handleChange({ target: { name: 'male_urinals_nonfunc', value: 0 } })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* PWD Toilets */}
+                        <div className="bg-violet-50/60 border border-violet-100 rounded-2xl p-4">
+                            <p className="text-[10px] font-extrabold text-violet-600 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                <span>♿</span> PWD Toilets
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiCheckCircle size={10} /> Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="pwd_bowls_func"
+                                        value={formData.pwd_bowls_func ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-emerald-700 bg-white border border-emerald-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.pwd_bowls_func === 0 && handleChange({ target: { name: 'pwd_bowls_func', value: '' } })}
+                                        onBlur={() => (formData.pwd_bowls_func === '' || formData.pwd_bowls_func === null) && handleChange({ target: { name: 'pwd_bowls_func', value: 0 } })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiXCircle size={10} /> Non-Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="pwd_bowls_nonfunc"
+                                        value={formData.pwd_bowls_nonfunc ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-rose-600 bg-white border border-rose-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.pwd_bowls_nonfunc === 0 && handleChange({ target: { name: 'pwd_bowls_nonfunc', value: '' } })}
+                                        onBlur={() => (formData.pwd_bowls_nonfunc === '' || formData.pwd_bowls_nonfunc === null) && handleChange({ target: { name: 'pwd_bowls_nonfunc', value: 0 } })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </div>
