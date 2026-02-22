@@ -6,7 +6,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart } from 'react-icons/fi';
 import { TbTrophy, TbSchool, TbChartBar } from 'react-icons/tb';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 
 import Papa from 'papaparse';
 import locationData from '../locations.json';
@@ -97,9 +97,6 @@ const MonitoringDashboard = () => {
     const effectiveRole = (isSuperUser && impersonatedRole)
         ? impersonatedRole
         : userData?.role;
-
-    // Dynamic Chart Height for Insights Tab
-    const chartHeight = Math.max(400, (divisionStats?.length || 0) * 45);
 
     const effectiveRegion = (isSuperUser)
         ? (sessionStorage.getItem('impersonatedRegion') || sessionStorage.getItem('impersonatedLocation') || userData?.region)
@@ -1917,7 +1914,7 @@ const MonitoringDashboard = () => {
                     {/* INSIGHTS TAB */}
                     {(activeTab === 'insights') && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div className="flex items-center gap-4">
                                     <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
                                         <TbChartBar className="text-purple-500" size={18} /> Regional Insights
@@ -1952,7 +1949,7 @@ const MonitoringDashboard = () => {
                                 </div>
 
                                 {/* Selector for Metric - Designated Area */}
-                                <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap w-full sm:w-auto">
+                                <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap">
                                     <div className="flex items-center gap-2 pl-2">
                                         <div className="bg-slate-200 dark:bg-slate-700 p-1.5 rounded-full">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 dark:text-slate-400"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
@@ -2572,115 +2569,6 @@ const MonitoringDashboard = () => {
                                                             </>
                                                         )}
                                                         <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} content={({ active, payload }) => {
-                            <div key={drilldownType} className={`bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden ${isMobile ? 'h-[500px] overflow-y-auto' : ''}`}>
-                                {insightsMetric === 'enrolment' && (
-                                    <>
-                                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
-                                                <FiPieChart />
-                                            </div>
-                                            {insightsSubMetric === 'total' ? 'Total Enrolment' :
-                                                insightsSubMetric === 'grade_kinder' ? 'Kindergarten Enrolment' :
-                                                    `Grade ${insightsSubMetric.replace('grade_', '')} Enrolment`} per Division
-                                        </h3>
-
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => {
-                                                        const key = insightsSubMetric === 'total' ? 'total_enrollment' : insightsSubMetric;
-                                                        return {
-                                                            name: formatInsightLabel(d),
-                                                            fullName: d[insightLabelKey],
-                                                            enrolment: parseInt(d[key] || 0)
-                                                        };
-                                                    })}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="name"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip
-                                                        cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                        content={({ active, payload, label }) => {
-                                                            if (active && payload && payload.length) {
-                                                                return (
-                                                                    <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                        <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                        <p className="font-mono text-purple-300">
-                                                                            {payload[0].value.toLocaleString()} Learners
-                                                                        </p>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            return null;
-                                                        }}
-                                                    />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="enrolment"
-                                                        fill="#8b5cf6"
-                                                        radius={[0, 4, 4, 0]}
-                                                        animationDuration={1500}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="enrolment" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                        {divisionStats.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
-
-                                {insightsMetric === 'organized_classes' && (
-                                    <>
-                                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-                                                <FiPieChart />
-                                            </div>
-                                            Organized Classes: {
-                                                insightsClassesGrade === 'classes_kinder' ? 'Kindergarten' :
-                                                    `Grade ${insightsClassesGrade.replace('classes_grade_', '')}`
-                                            }
-                                        </h3>
-
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => {
-                                                        const key = insightsClassesGrade;
-                                                        return {
-                                                            name: formatInsightLabel(d),
-                                                            fullName: d[insightLabelKey],
-                                                            value: parseInt(d[key] || 0)
-                                                        };
-                                                    })}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="name"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip
-                                                        cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                        content={({ active, payload }) => {
                                                             if (active && payload && payload.length) {
                                                                 return (
                                                                     <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
@@ -2737,141 +2625,6 @@ const MonitoringDashboard = () => {
                                                             </>
                                                         )}
                                                         <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} content={({ active, payload }) => {
-                                                        }}
-                                                    />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        fill="#3b82f6"
-                                                        radius={[0, 4, 4, 0]}
-                                                        animationDuration={1500}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                        {divisionStats.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
-
-                                {insightsMetric === 'aral' && (
-                                    <>
-                                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                            <div className="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-600 dark:text-orange-400">
-                                                <FiPieChart />
-                                            </div>
-                                            ARAL Program: Grade {insightsAralGrade.replace('g', '')} {
-                                                insightsAralSubject === 'math' ? 'Mathematics' :
-                                                    insightsAralSubject === 'sci' ? 'Science' : 'Reading'
-                                            }
-                                        </h3>
-
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => {
-                                                        // Construct dynamic key: aral_math_g1, aral_read_g2, etc.
-                                                        const key = `aral_${insightsAralSubject}_${insightsAralGrade}`;
-                                                        return {
-                                                            name: formatInsightLabel(d),
-                                                            fullName: d[insightLabelKey],
-                                                            value: parseInt(d[key] || 0)
-                                                        };
-                                                    })}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="name"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip
-                                                        cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                        content={({ active, payload }) => {
-                                                            if (active && payload && payload.length) {
-                                                                return (
-                                                                    <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                        <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                        <p className="font-mono text-orange-300">
-                                                                            {payload[0].value.toLocaleString()} Learners
-                                                                        </p>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            return null;
-                                                        }}
-                                                    />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        fill="#f97316"
-                                                        radius={[0, 4, 4, 0]}
-                                                        animationDuration={1500}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                        {divisionStats.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={['#f97316', '#ea580c', '#c2410c', '#fb923c', '#fdba74'][index % 5]} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
-
-                                {insightsMetric === 'class_size' && (
-                                    <>
-                                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                            <div className="p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg text-emerald-600 dark:text-emerald-400">
-                                                <FiPieChart />
-                                            </div>
-                                            Class Size: {
-                                                insightsClassSizeCategory === 'less' ? 'Less than Standard' :
-                                                    insightsClassSizeCategory === 'within' ? 'Within Standard' : 'More than Standard'
-                                            } ({
-                                                insightsClassSizeGrade === 'kinder' ? 'Kindergarten' :
-                                                    `Grade ${insightsClassSizeGrade.replace('g', '')}`
-                                            })
-                                        </h3>
-
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => {
-                                                        const key = `cnt_${insightsClassSizeCategory === 'less' ? 'less' : insightsClassSizeCategory}_${insightsClassSizeGrade}`;
-                                                        return {
-                                                            name: formatInsightLabel(d),
-                                                            fullName: d[insightLabelKey],
-                                                            value: parseInt(d[key] || 0)
-                                                        };
-                                                    })}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="name"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip
-                                                        cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                        content={({ active, payload }) => {
                                                             if (active && payload && payload.length) {
                                                                 return (
                                                                     <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
@@ -2881,27 +2634,17 @@ const MonitoringDashboard = () => {
                                                                 );
                                                             }
                                                             return null;
-                                                        }}
-                                                    />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        fill="#10b981"
-                                                        radius={[0, 4, 4, 0]}
-                                                        animationDuration={1500}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                        {divisionStats.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={['#10b981', '#34d399', '#059669', '#6ee7b7', '#047857'][index % 5]} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                                        }} />
+                                                        <Bar onClick={handleInsightBarClick} cursor="pointer" dataKey="value" fill="#8b5cf6" radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]} animationDuration={1500} label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }} barSize={isMobile ? 20 : undefined}>
+                                                            {divisionStats.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={['#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd', '#5b21b6'][index % 5]} />
+                                                            ))}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </>
+                                    )}
 
                                     {insightsMetric === 'aral' && (
                                         <>
@@ -2994,52 +2737,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg text-indigo-600 dark:text-indigo-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Shifting: {
-                                                    insightsShiftingGrade === 'k' ? 'Kindergarten' : `Grade ${insightsShiftingGrade.replace('g', '')}`
-                                                }
-                                                {insightsShiftingCategory !== 'total' && ` (${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift)`}
-                                            </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_shift_${insightsShiftingCategory}_${insightsShiftingGrade}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name={`${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift`}
-                                                        fill={insightsShiftingCategory === 'single' ? '#3b82f6' : insightsShiftingCategory === 'double' ? '#f59e0b' : '#ef4444'}
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'class_size' && (
                                         <>
@@ -3134,52 +2834,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg text-teal-600 dark:text-teal-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Learning Delivery: {
-                                                    insightsDeliveryGrade === 'k' ? 'Kindergarten' : `Grade ${insightsDeliveryGrade.replace('g', '')}`
-                                                }
-                                                {insightsDeliveryCategory !== 'total' && ` (${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning)`}
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_mode_${insightsDeliveryCategory}_${insightsDeliveryGrade}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name={`${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning`}
-                                                        fill={insightsDeliveryCategory === 'inperson' ? '#10b981' : insightsDeliveryCategory === 'blended' ? '#6366f1' : '#f43f5e'}
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'shifting' && (
                                         <>
@@ -3234,53 +2891,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Emergency ADM: {
-                                                    insightsAdmType === 'mdl' ? 'Modular Distance (MDL)' :
-                                                        insightsAdmType === 'odl' ? 'Online Distance (ODL)' :
-                                                            insightsAdmType === 'tvi' ? 'TV/Radio (TVI/RBI)' : 'Blended Learning'
-                                                }
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_adm_${insightsAdmType}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Schools"
-                                                        fill="#ef4444"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'delivery' && (
                                         <>
@@ -3335,51 +2948,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Teacher Count: {insightsTeacherGrade === 'total' ? 'All Grades' : insightsTeacherGrade === 'k' ? 'Kindergarten' : `Grade ${insightsTeacherGrade.replace('g', '')}`}
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: insightsTeacherGrade === 'total'
-                                                            ? ['k', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9', 'g10', 'g11', 'g12'].reduce((acc, g) => acc + parseInt(d[`cnt_teach_${g}`] || 0), 0)
-                                                            : parseInt(d[`cnt_teach_${insightsTeacherGrade}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Teachers"
-                                                        fill="#3b82f6"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'adm' && (
                                         <>
@@ -3435,49 +3006,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Multigrade Teachers: {insightsMultigradeCategory === '1_2' ? 'Grades 1 & 2' : insightsMultigradeCategory === '3_4' ? 'Grades 3 & 4' : 'Grades 5 & 6'}
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_multi_${insightsMultigradeCategory}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Teachers"
-                                                        fill="#f59e0b"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'teachers' && (
                                         <>
@@ -3531,49 +3062,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Teaching Experience: {insightsExperienceCategory.replace('_', '-')} Years
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_exp_${insightsExperienceCategory}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Teachers"
-                                                        fill="#8b5cf6"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'multigrade' && (
                                         <>
@@ -3625,59 +3116,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Specialization: {
-                                                    insightsSpecializationSubject === 'math' ? 'Mathematics' :
-                                                        insightsSpecializationSubject === 'sci' ? 'Science' :
-                                                            insightsSpecializationSubject === 'eng' ? 'English' :
-                                                                insightsSpecializationSubject === 'fil' ? 'Filipino' :
-                                                                    insightsSpecializationSubject === 'ap' ? 'Araling Panlipunan' :
-                                                                        insightsSpecializationSubject === 'mapeh' ? 'MAPEH' :
-                                                                            insightsSpecializationSubject === 'esp' ? 'Edukasyon sa Pagpapakatao' :
-                                                                                insightsSpecializationSubject === 'tle' ? 'TLE' :
-                                                                                    insightsSpecializationSubject === 'gen' ? 'General Education' : 'Early Childhood'
-                                                }
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_spec_${insightsSpecializationSubject}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Teachers"
-                                                        fill="#ec4899"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'experience' && (
                                         <>
@@ -3864,53 +3305,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Classrooms: {
-                                                    insightsClassroomCondition === 'good' ? 'Good Condition' :
-                                                        insightsClassroomCondition === 'new' ? 'Newly Built' :
-                                                            insightsClassroomCondition === 'repair' ? 'Needs Major Repairs' : 'For Demolition/Condemned'
-                                                }
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_class_${insightsClassroomCondition}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Classrooms"
-                                                        fill="#f59e0b"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'classrooms' && (
                                         <>
@@ -3966,52 +3363,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg text-violet-600 dark:text-violet-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Specialized Rooms: {
-                                                    insightsRoomType === 'sci' ? 'Science Lab' :
-                                                        insightsRoomType === 'com' ? 'Computer Lab' : 'TVL Workshop'
-                                                }
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_room_${insightsRoomType}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Rooms"
-                                                        fill="#8b5cf6"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'rooms' && (
                                         <>
@@ -4066,61 +3420,9 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
-                                            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-                                                <div className="p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg text-teal-600 dark:text-teal-400">
-                                                    <FiPieChart />
-                                                </div>
-                                                Site & Utilities: {
-                                                    (insightsSiteCategory === 'elec' ? 'Electricity' :
-                                                        insightsSiteCategory === 'water' ? 'Water' :
-                                                            insightsSiteCategory === 'build' ? 'Buildable Space' : 'SHA / Hardship') + ' - ' +
-                                                    (insightsSiteSubOption === 'grid' ? 'Grid Supply' :
-                                                        insightsSiteSubOption === 'offgrid' ? 'Off-Grid' :
-                                                            insightsSiteSubOption === 'piped' ? 'Piped Water' :
-                                                                insightsSiteSubOption === 'natural' ? 'Natural Resources' :
-                                                                    insightsSiteSubOption === 'yes' ? 'Yes' :
-                                                                        insightsSiteSubOption === 'no' ? 'No' :
-                                                                            insightsSiteSubOption === 'hardship' ? 'Hardship Post' :
-                                                                                insightsSiteSubOption === 'multi' ? 'Pure Multigrade' : 'None/No Source')
-                                                }
-                                            </h3>
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => ({
-                                                        ...d,
-                                                        value: parseInt(d[`cnt_site_${insightsSiteCategory}_${insightsSiteSubOption}`] || 0),
-                                                        displayDivision: formatInsightLabel(d)
-                                                    }))}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="displayDivision"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        name="Schools"
-                                                        fill="#14b8a6"
-                                                        radius={[0, 4, 4, 0]}
-                                                        barSize={20}
-                                                    >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+
 
                                     {insightsMetric === 'site' && (
                                         <>
@@ -4184,6 +3486,12 @@ const MonitoringDashboard = () => {
                                                     </BarChart>
                                                 </ResponsiveContainer>
                                             </div>
+                                        </>
+                                    )}
+
+
+                                    {insightsMetric === 'demographic' && (
+                                        <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
                                                 <div className="p-2 bg-pink-50 dark:bg-pink-900/20 rounded-lg text-pink-600 dark:text-pink-400">
                                                     <FiPieChart />
@@ -4207,64 +3515,87 @@ const MonitoringDashboard = () => {
                                                 })
                                             </h3>
 
-                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart
-                                                    layout="vertical"
-                                                    data={insightChartData.map(d => {
-                                                        const key = `stat_${insightsDemographicCategory}_${insightsDemographicGrade}`;
-                                                        return {
-                                                            name: formatInsightLabel(d),
-                                                            fullName: d[insightLabelKey],
-                                                            value: parseInt(d[key] || 0)
-                                                        };
-                                                    })}
-                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
-                                                >
-                                                    <XAxis type="number" hide />
-                                                    <YAxis
-                                                        dataKey="name"
-                                                        type="category"
-                                                        axisLine={false}
-                                                        tickLine={false}
-                                                        width={110}
-                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                    />
-                                                    <Tooltip
-                                                        cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
-                                                        content={({ active, payload }) => {
-                                                            if (active && payload && payload.length) {
-                                                                return (
-                                                                    <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
-                                                                        <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
-                                                                        <p className="font-mono text-pink-300">
-                                                                            {payload[0].value.toLocaleString()} Learners
-                                                                        </p>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            return null;
-                                                        }}
-                                                    />
-                                                    <Bar
-                                                        onClick={handleInsightBarClick}
-                                                        cursor="pointer"
-                                                        dataKey="value"
-                                                        fill="#ec4899"
-                                                        radius={[0, 4, 4, 0]}
-                                                        animationDuration={1500}
-                                                        barSize={20}
+                                            <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <BarChart
+                                                        layout={isMobile ? 'vertical' : 'horizontal'}
+                                                        data={insightChartData.map(d => {
+                                                            const key = `stat_${insightsDemographicCategory}_${insightsDemographicGrade}`;
+                                                            return {
+                                                                name: formatInsightLabel(d),
+                                                                fullName: d[insightLabelKey],
+                                                                value: parseInt(d[key] || 0)
+                                                            };
+                                                        })}
+                                                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                                                     >
-                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
-                                                        {divisionStats.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={['#ec4899', '#db2777', '#be185d', '#9d174d', '#831843'][index % 5]} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                    </>
-                                )}
+                                                        <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
+                                                        {isMobile ? (
+                                                            <>
+                                                                <XAxis type="number" hide />
+                                                                <YAxis
+                                                                    dataKey="name"
+                                                                    type="category"
+                                                                    width={100}
+                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                                />
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <XAxis
+                                                                    dataKey="name"
+                                                                    axisLine={false}
+                                                                    tickLine={false}
+                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                                    dy={10}
+                                                                    interval={0}
+                                                                    angle={-45}
+                                                                    textAnchor="end"
+                                                                />
+                                                                <YAxis
+                                                                    axisLine={false}
+                                                                    tickLine={false}
+                                                                    tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                                    tickFormatter={(value) => value.toLocaleString()}
+                                                                />
+                                                            </>
+                                                        )}
+                                                        <Tooltip
+                                                            cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
+                                                            content={({ active, payload }) => {
+                                                                if (active && payload && payload.length) {
+                                                                    return (
+                                                                        <div className="bg-slate-800 text-white text-xs p-3 rounded-lg shadow-xl border border-slate-700">
+                                                                            <p className="font-bold mb-1">{payload[0].payload.fullName}</p>
+                                                                            <p className="font-mono text-pink-300">
+                                                                                {payload[0].value.toLocaleString()} Learners
+                                                                            </p>
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return null;
+                                                            }}
+                                                        />
+                                                        <Bar
+                                                            onClick={handleInsightBarClick}
+                                                            cursor="pointer"
+                                                            dataKey="value"
+                                                            fill="#ec4899"
+                                                            radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                                                            animationDuration={1500}
+                                                            label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
+                                                            barSize={isMobile ? 20 : undefined}
+                                                        >
+                                                            {divisionStats.map((entry, index) => (
+                                                                <Cell key={`cell-${index}`} fill={['#ec4899', '#db2777', '#be185d', '#9d174d', '#831843'][index % 5]} />
+                                                            ))}
+                                                        </Bar>
+                                                    </BarChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -4686,7 +4017,7 @@ const MonitoringDashboard = () => {
                                                             {typeof val === 'string' ? val : val.toLocaleString()}
                                                         </span>
                                                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                                                            {insightsMetric === 'enrolment' || insightsMetric === 'demographic' ? 'Learners' : insightsMetric === 'teachers' || insightsMetric === 'experience' || insightsMetric === 'specialization' || insightsMetric === 'multigrade' ? 'Teachers' : insightsMetric === 'classrooms' || insightsMetric === 'organized_classes' || insightsMetric === 'class_size' ? 'Classes' : ['site', 'adm', 'shifting', 'delivery'].includes(insightsMetric) ? 'Status' : 'Units'}
+                                                            {insightsMetric === 'enrolment' || insightsMetric === 'demographic' ? 'Learners' : insightsMetric === 'teachers' || insightsMetric === 'experience' || insightsMetric === 'specialization' || insightsMetric === 'multigrade' ? 'Teachers' : insightsMetric === 'classrooms' || insightsMetric === 'organized_classes' || insightsMetric === 'class_size' ? 'Classes' : insightsMetric === 'shifting' ? 'Shifting' : insightsMetric === 'delivery' ? 'Delivery Mode' : insightsMetric === 'adm' ? 'Emergency ADM' : insightsMetric === 'site' ? 'Facility Status' : 'Units'}
                                                         </p>
                                                     </div>
                                                 )}

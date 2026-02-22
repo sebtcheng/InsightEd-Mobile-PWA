@@ -51,16 +51,16 @@ const RemarksHistory = ({ ipc }) => {
                     <div key={idx} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
                         <div className="absolute top-0 right-0 w-1 h-full bg-slate-100 group-hover:bg-blue-400 transition-colors"></div>
                         <div className="flex justify-between items-start mb-2">
-                             <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                                 <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
                                     <LuUser size={12} />
                                 </div>
                                 <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{entry.engineerName}</span>
-                             </div>
-                             <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                            </div>
+                            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
                                 <LuCalendar size={10} className="text-slate-400" />
                                 <span className="text-[9px] font-bold text-slate-500">{entry.statusAsOfDate}</span>
-                             </div>
+                            </div>
                         </div>
                         <p className="text-xs text-slate-700 font-medium leading-relaxed italic border-l-2 border-slate-100 pl-3">
                             "{entry.remarks}"
@@ -130,13 +130,13 @@ const DetailedProjInfo = () => {
                 // For a robust app, we might want to update the single item in the `projects_cache` array here.
 
             } catch (err) {
-                 if (type === 'LGU') {
+                if (type === 'LGU') {
                     // LGU Fetch
                     try {
                         const response = await fetch(`/api/lgu/project/${id}`);
                         if (!response.ok) throw new Error("LGU Project not found");
                         const data = await response.json();
-                        
+
                         // MAP LGU Data to Component State Format
                         const mappedProject = {
                             id: data.project_id,
@@ -148,40 +148,37 @@ const DetailedProjInfo = () => {
                             status: data.status,
                             accomplishmentPercentage: data.accomplishment_percentage,
                             otherRemarks: data.other_remarks,
-                            
+
                             // Dates (API already formatted these in the specific endpoint)
-                            noticeToProceed: data.noticeToProceed, 
+                            noticeToProceed: data.noticeToProceed,
                             constructionStartDate: data.construction_start_date,
                             targetCompletionDate: data.targetCompletionDate,
                             actualCompletionDate: data.actualCompletionDate,
                             statusAsOfDate: data.statusAsOfDate,
-                            
+
                             // Financial
                             contractorName: data.contractor_name,
                             scopeOfWork: data.scope_of_works || data.scope_of_work, // LGU uses plural in some places?
                             projectAllocation: data.project_allocation, // or contract_amount?
                             batchOfFunds: data.batch_of_funds || data.fund_source, // Map fund source here or separate?
                             fundsUtilized: data.funds_utilized,
-                            
+
                             // Specs
                             numberOfClassrooms: null, // LGU might not have this
                             numberOfStoreys: null,
                             numberOfSites: null,
-                            
+
                             region: data.region,
                             division: data.division,
-                            
+
                             // Docs
                             pow_pdf: data.pow_pdf,
                             dupa_pdf: data.dupa_pdf,
                             contract_pdf: data.contract_pdf,
-                            
+
                             // Loc
                             latitude: data.latitude,
                             longitude: data.longitude,
-                            
-                            otherRemarks: data.other_remarks,
-
                             // Extra LGU Fields
                             lguData: {
                                 sourceAgency: data.source_agency,
@@ -196,27 +193,27 @@ const DetailedProjInfo = () => {
                                 bidAmount: data.bid_amount,
                                 natureOfDelay: data.nature_of_delay
                             },
-                             // IMAGES (LGU endpoint returns them included)
-                             images: data.images || []
+                            // IMAGES (LGU endpoint returns them included)
+                            images: data.images || []
                         };
 
                         setProject(mappedProject);
-                        
+
                         // Perform direct image set since LGU endpoint returns them
-                        if(data.images){
-                             setProjectImages(data.images);
-                             setImageLoading(false);
+                        if (data.images) {
+                            setProjectImages(data.images);
+                            setImageLoading(false);
                         }
 
                     } catch (lguErr) {
-                         console.error("LGU Fetch Failed:", lguErr);
-                         // Logic: If NO project in state (cache failed/empty) AND network failed -> Show Error
-                         // ... (existing error logic)
-                         alert("Could not load LGU project details.");
-                         navigate('/lgu-projects');
+                        console.error("LGU Fetch Failed:", lguErr);
+                        // Logic: If NO project in state (cache failed/empty) AND network failed -> Show Error
+                        // ... (existing error logic)
+                        alert("Could not load LGU project details.");
+                        navigate('/lgu-projects');
                     }
                     return; // Exit main try/catch flow
-                 }
+                }
 
                 console.warn("Network fetch failed:", err);
                 // If we have cached data, we are fine.
@@ -238,7 +235,7 @@ const DetailedProjInfo = () => {
 
         const fetchImages = async () => {
             if (type === 'LGU') return; // LGU images handled in main fetch
-            
+
             setImageLoading(true);
             try {
                 // Network First
@@ -509,26 +506,26 @@ const DetailedProjInfo = () => {
                                     <DetailItem label="Mode of Procurement" value={project.lguData.modeOfProcurement} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                     <DetailItem label="LSB Res. No." value={project.lguData.lsbResolutionNo} />
-                                     <DetailItem label="MOA Ref No." value={project.lguData.moaRefNo} />
+                                    <DetailItem label="LSB Res. No." value={project.lguData.lsbResolutionNo} />
+                                    <DetailItem label="MOA Ref No." value={project.lguData.moaRefNo} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <DetailItem label="Validity Period" value={project.lguData.validityPeriod} />
                                     <DetailItem label="Contract Duration" value={project.lguData.contractDuration} />
                                 </div>
-                                 <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-3">
                                     <DetailItem label="PhilGEPS Ref" value={project.lguData.philgepsRefNo} />
                                     <DetailItem label="PCAB License" value={project.lguData.pcabLicenseNo} />
                                 </div>
-                                 <div className="grid grid-cols-2 gap-3">
-                                    <DetailItem label="Bid Amount" value={project.lguData.bidAmount} isMoney/>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <DetailItem label="Bid Amount" value={project.lguData.bidAmount} isMoney />
                                     <DetailItem label="Contract Signing" value={project.lguData.dateContractSigning} />
                                 </div>
                                 {project.lguData.natureOfDelay && (
-                                     <div className="text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+                                    <div className="text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
                                         <p className="text-[10px] uppercase font-bold opacity-70 mb-1">Nature of Delay</p>
                                         <p className="text-sm font-semibold">{project.lguData.natureOfDelay}</p>
-                                     </div>
+                                    </div>
                                 )}
                             </div>
                         </div>

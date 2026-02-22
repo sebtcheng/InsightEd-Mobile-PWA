@@ -501,7 +501,7 @@ const runMigrations = async (client, dbLabel) => {
                 district TEXT,
                 province TEXT,
                 municipality TEXT,
-                leg_district TEXT,
+                legislative_district TEXT,
                 barangay TEXT,
                 street_address TEXT,
                 mother_school_id TEXT,
