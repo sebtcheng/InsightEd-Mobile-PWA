@@ -104,7 +104,7 @@ const BottomNav = ({ userRole }) => {
                         <button
                             key={item.label}
                             style={styles.navButton}
-                            onClick={() => navigate(item.path, { state: item.state })}
+                            onClick={() => navigate(item.path, { state: { ...(item.state || {}), refreshTrigger: Date.now() } })}
                         >
                             <Icon
                                 size={24}

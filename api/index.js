@@ -128,15 +128,17 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS engineer_id TEXT;
     `);
 
-    // --- MIGRATION: ADD FRAUD DETECTION COLUMNS TO SCHOOL_PROFILES ---
+    // --- MIGRATION: REMOVE FRAUD DETECTION COLUMNS FROM SCHOOL_PROFILES ---
+    // User requested these be exclusively in school_summary EXCEPT FOR school_head_validation
     await pool.query(`
       ALTER TABLE school_profiles
       ADD COLUMN IF NOT EXISTS school_head_validation BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS data_health_score FLOAT DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS data_health_description TEXT,
-      ADD COLUMN IF NOT EXISTS forms_to_recheck TEXT;
+      DROP COLUMN IF EXISTS data_health_score,
+      DROP COLUMN IF EXISTS data_health_description,
+      DROP COLUMN IF EXISTS forms_to_recheck;
     `);
-    console.log("✅ DB Init: Schema verified (project_documents + engineer_form PDF cols + engineer_id).");
+    console.log("✅ DB Init: Schema verified (dropped health columns but preserved school_head_validation).");
+
 
     // --- MIGRATION: LGU FORMS AND IMAGES (REMOVED) ---
     /*
@@ -2377,8 +2379,9 @@ const updateSchoolSummary = async (schoolId, db) => {
     }
 
     // 3. Score & Description
-    let score = 100;
-    let description = "Excellent";
+    // We default to 0 (Pending) instead of 100 to allow the Python script to run
+    let score = 0;
+    let description = "Pending Validation";
     let formsToRecheck = "";
 
     if (issues.length > 0) {
@@ -2387,7 +2390,7 @@ const updateSchoolSummary = async (schoolId, db) => {
       formsToRecheck = issues.join("; ");
       console.log(`[InstantUpdate] Issues Found: ${formsToRecheck} `);
     } else {
-      console.log(`[InstantUpdate] No Issues.Score: 100`);
+      console.log(`[InstantUpdate] No Critical Issues. Awaiting Python Validation...`);
     }
 
     // 4. Update school_summary (Upsert)
@@ -2421,8 +2424,9 @@ school_name = EXCLUDED.school_name,
   last_updated = CURRENT_TIMESTAMP
     `;
 
-    // Simple implementation: Just overwrite for now. Python will refine it later.
-    // If Python is running concurrently, it might overwrite this, which is fine.
+    // Simple implementation: Insert with Pending/Critical score, but DO NOT overwrite existing score on conflict
+    // unless there is a critical issue.
+    // Python will refine and overwrite it later.
     await db.query(`
       INSERT INTO school_summary(
       school_id, school_name, iern, region, division, district,
@@ -2444,8 +2448,6 @@ school_name = EXCLUDED.school_name,
   total_classrooms = EXCLUDED.total_classrooms,
   total_toilets = EXCLUDED.total_toilets,
   total_seats = EXCLUDED.total_seats,
-  data_health_score = EXCLUDED.data_health_score,
-  data_health_description = EXCLUDED.data_health_description,
   issues = EXCLUDED.issues,
   last_updated = CURRENT_TIMESTAMP
     `, [
@@ -2619,8 +2621,8 @@ forms_completed_count = $1,
 
       try {
         const { spawn } = await import('child_process');
-        // Pass schoolId as an argument
-        const pythonProcess = spawn('python', ['advanced_fraud_detection.py', schoolId]);
+        // Pass schoolId as an argument with proper flag
+        const pythonProcess = spawn('python', ['advanced_fraud_detection.py', '--school_id', schoolId]);
 
         pythonProcess.stdout.on('data', (data) => {
           // Optional: reduce log spam unless critical
@@ -4331,7 +4333,18 @@ app.post('/api/save-school', async (req, res) => {
 app.get('/api/school-profile/:uid', async (req, res) => {
   const { uid } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const query = `
+      SELECT 
+        p.*, 
+        s.data_health_score, 
+        s.data_health_description, 
+        s.issues as data_quality_issues, 
+        s.school_head_validation 
+      FROM school_profiles p 
+      LEFT JOIN school_summary s ON p.school_id = s.school_id 
+      WHERE p.submitted_by = $1
+    `;
+    const result = await pool.query(query, [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     // Return standard format expected by frontend
     res.json({
@@ -4367,7 +4380,18 @@ app.get('/api/school-by-user/:uid', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM school_profiles WHERE submitted_by = $1', [uid]);
+    const query = `
+      SELECT 
+        p.*, 
+        s.data_health_score, 
+        s.data_health_description, 
+        s.issues as data_quality_issues, 
+        s.school_head_validation 
+      FROM school_profiles p 
+      LEFT JOIN school_summary s ON p.school_id = s.school_id 
+      WHERE p.submitted_by = $1
+    `;
+    const result = await pool.query(query, [uid]);
     if (result.rows.length === 0) return res.json({ exists: false });
     res.json({
       exists: true,
@@ -4657,7 +4681,7 @@ app.post('/api/school/validate-data', async (req, res) => {
 
   try {
     const query = `
-      UPDATE school_profiles
+      UPDATE school_summary
       SET school_head_validation = true
       WHERE school_id = $1
       RETURNING school_id;
@@ -8103,6 +8127,7 @@ app.get('/api/monitoring/schools', async (req, res) => {
     // We use schools table (s) for identity
     // We use school_profiles (sp) for status, handling NULLs with COALESCE
     const selectFields = `
+      sp.*,
       s.school_name,
       s.school_id,
       COALESCE(sp.total_enrollment, 0) as total_enrollment,

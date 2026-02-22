@@ -2776,20 +2776,18 @@ app.get('/api/monitoring/schools', async (req, res) => {
   try {
     let query = `
     SELECT
-    sp.school_name,
-      sp.school_id,
-      sp.total_enrollment,
+      sp.*,
       (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
-  (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
-    (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+      (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
+      (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
       (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
-        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
-          (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
-            (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
-              (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
-              (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
-              (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status,
-                sp.submitted_by
+      (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+      (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+      (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
+      (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+      (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
+      (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status
+
       FROM school_profiles sp
       WHERE TRIM(sp.region) = TRIM($1)
   `;
