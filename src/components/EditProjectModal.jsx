@@ -625,15 +625,15 @@ const EditProjectModal = ({
                         </div>
                     )}
 
-                    {/* FULL MODE: Remarks */}
-                    {mode === 'full' && (
+                    {/* (mode === 'full' || mode === 'quick') Remarks */}
+                    {(mode === 'full' || mode === 'quick') && (
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Remarks</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Remarks / Update Context</label>
                             <textarea
                                 name="otherRemarks"
                                 value={formData.otherRemarks || ""}
                                 onChange={handleChange}
-                                rows={3}
+                                rows={mode === 'quick' ? 2 : 3}
                                 placeholder="Enter site observations or issues..."
                                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                             />

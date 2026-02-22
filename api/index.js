@@ -5,6 +5,7 @@ import cors from 'cors';
 // import cron from 'node-cron'; // REMOVED for Vercel
 import admin from 'firebase-admin'; // --- FIREBASE ADMIN ---
 import nodemailer from 'nodemailer'; // --- NODEMAILER ---
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { initOtpTable, runMigrations } from './db_init.js';
 
 import { fileURLToPath } from 'url';
@@ -657,7 +658,7 @@ const initMasterlistDB = async () => {
   }
 }); */
 
-// --- PSIP API ENDPOINTS ---
+// --- MASTERLIST API ENDPOINTS ---
 
 app.get('/api/debug-integrity', async (req, res) => {
   try {
@@ -680,10 +681,58 @@ app.get('/api/debug-integrity', async (req, res) => {
   }
 });
 
-// Summary totals
-app.get('/api/psip/summary', async (req, res) => {
+// Helper for dynamic WHERE clause
+const buildMasterlistQuery = (baseQuery, filters) => {
+  const { region, division, municipality, leg_district } = filters;
+  let where = [];
+  let params = [];
+  let pIdx = 1;
+
+  if (region) { where.push(`"region" = $${pIdx++}`); params.push(region); }
+  if (division) { where.push(`"division" = $${pIdx++}`); params.push(division); }
+  if (municipality) { where.push(`"municipality" = $${pIdx++}`); params.push(municipality); }
+  if (leg_district) { where.push(`"leg_district" = $${pIdx++}`); params.push(leg_district); }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  return { query: `${baseQuery}${whereClause ? ' ' + whereClause : ''}`, params };
+};
+
+// Filter options (Cascading)
+app.get('/api/masterlist/filters', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const { region, division, municipality } = req.query;
+
+    let query, params;
+    if (municipality) {
+      // Fetch Leg Districts for Municipality
+      query = 'SELECT DISTINCT "leg_district" FROM masterlist_26_30 WHERE "municipality" = $1 ORDER BY "leg_district"';
+      params = [municipality];
+    } else if (division) {
+      // Fetch Municipalities for Division
+      query = 'SELECT DISTINCT "municipality" FROM masterlist_26_30 WHERE "division" = $1 ORDER BY "municipality"';
+      params = [division];
+    } else if (region) {
+      // Fetch Divisions for Region
+      query = 'SELECT DISTINCT "division" FROM masterlist_26_30 WHERE "region" = $1 ORDER BY "division"';
+      params = [region];
+    } else {
+      // Fetch Regions
+      query = 'SELECT DISTINCT "region" FROM masterlist_26_30 WHERE "region" IS NOT NULL ORDER BY "region"';
+      params = [];
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows.map(r => Object.values(r)[0]));
+  } catch (err) {
+    console.error('❌ Masterlist Filters Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Summary totals
+app.get('/api/masterlist/summary', async (req, res) => {
+  try {
+    const base = `
       SELECT
         COUNT(*) as total_projects,
         COUNT(DISTINCT "school_id") as total_schools,
@@ -695,18 +744,20 @@ app.get('/api/psip/summary', async (req, res) => {
         COUNT(DISTINCT "governor") as total_governors,
         COUNT(DISTINCT "mayor") as total_mayors
       FROM masterlist_26_30
-    `);
+    `;
+    const { query, params } = buildMasterlistQuery(base, req.query);
+    const result = await pool.query(query, params);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('❌ PSIP Summary Error:', err);
+    console.error('❌ Masterlist Summary Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // By Region
-app.get('/api/psip/by-region', async (req, res) => {
+app.get('/api/masterlist/by-region', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const base = `
       SELECT
         "region" as region,
         COUNT(*) as projects,
@@ -715,109 +766,115 @@ app.get('/api/psip/by-region', async (req, res) => {
         COALESCE(SUM("est_cost_of_classrooms"), 0) as cost,
         COALESCE(SUM("estimated_classroom_shortage"), 0) as shortage
       FROM masterlist_26_30
-      WHERE "region" IS NOT NULL
-      GROUP BY "region"
-      ORDER BY classrooms DESC
-    `);
+    `;
+    const { query, params } = buildMasterlistQuery(base, req.query);
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "region" IS NOT NULL GROUP BY "region" ORDER BY classrooms DESC`;
+    const result = await pool.query(finalQuery, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ PSIP By Region Error:', err);
+    console.error('❌ Masterlist By Region Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // By Funding Year
-app.get('/api/psip/by-funding-year', async (req, res) => {
+app.get('/api/masterlist/by-funding-year', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const base = `
       SELECT
         "proposed_funding_year" as funding_year,
         COUNT(*) as projects,
         COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
         COALESCE(SUM("est_cost_of_classrooms"), 0) as cost
       FROM masterlist_26_30
-      WHERE "proposed_funding_year" IS NOT NULL
-      GROUP BY "proposed_funding_year"
-      ORDER BY "proposed_funding_year"
-    `);
+    `;
+    const { query, params } = buildMasterlistQuery(base, req.query);
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "proposed_funding_year" IS NOT NULL GROUP BY "proposed_funding_year" ORDER BY "proposed_funding_year"`;
+    const result = await pool.query(finalQuery, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ PSIP By Year Error:', err);
+    console.error('❌ Masterlist By Year Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // By Storey Type
-app.get('/api/psip/by-storey', async (req, res) => {
+app.get('/api/masterlist/by-storey', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const base = `
       SELECT
         "sty" as storeys,
         COUNT(*) as projects,
         COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms,
         COALESCE(SUM("est_cost_of_classrooms"), 0) as cost
       FROM masterlist_26_30
-      WHERE "sty" > 0
-      GROUP BY "sty"
-      ORDER BY "sty"
-    `);
+    `;
+    const { query, params } = buildMasterlistQuery(base, req.query);
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "sty" > 0 GROUP BY "sty" ORDER BY "sty"`;
+    const result = await pool.query(finalQuery, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ PSIP By Storey Error:', err);
+    console.error('❌ Masterlist By Storey Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // By Storey Breakdown (e.g., 2sty4cl)
-app.get('/api/psip/storey-breakdown', async (req, res) => {
+app.get('/api/masterlist/storey-breakdown', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const base = `
       SELECT
         "sty" as storey,
         "cl" as classrooms,
         COUNT(*) as count
       FROM masterlist_26_30
-      WHERE "sty" IS NOT NULL AND "cl" IS NOT NULL
-      GROUP BY "sty", "cl"
-      ORDER BY "sty", "cl"
-    `);
+    `;
+    const { query, params } = buildMasterlistQuery(base, req.query);
+    const finalQuery = `${query} ${query.includes('WHERE') ? 'AND' : 'WHERE'} "sty" IS NOT NULL AND "cl" IS NOT NULL GROUP BY "sty", "cl" ORDER BY "sty", "cl"`;
+    const result = await pool.query(finalQuery, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ PSIP Storey Breakdown Error:', err);
+    console.error('❌ Masterlist Storey Breakdown Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Partnerships (Congressman / Governor / Mayor)
-app.get('/api/psip/partnerships', async (req, res) => {
+app.get('/api/masterlist/partnerships', async (req, res) => {
   try {
+    const { region, division, municipality, leg_district } = req.query;
+    const { query: whereBase, params } = buildMasterlistQuery('', req.query);
+    const whereClause = whereBase.trim() ? `AND ${whereBase.replace('WHERE', '').trim()}` : '';
+
     const [congRes, govRes, mayorRes] = await Promise.all([
       pool.query(`
         SELECT "congressman" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
-        FROM masterlist_26_30 WHERE "congressman" IS NOT NULL
+        FROM masterlist_26_30 WHERE "congressman" IS NOT NULL ${whereClause}
         GROUP BY "congressman" ORDER BY classrooms DESC LIMIT 20
-      `),
+      `, params),
       pool.query(`
         SELECT "governor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
-        FROM masterlist_26_30 WHERE "governor" IS NOT NULL
+        FROM masterlist_26_30 WHERE "governor" IS NOT NULL ${whereClause}
         GROUP BY "governor" ORDER BY classrooms DESC LIMIT 20
-      `),
+      `, params),
       pool.query(`
         SELECT "mayor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_classrooms"), 0) as classrooms
-        FROM masterlist_26_30 WHERE "mayor" IS NOT NULL
+        FROM masterlist_26_30 WHERE "mayor" IS NOT NULL ${whereClause}
         GROUP BY "mayor" ORDER BY classrooms DESC LIMIT 20
-      `)
+      `, params)
     ]);
 
     // Also get totals per category
-    const totals = await pool.query(`
+    const totalsBase = `
       SELECT
         COUNT(DISTINCT "congressman") as congressman_count,
         COUNT(DISTINCT "governor") as governor_count,
         COUNT(DISTINCT "mayor") as mayor_count,
         COALESCE(SUM("proposed_no_of_classrooms"), 0) as total_classrooms
       FROM masterlist_26_30
-    `);
+    `;
+    const { query: tQuery, params: tParams } = buildMasterlistQuery(totalsBase, req.query);
+    const totals = await pool.query(tQuery, tParams);
 
     res.json({
       congressman: congRes.rows,
@@ -826,8 +883,75 @@ app.get('/api/psip/partnerships', async (req, res) => {
       totals: totals.rows[0]
     });
   } catch (err) {
-    console.error('❌ PSIP Partnerships Error:', err);
+    console.error('❌ Masterlist Partnerships Error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- AI CHATBOT INTEGRATION ---
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+app.post('/api/masterlist/ai-query', async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+  try {
+    const context = `
+      You are a SQL expert for a PostgreSQL database. 
+      The table name is "masterlist_26_30".
+      Columns:
+      - school_id (text)
+      - school_name (text)
+      - region (text)
+      - division (text)
+      - municipality (text)
+      - leg_district (text)
+      - proposed_no_of_classrooms (numeric)
+      - est_cost_of_classrooms (numeric)
+      - estimated_classroom_shortage (numeric)
+      - sty (numeric, storeys)
+      - cl (numeric, classrooms per building)
+      - proposed_funding_year (numeric)
+      - congressman (text)
+      - governor (text)
+      - mayor (text)
+
+      Task: Translate the following user request into a single PostgreSQL SELECT query.
+      Return ONLY THE RAW SQL query. NO MARKDOWN, NO EXPLANATION, NO BACKTICKS.
+      The query MUST be read-only (SELECT only).
+      Example: SELECT school_name, estimated_classroom_shortage FROM masterlist_26_30 WHERE region = 'REGION I' ORDER BY estimated_classroom_shortage DESC LIMIT 10;
+      
+      User Request: "${prompt}"
+    `;
+
+    const result = await aiModel.generateContent(context);
+    const sql = result.response.text().trim().replace(/```sql|```/g, '').trim();
+
+    console.log('🤖 AI Generated SQL:', sql);
+
+    // Security check: Only allow SELECT, block destructive commands
+    const upperSql = sql.toUpperCase();
+    const isSafe = upperSql.startsWith('SELECT') &&
+      !upperSql.includes('DROP') &&
+      !upperSql.includes('DELETE') &&
+      !upperSql.includes('UPDATE') &&
+      !upperSql.includes('INSERT') &&
+      !upperSql.includes('TRUNCATE') &&
+      !upperSql.includes('ALTER');
+
+    if (!isSafe) {
+      return res.status(400).json({ error: "Only safe SELECT queries are allowed." });
+    }
+
+    // Execute query
+    const dbResult = await pool.query(sql);
+    res.json({ sql, data: dbResult.rows });
+
+  } catch (err) {
+    console.error('❌ AI Query Error:', err);
+    res.status(500).json({ error: "AI could not process your request: " + err.message });
   }
 });
 
@@ -5325,6 +5449,38 @@ app.post('/api/validate-project', async (req, res) => {
   }
 });
 
+// --- 11d. GET: Get Project History by IPC ---
+app.get('/api/project-history/:ipc', async (req, res) => {
+  const { ipc } = req.params;
+  const isLgu = ipc?.startsWith('LGU-');
+
+  try {
+    const tableName = isLgu ? "lgu_projects" : "engineer_form";
+    const nameColumn = isLgu ? "lgu_name" : "engineer_name";
+    const idColumn = isLgu ? "lgu_project_id" : "project_id";
+    const statusCol = isLgu ? "project_status" : "status";
+    const statusAsOfCol = isLgu ? "status_as_of_date" : "status_as_of";
+
+    const query = `
+      SELECT 
+        ${idColumn} AS "id", 
+        other_remarks AS "remarks", 
+        ${nameColumn} AS "engineerName", 
+        ${statusCol} AS "status", 
+        TO_CHAR(${statusAsOfCol}, 'YYYY-MM-DD') AS "statusAsOfDate",
+        created_at
+      FROM ${tableName}
+      WHERE ipc = $1
+      ORDER BY ${idColumn} DESC;
+    `;
+    const result = await pool.query(query, [ipc]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch Project History Error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // --- 20. POST: Upload Project Image (Base64) ---
 app.post('/api/upload-image', async (req, res) => {
   const { projectId, imageData, uploadedBy, category } = req.body;
@@ -9197,7 +9353,7 @@ app.post('/api/lgu/project/update', async (req, res) => {
       "pcab_license_no", "date_contract_signing", "date_notice_of_award", "bid_amount",
       "latitude", "longitude", "pow_pdf", "dupa_pdf", "contract_pdf",
       "project_status", "accomplishment_percentage", "status_as_of_date",
-      "amount_utilized", "nature_of_delay", "root_project_id", "municipality"
+      "amount_utilized", "nature_of_delay", "root_project_id", "municipality", "other_remarks"
     ];
 
     const numericCols = [

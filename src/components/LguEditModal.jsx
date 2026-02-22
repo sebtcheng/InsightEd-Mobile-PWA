@@ -234,7 +234,7 @@ const LguEditModal = ({ isOpen, onClose, project, onUpdateSuccess }) => {
                             {renderInput("Status Date", "status_as_of_date", "date")}
                             {renderInput("Amount Utilized", "amount_utilized", "number")}
                         </div>
-                         {renderTextarea("Reasons for Delay / Remarks", "nature_of_delay")}
+                         {renderTextarea("Remarks / Update Context", "other_remarks")}
                     </div>
 
                     {/* 2. Project Identification & Location */}

@@ -109,6 +109,9 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
               <th className="p-4 min-w-[120px]">
                 Status & Progress
               </th>
+              <th className="p-4 min-w-[200px]">
+                Remarks
+              </th>
               <th className="p-4 min-w-[100px]">
                 Details
               </th>
@@ -192,6 +195,18 @@ const ProjectTable = ({ projects, onEdit, onAnalyze, onView, isLoading, searchQu
                       <div className="text-[9px] text-slate-300 dark:text-slate-500 italic flex items-center gap-1">
                         <LuActivity size={10} /> Pending Start
                       </div>
+                    )}
+                  </td>
+
+                  <td className="p-4 min-w-[200px]">
+                    {p.otherRemarks ? (
+                      <div className="bg-amber-50/50 dark:bg-amber-900/20 p-2 rounded-lg border border-amber-100/50 dark:border-amber-800/50">
+                        <p className="text-[10px] italic text-slate-600 dark:text-slate-400 line-clamp-3">
+                          "{p.otherRemarks}"
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">No remarks</span>
                     )}
                   </td>
 
@@ -537,6 +552,12 @@ const EngineerProjects = () => {
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Update failed");
+      const resData = await response.json();
+      const finalProject = { 
+        ...updatedProject, 
+        id: resData.project.project_id,
+        otherRemarks: resData.project.other_remarks // Ensure latest remarks are in state
+      };
 
       // Online Upload Images
       const allFiles = [
@@ -558,7 +579,7 @@ const EngineerProjects = () => {
           }
         }
       }
-      setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
+      setProjects(prev => prev.map(p => p.id === updatedProject.id ? finalProject : p));
       alert("Success: Changes synced to database!");
       setInternalFiles([]);
       setExternalFiles([]);

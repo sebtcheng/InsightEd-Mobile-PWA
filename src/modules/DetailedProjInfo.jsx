@@ -7,7 +7,74 @@ import { TbPhoto } from "react-icons/tb";
 import { auth } from '../firebase';
 import EditProjectModal from '../components/EditProjectModal';
 import { compressImage } from '../utils/imageCompression';
-// import { addEngineerToOutbox } from '../db';
+import { LuHistory, LuUser, LuCalendar } from "react-icons/lu";
+
+// --- SUB-COMPONENT: REMARKS HISTORY ---
+const RemarksHistory = ({ ipc }) => {
+    const [history, setHistory] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+            try {
+                const res = await fetch(`/api/project-history/${ipc}`);
+                if (!res.ok) throw new Error("Failed to fetch history");
+                const data = await res.json();
+                setHistory(data);
+            } catch (err) {
+                console.error("History fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        if (ipc) fetchHistory();
+    }, [ipc]);
+
+    if (loading) return (
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-center items-center gap-3">
+            <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Loading History...</p>
+        </div>
+    );
+
+    const validHistory = history.filter(h => h.remarks && h.remarks.trim() !== "");
+
+    if (validHistory.length === 0) return null;
+
+    return (
+        <div className="space-y-3">
+            <h3 className="text-slate-700 font-bold text-sm flex items-center gap-2 ml-1">
+                <LuHistory className="text-blue-500" /> Remarks History
+            </h3>
+            <div className="space-y-3">
+                {validHistory.map((entry, idx) => (
+                    <div key={idx} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
+                        <div className="absolute top-0 right-0 w-1 h-full bg-slate-100 group-hover:bg-blue-400 transition-colors"></div>
+                        <div className="flex justify-between items-start mb-2">
+                             <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
+                                    <LuUser size={12} />
+                                </div>
+                                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight">{entry.engineerName}</span>
+                             </div>
+                             <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+                                <LuCalendar size={10} className="text-slate-400" />
+                                <span className="text-[9px] font-bold text-slate-500">{entry.statusAsOfDate}</span>
+                             </div>
+                        </div>
+                        <p className="text-xs text-slate-700 font-medium leading-relaxed italic border-l-2 border-slate-100 pl-3">
+                            "{entry.remarks}"
+                        </p>
+                        <div className="mt-2 flex items-center gap-1.5">
+                            <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">At Stage:</span>
+                            <span className="text-[9px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{entry.status}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 const DetailedProjInfo = () => {
     const { id } = useParams();
@@ -80,6 +147,7 @@ const DetailedProjInfo = () => {
                             ipc: data.ipc,
                             status: data.status,
                             accomplishmentPercentage: data.accomplishment_percentage,
+                            otherRemarks: data.other_remarks,
                             
                             // Dates (API already formatted these in the specific endpoint)
                             noticeToProceed: data.noticeToProceed, 
@@ -416,6 +484,7 @@ const DetailedProjInfo = () => {
                                 <DetailItem label="Funds Utilized" value={project.fundsUtilized} isMoney />
                                 <div className="hidden sm:block"></div> {/* Spacer */}
                             </div>
+                            <DetailItem label="Remarks" value={project.otherRemarks} />
 
                             {/* Physical Specs */}
                             <div className="grid grid-cols-3 gap-3">
@@ -651,9 +720,14 @@ const DetailedProjInfo = () => {
                     {/* Remarks Section */}
                     {project.otherRemarks && (
                         <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 text-amber-900">
-                            <p className="text-[10px] font-bold uppercase opacity-70 mb-2">📢 Remarks / Issues</p>
+                            <p className="text-[10px] font-bold uppercase opacity-70 mb-2">📢 Latest Remarks</p>
                             <p className="text-sm italic">"{project.otherRemarks}"</p>
                         </div>
+                    )}
+
+                    {/* Remarks History Section */}
+                    {project.ipc && (
+                        <RemarksHistory ipc={project.ipc} />
                     )}
 
                 </div>
