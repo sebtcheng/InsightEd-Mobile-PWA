@@ -342,7 +342,7 @@ const initDB = async () => {
     console.error("âŒ DB Init Error:", err);
   }
 };
-initDB();
+// initDB(); // Moved to awaited startup
 
 // --- DATABASE INIT (EXTENDED FOR FINANCE) ---
 const initFinanceDB = async () => {
@@ -464,7 +464,7 @@ const initFinanceDB = async () => {
   }
 
 };
-initFinanceDB();
+// initFinanceDB(); // Moved to awaited startup
 
 // --- PSIP DATABASE INIT ---
 const initMasterlistDB = async () => {
@@ -508,7 +508,7 @@ const initMasterlistDB = async () => {
     console.error("❌ Masterlist DB Init Error:", err);
   }
 };
-initMasterlistDB();
+// initMasterlistDB(); // Moved to awaited startup
 
 // --- PSIP IMPORT ENDPOINT (One-Time) ---
 /* app.get('/api/psip/import', async (req, res) => {
@@ -1831,558 +1831,38 @@ const initOtpTable_OLD = async () => {
 
 // --- DATABASE CONNECTION ---
 // Auto-connect and initialize
-const startServer = async () => {
+const runLegacyMigrations = async () => {
   let client;
   try {
     client = await pool.connect();
-    isDbConnected = true;
-    console.log('âœ… Connected to Postgres Database successfully!');
-    await initOtpTable();
-
     try {
-      // --- INIT NOTIFICATIONS TABLE ---
-      try {
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS notifications(
-  id SERIAL PRIMARY KEY,
-  recipient_uid TEXT NOT NULL,
-  sender_uid TEXT,
-  sender_name TEXT,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  type TEXT DEFAULT 'alert',
-  is_read BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-`);
-        console.log('âœ… Notifications Table Initialized');
-      } catch (tableErr) {
-        console.error('âŒ Failed to init notifications table:', tableErr.message);
-      }
-
-      // --- MIGRATION: ADD EMAIL TO SCHOOL_PROFILES ---
-      try {
-        await client.query(`
-            ALTER TABLE school_profiles 
-            ADD COLUMN IF NOT EXISTS email TEXT;
-`);
-        console.log('âœ… Checked/Added email column to school_profiles');
-      } catch (migErr) {
-        console.error('âŒ Failed to migrate school_profiles:', migErr.message);
-      }
-
-      // --- MIGRATION: USER DEVICE TOKENS ---
-      try {
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS user_device_tokens(
-  uid TEXT PRIMARY KEY,
-  fcm_token TEXT NOT NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-`);
-        console.log('âœ… Checked/Created user_device_tokens table');
-      } catch (tokenErr) {
-        console.error('âŒ Failed to init user_device_tokens:', tokenErr.message);
-      }
-
-      // --- MIGRATION: LGU PROJECT PRIVACY ---
-      try {
-        await client.query(`
-          ALTER TABLE lgu_projects 
-          ADD COLUMN IF NOT EXISTS created_by_uid TEXT;
-`);
-        console.log('✅ Checked/Added created_by_uid column to lgu_projects');
-      } catch (migErr) {
-        console.error('❌ Failed to migrate lgu_projects privacy:', migErr.message);
-      }
-
-    } catch (err) {
-      console.error("Init Error:", err);
-    }
-    // --- MIGRATION: ADD CURRICULAR OFFERING ---
-    try {
-      await client.query(`
-            ALTER TABLE school_profiles 
-            ADD COLUMN IF NOT EXISTS curricular_offering TEXT;
-`);
-      console.log('âœ… Checked/Added curricular_offering column to school_profiles');
+      // Core remaining migrations
+      await client.query(`CREATE TABLE IF NOT EXISTS notifications(id SERIAL PRIMARY KEY, recipient_uid TEXT NOT NULL, sender_uid TEXT, sender_name TEXT, title TEXT NOT NULL, message TEXT NOT NULL, type TEXT DEFAULT 'alert', is_read BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+      await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS email TEXT;`);
+      await client.query(`CREATE TABLE IF NOT EXISTS user_device_tokens(uid TEXT PRIMARY KEY, fcm_token TEXT NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+      await client.query(`ALTER TABLE lgu_projects ADD COLUMN IF NOT EXISTS created_by_uid TEXT;`);
+      await client.query(`ALTER TABLE school_profiles ADD COLUMN IF NOT EXISTS curricular_offering TEXT;`);
+      await client.query(`CREATE TABLE IF NOT EXISTS users(uid TEXT PRIMARY KEY, email TEXT, role TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, first_name TEXT, last_name TEXT, region TEXT, division TEXT, province TEXT, city TEXT, barangay TEXT, office TEXT, position TEXT, disabled BOOLEAN DEFAULT FALSE);`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name TEXT, ADD COLUMN IF NOT EXISTS last_name TEXT, ADD COLUMN IF NOT EXISTS region TEXT, ADD COLUMN IF NOT EXISTS division TEXT, ADD COLUMN IF NOT EXISTS province TEXT, ADD COLUMN IF NOT EXISTS city TEXT, ADD COLUMN IF NOT EXISTS barangay TEXT, ADD COLUMN IF NOT EXISTS office TEXT, ADD COLUMN IF NOT EXISTS position TEXT, ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;`);
+      await client.query(`CREATE TABLE IF NOT EXISTS ecart_batches(id SERIAL PRIMARY KEY, school_id TEXT NOT NULL, batch_no VARCHAR(100), year_received INTEGER, source_fund VARCHAR(100), ecart_qty_laptops INTEGER DEFAULT 0, ecart_condition_laptops VARCHAR(50), ecart_has_smart_tv BOOLEAN DEFAULT false, ecart_tv_size VARCHAR(50), ecart_condition_tv VARCHAR(50), ecart_condition_charging VARCHAR(50), ecart_condition_cabinet VARCHAR(100), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
+      await client.query(`CREATE TABLE IF NOT EXISTS system_settings(setting_key TEXT PRIMARY KEY, setting_value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_by TEXT);`);
     } catch (migErr) {
-      console.error('âŒ Failed to migrate curricular_offering:', migErr.message);
+      console.error("Migration Error:", migErr.message);
     }
-
-    // --- MIGRATION: EXTEND USERS TABLE (For Engineer/Generic Sync) ---
-    try {
-      await client.query(`
-            CREATE TABLE IF NOT EXISTS users(
-  uid TEXT PRIMARY KEY,
-  email TEXT,
-  role TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  first_name TEXT,
-  last_name TEXT,
-  region TEXT,
-  division TEXT,
-  province TEXT,
-  city TEXT,
-  barangay TEXT,
-  office TEXT,
-  position TEXT,
-  disabled BOOLEAN DEFAULT FALSE
-);
-`);
-      // --- 1e. FORGOT PASSWORD (CUSTOM) ---
-
-      // If table exists, ensure columns exist
-      await client.query(`
-            ALTER TABLE users 
-            ADD COLUMN IF NOT EXISTS first_name TEXT,
-  ADD COLUMN IF NOT EXISTS last_name TEXT,
-    ADD COLUMN IF NOT EXISTS region TEXT,
-      ADD COLUMN IF NOT EXISTS division TEXT,
-        ADD COLUMN IF NOT EXISTS province TEXT,
-          ADD COLUMN IF NOT EXISTS city TEXT,
-            ADD COLUMN IF NOT EXISTS barangay TEXT,
-              ADD COLUMN IF NOT EXISTS office TEXT,
-                ADD COLUMN IF NOT EXISTS position TEXT,
-                  ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
-`);
-      console.log('âœ… Checked/Extended users table schema');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate users table:', migErr.message);
-    }
-    // --- MIGRATION: ADD SCHOOL RESOURCES COLUMNS ---
-    try {
-      await client.query(`
-        ALTER TABLE school_profiles 
-        ADD COLUMN IF NOT EXISTS res_toilets_common INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS sha_category TEXT;
-`);
-      console.log('âœ… Checked/Added new School Resources columns');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate resources columns:', migErr.message);
-    }
-
-    // --- MIGRATION: COMPREHENSIVE FIX FOR MISSING COLUMNS ---
-    try {
-      await client.query(`
-        ALTER TABLE school_profiles
---Site & Utils
-        ADD COLUMN IF NOT EXISTS res_electricity_source TEXT,
-  ADD COLUMN IF NOT EXISTS res_buildable_space TEXT,
-    ADD COLUMN IF NOT EXISTS res_water_source TEXT,
-
-      --Toilets & Labs
-        ADD COLUMN IF NOT EXISTS res_toilets_pwd INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS res_sci_labs INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS res_com_labs INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS res_tvl_workshops INTEGER DEFAULT 0,
-
-        --Seats Analysis
-        ADD COLUMN IF NOT EXISTS seats_kinder INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS seats_grade_1 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS seats_grade_2 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS seats_grade_3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS seats_grade_4 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS seats_grade_5 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS seats_grade_6 INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS seats_grade_7 INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS seats_grade_8 INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS seats_grade_9 INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS seats_grade_10 INTEGER DEFAULT 0,
-                      ADD COLUMN IF NOT EXISTS seats_grade_11 INTEGER DEFAULT 0,
-                        ADD COLUMN IF NOT EXISTS seats_grade_12 INTEGER DEFAULT 0,
-
-                          --Organized Classes(Counters)
-        ADD COLUMN IF NOT EXISTS classes_kinder INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS classes_grade_1 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS classes_grade_2 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS classes_grade_3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS classes_grade_4 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS classes_grade_5 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS classes_grade_6 INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS classes_grade_7 INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS classes_grade_8 INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS classes_grade_9 INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS classes_grade_10 INTEGER DEFAULT 0,
-                      ADD COLUMN IF NOT EXISTS classes_grade_11 INTEGER DEFAULT 0,
-                        ADD COLUMN IF NOT EXISTS classes_grade_12 INTEGER DEFAULT 0,
-
-                          --Class Size Analysis
-        ADD COLUMN IF NOT EXISTS cnt_less_kinder INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS cnt_within_kinder INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS cnt_above_kinder INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS cnt_less_g1 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS cnt_within_g1 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS cnt_above_g1 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS cnt_less_g2 INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS cnt_within_g2 INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS cnt_above_g2 INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS cnt_less_g3 INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS cnt_within_g3 INTEGER DEFAULT 0,
-                      ADD COLUMN IF NOT EXISTS cnt_above_g3 INTEGER DEFAULT 0,
-                        ADD COLUMN IF NOT EXISTS cnt_less_g4 INTEGER DEFAULT 0,
-                          ADD COLUMN IF NOT EXISTS cnt_within_g4 INTEGER DEFAULT 0,
-                            ADD COLUMN IF NOT EXISTS cnt_above_g4 INTEGER DEFAULT 0,
-                              ADD COLUMN IF NOT EXISTS cnt_less_g5 INTEGER DEFAULT 0,
-                                ADD COLUMN IF NOT EXISTS cnt_within_g5 INTEGER DEFAULT 0,
-                                  ADD COLUMN IF NOT EXISTS cnt_above_g5 INTEGER DEFAULT 0,
-                                    ADD COLUMN IF NOT EXISTS cnt_less_g6 INTEGER DEFAULT 0,
-                                      ADD COLUMN IF NOT EXISTS cnt_within_g6 INTEGER DEFAULT 0,
-                                        ADD COLUMN IF NOT EXISTS cnt_above_g6 INTEGER DEFAULT 0,
-                                          ADD COLUMN IF NOT EXISTS cnt_less_g7 INTEGER DEFAULT 0,
-                                            ADD COLUMN IF NOT EXISTS cnt_within_g7 INTEGER DEFAULT 0,
-                                              ADD COLUMN IF NOT EXISTS cnt_above_g7 INTEGER DEFAULT 0,
-                                                ADD COLUMN IF NOT EXISTS cnt_less_g8 INTEGER DEFAULT 0,
-                                                  ADD COLUMN IF NOT EXISTS cnt_within_g8 INTEGER DEFAULT 0,
-                                                    ADD COLUMN IF NOT EXISTS cnt_above_g8 INTEGER DEFAULT 0,
-                                                      ADD COLUMN IF NOT EXISTS cnt_less_g9 INTEGER DEFAULT 0,
-                                                        ADD COLUMN IF NOT EXISTS cnt_within_g9 INTEGER DEFAULT 0,
-                                                          ADD COLUMN IF NOT EXISTS cnt_above_g9 INTEGER DEFAULT 0,
-                                                            ADD COLUMN IF NOT EXISTS cnt_less_g10 INTEGER DEFAULT 0,
-                                                              ADD COLUMN IF NOT EXISTS cnt_within_g10 INTEGER DEFAULT 0,
-                                                                ADD COLUMN IF NOT EXISTS cnt_above_g10 INTEGER DEFAULT 0,
-                                                                  ADD COLUMN IF NOT EXISTS cnt_less_g11 INTEGER DEFAULT 0,
-                                                                    ADD COLUMN IF NOT EXISTS cnt_within_g11 INTEGER DEFAULT 0,
-                                                                      ADD COLUMN IF NOT EXISTS cnt_above_g11 INTEGER DEFAULT 0,
-                                                                        ADD COLUMN IF NOT EXISTS cnt_less_g12 INTEGER DEFAULT 0,
-                                                                          ADD COLUMN IF NOT EXISTS cnt_within_g12 INTEGER DEFAULT 0,
-                                                                            ADD COLUMN IF NOT EXISTS cnt_above_g12 INTEGER DEFAULT 0,
-
-                                                                              --Equipment Inventory
-        ADD COLUMN IF NOT EXISTS res_ecart_func INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS res_ecart_nonfunc INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS res_laptop_func INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS res_laptop_nonfunc INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS res_tv_func INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS res_tv_nonfunc INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS res_printer_func INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS res_printer_nonfunc INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS res_desk_func INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS res_desk_nonfunc INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS res_armchair_func INTEGER DEFAULT 0,
-                      ADD COLUMN IF NOT EXISTS res_armchair_nonfunc INTEGER DEFAULT 0,
-                        ADD COLUMN IF NOT EXISTS res_toilet_func INTEGER DEFAULT 0,
-                          ADD COLUMN IF NOT EXISTS res_toilet_nonfunc INTEGER DEFAULT 0,
-                            ADD COLUMN IF NOT EXISTS res_handwash_func INTEGER DEFAULT 0,
-                              ADD COLUMN IF NOT EXISTS res_handwash_nonfunc INTEGER DEFAULT 0;
-`);
-      console.log('âœ… Checked/Added ALL missing School Resources & Class Analysis columns');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate extra columns:', migErr.message);
-    }
-
-    // --- MIGRATION: E-CART BATCHES TABLE ---
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS ecart_batches(
-  id SERIAL PRIMARY KEY,
-  school_id TEXT NOT NULL,
-  batch_no VARCHAR(100),
-  year_received INTEGER,
-  source_fund VARCHAR(100),
-  ecart_qty_laptops INTEGER DEFAULT 0,
-  ecart_condition_laptops VARCHAR(50),
-  ecart_has_smart_tv BOOLEAN DEFAULT false,
-  ecart_tv_size VARCHAR(50),
-  ecart_condition_tv VARCHAR(50),
-  ecart_condition_charging VARCHAR(50),
-  ecart_condition_cabinet VARCHAR(100),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-`);
-      console.log('âœ… ecart_batches table ready');
-    } catch (ecartErr) {
-      console.error('âŒ Failed to create ecart_batches table:', ecartErr.message);
-    }
-
-    // --- MIGRATION: TEACHER SPECIALIZATION COLUMNS ---
-    try {
-      await client.query(`
-        ALTER TABLE school_profiles 
-        ADD COLUMN IF NOT EXISTS spec_english_major INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS spec_english_teaching INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS spec_filipino_major INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS spec_filipino_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_math_major INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS spec_math_teaching INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS spec_science_major INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS spec_science_teaching INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS spec_ap_major INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS spec_ap_teaching INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS spec_mapeh_major INTEGER DEFAULT 0,
-                      ADD COLUMN IF NOT EXISTS spec_mapeh_teaching INTEGER DEFAULT 0,
-                        ADD COLUMN IF NOT EXISTS spec_esp_major INTEGER DEFAULT 0,
-                          ADD COLUMN IF NOT EXISTS spec_esp_teaching INTEGER DEFAULT 0,
-                            ADD COLUMN IF NOT EXISTS spec_tle_major INTEGER DEFAULT 0,
-                              ADD COLUMN IF NOT EXISTS spec_tle_teaching INTEGER DEFAULT 0,
-                                ADD COLUMN IF NOT EXISTS spec_guidance INTEGER DEFAULT 0,
-                                  ADD COLUMN IF NOT EXISTS spec_librarian INTEGER DEFAULT 0,
-                                    ADD COLUMN IF NOT EXISTS spec_ict_coord INTEGER DEFAULT 0,
-                                      ADD COLUMN IF NOT EXISTS spec_drrm_coord INTEGER DEFAULT 0,
-                                        --General Education for Elementary
-        ADD COLUMN IF NOT EXISTS spec_general_major INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS spec_general_teaching INTEGER DEFAULT 0,
-    --New Elementary Field
-        ADD COLUMN IF NOT EXISTS spec_ece_major INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS spec_ece_teaching INTEGER DEFAULT 0,
-    --New Secondary Fields
-        ADD COLUMN IF NOT EXISTS spec_bio_sci_major INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS spec_bio_sci_teaching INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS spec_phys_sci_major INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS spec_phys_sci_teaching INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS spec_agri_fishery_major INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS spec_agri_fishery_teaching INTEGER DEFAULT 0,
-            --New Others Field
-        ADD COLUMN IF NOT EXISTS spec_others_major INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS spec_others_teaching INTEGER DEFAULT 0;
-`);
-      console.log('âœ… Checked/Added Teacher Specialization columns');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate specialization columns:', migErr.message);
-    }
-
-    // --- MIGRATION: ADD IPC COLUMN TO ENGINEER FORM ---
-    try {
-      // First ensure the table exists (it should, but safety first)
-      await client.query(`
-            CREATE TABLE IF NOT EXISTS engineer_form(
-  project_id SERIAL PRIMARY KEY,
-  school_name TEXT,
-  project_name TEXT,
-  school_id TEXT,
-  region TEXT,
-  division TEXT,
-  status TEXT,
-  accomplishment_percentage INTEGER,
-  status_as_of TIMESTAMP,
-  target_completion_date TIMESTAMP,
-  actual_completion_date TIMESTAMP,
-  notice_to_proceed TIMESTAMP,
-  contractor_name TEXT,
-  project_allocation NUMERIC,
-  batch_of_funds TEXT,
-  other_remarks TEXT,
-  engineer_id TEXT,
-  validation_status TEXT,
-  validation_remarks TEXT,
-  validated_by TEXT
-);
-`);
-
-      await client.query(`
-            ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS ipc TEXT UNIQUE;
-`);
-      console.log('âœ… Checked/Added IPC column to engineer_form');
-
-      // --- MIGRATION: ADD COORDINATES TO ENGINEER FORM ---
-      await client.query(`
-            ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS latitude TEXT,
-  ADD COLUMN IF NOT EXISTS longitude TEXT;
-`);
-      console.log('âœ… Checked/Added Latitude & Longitude to engineer_form');
-
-      // --- MIGRATION: ADD CONSTRUCTION DETAILS TO ENGINEER FORM ---
-      await client.query(`
-            ALTER TABLE engineer_form 
-            ADD COLUMN IF NOT EXISTS construction_start_date TIMESTAMP,
-  ADD COLUMN IF NOT EXISTS project_category TEXT,
-    ADD COLUMN IF NOT EXISTS scope_of_work TEXT;
-`);
-      console.log('âœ… Checked/Added Construction Details to engineer_form');
-
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate engineer_form columns:', migErr.message);
-    }
-
-    // --- MIGRATION: ARAL & TEACHING EXPERIENCE COLUMNS ---
-    try {
-      await client.query(`
-        ALTER TABLE school_profiles
---ARAL(Grades 1 - 6)
-        ADD COLUMN IF NOT EXISTS aral_math_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g1 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g1 INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS aral_math_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g2 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g2 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS aral_math_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g3 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g3 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS aral_math_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g4 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g4 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS aral_math_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g5 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g5 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS aral_math_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_read_g6 INTEGER DEFAULT 0, ADD COLUMN IF NOT EXISTS aral_sci_g6 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS aral_total INTEGER DEFAULT 0,
-
-              --Teaching Experience
-        ADD COLUMN IF NOT EXISTS teach_exp_0_1 INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS teach_exp_2_5 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS teach_exp_6_10 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS teach_exp_11_15 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS teach_exp_16_20 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS teach_exp_21_25 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS teach_exp_26_30 INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS teach_exp_31_35 INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS teach_exp_36_40 INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS teach_exp_40_45 INTEGER DEFAULT 0;
-`);
-      console.log('âœ… Checked/Added ARAL and Teaching Experience columns');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate ARAL/Exp columns:', migErr.message);
-    }
-
-    // --- MIGRATION: UPDATE PROJECT HISTORY SCHEMA ---
-    try {
-      // 1. Add engineer_name column
-      await client.query(`
-          ALTER TABLE engineer_form 
-          ADD COLUMN IF NOT EXISTS engineer_name TEXT;
-`);
-      console.log('âœ… Checked/Added engineer_name and created_at columns');
-
-      // 2. Drop UNIQUE constraint on IPC (if it exists) to allow multiple rows per project
-      await client.query(`
-          ALTER TABLE engineer_form 
-          DROP CONSTRAINT IF EXISTS engineer_form_ipc_key;
-`);
-      console.log('âœ… Dropped UNIQUE constraint on IPC (if existed)');
-
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate history schema:', migErr.message);
-    }
-
-
-    // --- MIGRATION: DETAILED ENROLLMENT COLUMNS ---
-    try {
-      await client.query(`
-        ALTER TABLE school_profiles
---Elementary
-        ADD COLUMN IF NOT EXISTS grade_kinder INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS grade_1 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS grade_2 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS grade_3 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_4 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS grade_5 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS grade_6 INTEGER DEFAULT 0,
-
-              --JHS
-        ADD COLUMN IF NOT EXISTS grade_7 INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS grade_8 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS grade_9 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS grade_10 INTEGER DEFAULT 0,
-
-        --SHS Grade 11
-        ADD COLUMN IF NOT EXISTS abm_11 INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS stem_11 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS humss_11 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS gas_11 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_ict_11 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS tvl_he_11 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS tvl_ia_11 INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS tvl_afa_11 INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS arts_11 INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS sports_11 INTEGER DEFAULT 0,
-
-                    --SHS Grade 12
-        ADD COLUMN IF NOT EXISTS abm_12 INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS stem_12 INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS humss_12 INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS gas_12 INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS tvl_ict_12 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS tvl_he_12 INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS tvl_ia_12 INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS tvl_afa_12 INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS arts_12 INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS sports_12 INTEGER DEFAULT 0,
-
-                    --Totals
-        ADD COLUMN IF NOT EXISTS es_enrollment INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS jhs_enrollment INTEGER DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS shs_enrollment INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS total_enrollment INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS grade_11 INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS grade_12 INTEGER DEFAULT 0;
-`);
-      console.log('âœ… Checked/Added Detailed Enrollment columns');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate enrollment columns:', migErr.message);
-    }
-
-    // --- MIGRATION: ENSURE BUILDABLE SPACE IS TEXT ---
-    try {
-      await client.query(`
-        ALTER TABLE school_profiles 
-        ALTER COLUMN res_buildable_space TYPE TEXT;
-`);
-      console.log('âœ… Ensured res_buildable_space is TEXT');
-    } catch (migErr) {
-      console.log('â„¹ï¸  res_buildable_space type check skipped/validated');
-    }
-
-    // --- MIGRATION: SYSTEM SETTINGS TABLE ---
-    try {
-      await client.query(`
-          CREATE TABLE IF NOT EXISTS system_settings(
-  setting_key TEXT PRIMARY KEY,
-  setting_value TEXT,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_by TEXT
-);
-`);
-      console.log('âœ… Checked/Created system_settings table');
-    } catch (tableErr) {
-      console.error('âŒ Failed to init system_settings table:', tableErr.message);
-    }
-
-    // --- MIGRATION: ADD DISABLED COLUMN TO USERS ---
-    try {
-      await client.query(`
-          ALTER TABLE users 
-          ADD COLUMN IF NOT EXISTS disabled BOOLEAN DEFAULT FALSE;
-`);
-      console.log('âœ… Checked/Added disabled column to users table');
-      /* ... (previous migrations omitted) ... */
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate disabled column:', migErr.message);
-    }
-
-    // --- MIGRATION: MONITORING SNAPSHOT COLUMNS ---
-    try {
-      await client.query(`
-          ALTER TABLE school_profiles 
-          ADD COLUMN IF NOT EXISTS forms_completed_count INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS f1_profile INTEGER DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS f2_head INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS f3_enrollment INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS f4_classes INTEGER DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS f5_teachers INTEGER DEFAULT 0,
-              ADD COLUMN IF NOT EXISTS f6_specialization INTEGER DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS f7_resources INTEGER DEFAULT 0,
-                  ADD COLUMN IF NOT EXISTS f8_facilities INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS f9_shifting INTEGER DEFAULT 0,
-                      ADD COLUMN IF NOT EXISTS f10_stats INTEGER DEFAULT 0;
-`);
-      console.log('âœ… Checked/Added Monitoring Granular Snapshot columns');
-    } catch (migErr) {
-      console.error('âŒ Failed to migrate snapshot columns:', migErr.message);
-    }
-
-
-  } catch (err) {
-    console.error('âŒ FATAL: Could not connect to Postgres DB:', err.message);
-    console.warn('âš ï¸  RUNNING IN OFFLINE MOCK MODE. Database features will be simulated.');
-    isDbConnected = false;
   } finally {
-    if (client) {
-      client.release();
-    }
+    if (client) client.release();
   }
-}; // End of OLD DB Init
+};
 
 // --- NEW DATABASE INITIALIZATION ---
+/* Moved to awaited startup
 (async () => {
   // 1. Primary Database
   try {
     const client = await pool.connect();
     isDbConnected = true;
     console.log('âœ… Connected to Postgres Database (Primary) successfully!');
-
+ 
     try {
       await initOtpTable(pool);
       await runMigrations(client, "Primary");
@@ -2394,7 +1874,7 @@ const startServer = async () => {
     console.warn('âš ï¸  RUNNING IN OFFLINE MOCK MODE.');
     isDbConnected = false;
   }
-
+ 
   // 2. Secondary Database (Dual Write Target)
   if (poolNew) {
     console.log("ðŸ”Œ Initializing Secondary Database Migrations...");
@@ -2413,6 +1893,7 @@ const startServer = async () => {
     }
   }
 })();
+*/
 
 // --- 1f. MASKED EMAIL LOOKUP (FORGOT PASSWORD) ---
 app.get('/api/lookup-masked-email/:schoolId', async (req, res) => {
@@ -2528,7 +2009,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     // If School ID provided (no @), use DB Lookup to find the real email
     if (!targetEmail.includes('@') && /^\d+$/.test(targetEmail)) {
       // Try USERS table first
-      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail} @% `]);
+      let lookupResult = await pool.query("SELECT email FROM users WHERE email LIKE $1 LIMIT 1", [`${targetEmail}@%`]);
       if (lookupResult.rows.length > 0) {
         targetEmail = lookupResult.rows[0].email;
       } else {
@@ -2538,14 +2019,14 @@ app.post('/api/auth/master-login', async (req, res) => {
           targetEmail = lookupResult.rows[0].email;
         } else {
           // Last resort: default to @deped.gov.ph
-          targetEmail = `${targetEmail} @deped.gov.ph`;
+          targetEmail = `${targetEmail}@deped.gov.ph`;
         }
       }
 
       // Check Firebase for @insighted.app (Priority Override)
       try {
         const originalId = email.trim();
-        const fbUser = await admin.auth().getUserByEmail(`${originalId} @insighted.app`);
+        const fbUser = await admin.auth().getUserByEmail(`${originalId}@insighted.app`);
         targetEmail = fbUser.email;
       } catch (fbErr) {
         // Ignore
@@ -2575,7 +2056,7 @@ app.post('/api/auth/master-login', async (req, res) => {
     if (userRes.rows.length > 0) {
       userData = userRes.rows[0];
     } else {
-      // Fallback: Legacy user only in school_profiles
+      // Fallback 1: Legacy user only in school_profiles
       const spRes = await pool.query(
         'SELECT submitted_by as uid, email, school_name FROM school_profiles WHERE submitted_by = $1',
         [userRecord.uid]
@@ -2589,7 +2070,26 @@ app.post('/api/auth/master-login', async (req, res) => {
           last_name: ''
         };
       } else {
-        return res.status(404).json({ error: "User exists in Auth but not in database." });
+        // Fallback 2: Check Firestore (for Super Admin / Manual users not in SQL)
+        try {
+          const userDoc = await admin.firestore().collection('users').doc(userRecord.uid).get();
+          if (userDoc.exists) {
+            const firestoreData = userDoc.data();
+            userData = {
+              uid: userRecord.uid,
+              email: userRecord.email,
+              role: firestoreData.role || 'User',
+              first_name: firestoreData.firstName || 'User',
+              last_name: firestoreData.lastName || ''
+            };
+            console.log(`[Master Login] Recovered user from Firestore: ${targetEmail} (${userData.role})`);
+          } else {
+            return res.status(404).json({ error: "User exists in Auth but not in database (SQL or Firestore)." });
+          }
+        } catch (fsErr) {
+          console.error("Firestore Fallback Error:", fsErr);
+          return res.status(404).json({ error: "User exists in Auth but not in database." });
+        }
       }
     }
 
@@ -10009,21 +9509,81 @@ app.get('/api/facility-repairs/:iern', async (req, res) => {
 
 
 // Force start for PM2 (since isMainModule is false in PM2 fork mode)
-if (true) {
-  const PORT = process.env.PORT || 3000;
-  const server = app.listen(PORT, () => {
-    console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
-    console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
-    console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
-  });
 
-  server.on('error', (e) => {
-    if (e.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
-    } else {
-      console.error("❌ Server Error:", e);
+// --- UNIFIED INITIALIZATION & STARTUP ---
+const initializeAndStart = async () => {
+  console.log("🚀 Starting InsightEd API Initialization...");
+
+  try {
+    // 1. Initial Primary Connection
+    const client = await pool.connect();
+    isDbConnected = true;
+    console.log('✅ Connected to Postgres Database (Primary) successfully!');
+
+    try {
+      // 2. Sequential Migrations
+      console.log("📦 Running Database Initializations...");
+      await initOtpTable(pool);
+      await initDB();
+      await initFinanceDB();
+      await initMasterlistDB();
+
+      console.log("🛠️ Running Advanced Migrations (Primary)...");
+      await runLegacyMigrations(); // Legacy blob
+      await runMigrations(client, "Primary"); // Versioned migrations
+
+      // 3. Secondary Database (Optional/Dual-Write)
+      if (poolNew) {
+        console.log("🔄 Initializing Secondary Database...");
+        const clientNew = await poolNew.connect();
+        try {
+          await runMigrations(clientNew, "Secondary");
+        } finally {
+          clientNew.release();
+        }
+      }
+
+    } finally {
+      client.release();
     }
-  });
+
+    console.log("✨ All Initializations Complete.");
+
+    // 4. Start Listener
+    const PORT = process.env.PORT || 3000;
+    const server = app.listen(PORT, () => {
+      console.log(`\n🚀 SERVER RUNNING ON PORT ${PORT} `);
+      console.log(`👉 API Endpoint: http://localhost:${PORT}/api/send-otp`);
+      console.log(`👉 CORS Allowed Origins: http://localhost:5173, https://insight-ed-mobile-pwa.vercel.app\n`);
+    });
+
+    server.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use! Please close the other process or use a different port.`);
+      } else {
+        console.error("❌ Server Error:", e);
+      }
+    });
+
+  } catch (err) {
+    console.error('❌ FATAL: Initialization Failed:', err.message);
+    console.warn('⚠️  Server might be in an inconsistent state.');
+
+    // Attempt fallback start if possible or exit
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    } else {
+      console.log("⚠️ Continuing in Degraded/Mock mode for development...");
+      isDbConnected = false;
+      const PORT = process.env.PORT || 3000;
+      app.listen(PORT, () => console.log(`🚀 DEGRADED SERVER RUNNING ON PORT ${PORT}`));
+    }
+  }
+};
+
+// Check if main module and start using the isMainModule defined earlier
+if (isMainModule || process.env.START_SERVER || true) {
+  initializeAndStart();
 }
 
 

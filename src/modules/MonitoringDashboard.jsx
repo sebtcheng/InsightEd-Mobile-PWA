@@ -6,7 +6,7 @@ import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiTrendingUp, FiCheckCircle, FiClock, FiFileText, FiMapPin, FiArrowLeft, FiMenu, FiBell, FiSearch, FiFilter, FiAlertCircle, FiX, FiBarChart2, FiRefreshCw, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiPieChart } from 'react-icons/fi';
 import { TbTrophy, TbSchool, TbChartBar } from 'react-icons/tb';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
 
 import Papa from 'papaparse';
 import locationData from '../locations.json';
@@ -97,6 +97,9 @@ const MonitoringDashboard = () => {
     const effectiveRole = (isSuperUser && impersonatedRole)
         ? impersonatedRole
         : userData?.role;
+
+    // Dynamic Chart Height for Insights Tab
+    const chartHeight = Math.max(400, (divisionStats?.length || 0) * 45);
 
     const effectiveRegion = (isSuperUser)
         ? (sessionStorage.getItem('impersonatedRegion') || sessionStorage.getItem('impersonatedLocation') || userData?.region)
@@ -1909,7 +1912,7 @@ const MonitoringDashboard = () => {
                     {/* INSIGHTS TAB */}
                     {(activeTab === 'insights') && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                 <div className="flex items-center gap-4">
                                     <h2 className="text-black/60 dark:text-white/60 text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
                                         <TbChartBar className="text-purple-500" size={18} /> Regional Insights
@@ -1944,7 +1947,7 @@ const MonitoringDashboard = () => {
                                 </div>
 
                                 {/* Selector for Metric - Designated Area */}
-                                <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap">
+                                <div className="bg-slate-50 dark:bg-slate-800/50 p-2 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center gap-3 flex-wrap w-full sm:w-auto">
                                     <div className="flex items-center gap-2 pl-2">
                                         <div className="bg-slate-200 dark:bg-slate-700 p-1.5 rounded-full">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500 dark:text-slate-400"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
@@ -2539,10 +2542,10 @@ const MonitoringDashboard = () => {
                                                     `Grade ${insightsSubMetric.replace('grade_', '')} Enrolment`} per Division
                                         </h3>
 
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => {
                                                         const key = insightsSubMetric === 'total' ? 'total_enrollment' : insightsSubMetric;
                                                         return {
@@ -2551,39 +2554,17 @@ const MonitoringDashboard = () => {
                                                             enrolment: parseInt(d[key] || 0)
                                                         };
                                                     })}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="name"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis
-                                                                dataKey="name"
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                dy={10}
-                                                                interval={0}
-                                                                angle={-45}
-                                                                textAnchor="end"
-                                                            />
-                                                            <YAxis
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                tickFormatter={(value) => value.toLocaleString()}
-                                                            />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="name"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip
                                                         cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
                                                         content={({ active, payload, label }) => {
@@ -2605,11 +2586,11 @@ const MonitoringDashboard = () => {
                                                         cursor="pointer"
                                                         dataKey="enrolment"
                                                         fill="#8b5cf6"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                                                        radius={[0, 4, 4, 0]}
                                                         animationDuration={1500}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
+                                                        barSize={20}
                                                     >
+                                                        <LabelList dataKey="enrolment" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
                                                         {divisionStats.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
                                                         ))}
@@ -2632,10 +2613,10 @@ const MonitoringDashboard = () => {
                                             }
                                         </h3>
 
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => {
                                                         const key = insightsClassesGrade;
                                                         return {
@@ -2644,39 +2625,17 @@ const MonitoringDashboard = () => {
                                                             value: parseInt(d[key] || 0)
                                                         };
                                                     })}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="name"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis
-                                                                dataKey="name"
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                dy={10}
-                                                                interval={0}
-                                                                angle={-45}
-                                                                textAnchor="end"
-                                                            />
-                                                            <YAxis
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                tickFormatter={(value) => value.toLocaleString()}
-                                                            />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="name"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip
                                                         cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
                                                         content={({ active, payload }) => {
@@ -2698,11 +2657,11 @@ const MonitoringDashboard = () => {
                                                         cursor="pointer"
                                                         dataKey="value"
                                                         fill="#3b82f6"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                                                        radius={[0, 4, 4, 0]}
                                                         animationDuration={1500}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
+                                                        barSize={20}
                                                     >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
                                                         {divisionStats.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
                                                         ))}
@@ -2725,10 +2684,10 @@ const MonitoringDashboard = () => {
                                             }
                                         </h3>
 
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => {
                                                         // Construct dynamic key: aral_math_g1, aral_read_g2, etc.
                                                         const key = `aral_${insightsAralSubject}_${insightsAralGrade}`;
@@ -2738,39 +2697,17 @@ const MonitoringDashboard = () => {
                                                             value: parseInt(d[key] || 0)
                                                         };
                                                     })}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="name"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis
-                                                                dataKey="name"
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                dy={10}
-                                                                interval={0}
-                                                                angle={-45}
-                                                                textAnchor="end"
-                                                            />
-                                                            <YAxis
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                tickFormatter={(value) => value.toLocaleString()}
-                                                            />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="name"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip
                                                         cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
                                                         content={({ active, payload }) => {
@@ -2792,11 +2729,11 @@ const MonitoringDashboard = () => {
                                                         cursor="pointer"
                                                         dataKey="value"
                                                         fill="#f97316"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                                                        radius={[0, 4, 4, 0]}
                                                         animationDuration={1500}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
+                                                        barSize={20}
                                                     >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
                                                         {divisionStats.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={['#f97316', '#ea580c', '#c2410c', '#fb923c', '#fdba74'][index % 5]} />
                                                         ))}
@@ -2822,10 +2759,10 @@ const MonitoringDashboard = () => {
                                             })
                                         </h3>
 
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => {
                                                         const key = `cnt_${insightsClassSizeCategory === 'less' ? 'less' : insightsClassSizeCategory}_${insightsClassSizeGrade}`;
                                                         return {
@@ -2834,39 +2771,17 @@ const MonitoringDashboard = () => {
                                                             value: parseInt(d[key] || 0)
                                                         };
                                                     })}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="name"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis
-                                                                dataKey="name"
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                dy={10}
-                                                                interval={0}
-                                                                angle={-45}
-                                                                textAnchor="end"
-                                                            />
-                                                            <YAxis
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                tickFormatter={(value) => value.toLocaleString()}
-                                                            />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="name"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip
                                                         cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
                                                         content={({ active, payload }) => {
@@ -2888,11 +2803,11 @@ const MonitoringDashboard = () => {
                                                         cursor="pointer"
                                                         dataKey="value"
                                                         fill="#10b981"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                                                        radius={[0, 4, 4, 0]}
                                                         animationDuration={1500}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
+                                                        barSize={20}
                                                     >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
                                                         {divisionStats.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={['#10b981', '#34d399', '#059669', '#6ee7b7', '#047857'][index % 5]} />
                                                         ))}
@@ -2923,25 +2838,17 @@ const MonitoringDashboard = () => {
                                                         value: parseInt(d[`cnt_shift_${insightsShiftingCategory}_${insightsShiftingGrade}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -2949,10 +2856,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name={`${insightsShiftingCategory === 'single' ? 'Single' : insightsShiftingCategory === 'double' ? 'Double' : 'Triple'} Shift`}
                                                         fill={insightsShiftingCategory === 'single' ? '#3b82f6' : insightsShiftingCategory === 'double' ? '#f59e0b' : '#ef4444'}
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -2970,34 +2878,26 @@ const MonitoringDashboard = () => {
                                             }
                                             {insightsDeliveryCategory !== 'total' && ` (${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning)`}
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_mode_${insightsDeliveryCategory}_${insightsDeliveryGrade}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3005,10 +2905,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name={`${insightsDeliveryCategory === 'inperson' ? 'In-Person' : insightsDeliveryCategory === 'blended' ? 'Blended' : 'Distance'} Learning`}
                                                         fill={insightsDeliveryCategory === 'inperson' ? '#10b981' : insightsDeliveryCategory === 'blended' ? '#6366f1' : '#f43f5e'}
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3027,34 +2928,26 @@ const MonitoringDashboard = () => {
                                                         insightsAdmType === 'tvi' ? 'TV/Radio (TVI/RBI)' : 'Blended Learning'
                                             }
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_adm_${insightsAdmType}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3062,10 +2955,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Schools"
                                                         fill="#ef4444"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3080,10 +2974,10 @@ const MonitoringDashboard = () => {
                                             </div>
                                             Teacher Count: {insightsTeacherGrade === 'total' ? 'All Grades' : insightsTeacherGrade === 'k' ? 'Kindergarten' : `Grade ${insightsTeacherGrade.replace('g', '')}`}
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: insightsTeacherGrade === 'total'
@@ -3091,25 +2985,17 @@ const MonitoringDashboard = () => {
                                                             : parseInt(d[`cnt_teach_${insightsTeacherGrade}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3117,10 +3003,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Teachers"
                                                         fill="#3b82f6"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3135,34 +3022,26 @@ const MonitoringDashboard = () => {
                                             </div>
                                             Multigrade Teachers: {insightsMultigradeCategory === '1_2' ? 'Grades 1 & 2' : insightsMultigradeCategory === '3_4' ? 'Grades 3 & 4' : 'Grades 5 & 6'}
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_multi_${insightsMultigradeCategory}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3170,10 +3049,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Teachers"
                                                         fill="#f59e0b"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3188,34 +3068,26 @@ const MonitoringDashboard = () => {
                                             </div>
                                             Teaching Experience: {insightsExperienceCategory.replace('_', '-')} Years
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_exp_${insightsExperienceCategory}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3223,10 +3095,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Teachers"
                                                         fill="#8b5cf6"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3251,34 +3124,26 @@ const MonitoringDashboard = () => {
                                                                                 insightsSpecializationSubject === 'gen' ? 'General Education' : 'Early Childhood'
                                             }
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_spec_${insightsSpecializationSubject}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3286,10 +3151,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Teachers"
                                                         fill="#ec4899"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3313,10 +3179,10 @@ const MonitoringDashboard = () => {
                                                                 insightsInventoryItem === 'printer' ? 'Printers' : 'Smart TVs'
                                             } {insightsInventoryItem !== 'seats' && insightsInventoryItem !== 'toilets' && '(Functional)'}
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => {
                                                         let val = 0;
                                                         if (insightsInventoryItem === 'seats') {
@@ -3332,25 +3198,17 @@ const MonitoringDashboard = () => {
                                                             displayDivision: formatInsightLabel(d)
                                                         };
                                                     })}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3358,10 +3216,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Units"
                                                         fill="#06b6d4"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3380,34 +3239,26 @@ const MonitoringDashboard = () => {
                                                         insightsClassroomCondition === 'repair' ? 'Needs Major Repairs' : 'For Demolition/Condemned'
                                             }
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_class_${insightsClassroomCondition}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3415,10 +3266,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Classrooms"
                                                         fill="#f59e0b"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3436,34 +3288,26 @@ const MonitoringDashboard = () => {
                                                     insightsRoomType === 'com' ? 'Computer Lab' : 'TVL Workshop'
                                             }
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_room_${insightsRoomType}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3471,10 +3315,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Rooms"
                                                         fill="#8b5cf6"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3501,34 +3346,26 @@ const MonitoringDashboard = () => {
                                                                             insightsSiteSubOption === 'multi' ? 'Pure Multigrade' : 'None/No Source')
                                             }
                                         </h3>
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => ({
                                                         ...d,
                                                         value: parseInt(d[`cnt_site_${insightsSiteCategory}_${insightsSiteSubOption}`] || 0),
                                                         displayDivision: formatInsightLabel(d)
                                                     }))}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="displayDivision"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis dataKey="displayDivision" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} dy={10} interval={0} angle={-45} textAnchor="end" />
-                                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="displayDivision"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip cursor={{ fill: '#f1f5f9', opacity: 0.5 }} contentStyle={{ backgroundColor: '#1e293b', color: '#fff' }} />
                                                     <Bar
                                                         onClick={handleInsightBarClick}
@@ -3536,10 +3373,11 @@ const MonitoringDashboard = () => {
                                                         dataKey="value"
                                                         name="Schools"
                                                         fill="#14b8a6"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
-                                                    />
+                                                        radius={[0, 4, 4, 0]}
+                                                        barSize={20}
+                                                    >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
+                                                    </Bar>
                                                 </BarChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -3571,10 +3409,10 @@ const MonitoringDashboard = () => {
                                             })
                                         </h3>
 
-                                        <div className={`w-full ${isMobile ? 'h-[800px]' : 'h-[400px]'}`}>
+                                        <div className="w-full" style={{ height: chartHeight, width: '100%' }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <BarChart
-                                                    layout={isMobile ? 'vertical' : 'horizontal'}
+                                                    layout="vertical"
                                                     data={insightChartData.map(d => {
                                                         const key = `stat_${insightsDemographicCategory}_${insightsDemographicGrade}`;
                                                         return {
@@ -3583,39 +3421,17 @@ const MonitoringDashboard = () => {
                                                             value: parseInt(d[key] || 0)
                                                         };
                                                     })}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                    margin={{ top: 20, right: 60, left: 0, bottom: 20 }}
                                                 >
-                                                    <CartesianGrid strokeDasharray="3 3" horizontal={!isMobile} vertical={isMobile} stroke="#e2e8f0" />
-                                                    {isMobile ? (
-                                                        <>
-                                                            <XAxis type="number" hide />
-                                                            <YAxis
-                                                                dataKey="name"
-                                                                type="category"
-                                                                width={100}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                            />
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <XAxis
-                                                                dataKey="name"
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                dy={10}
-                                                                interval={0}
-                                                                angle={-45}
-                                                                textAnchor="end"
-                                                            />
-                                                            <YAxis
-                                                                axisLine={false}
-                                                                tickLine={false}
-                                                                tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
-                                                                tickFormatter={(value) => value.toLocaleString()}
-                                                            />
-                                                        </>
-                                                    )}
+                                                    <XAxis type="number" hide />
+                                                    <YAxis
+                                                        dataKey="name"
+                                                        type="category"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        width={110}
+                                                        tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }}
+                                                    />
                                                     <Tooltip
                                                         cursor={{ fill: '#f1f5f9', opacity: 0.5 }}
                                                         content={({ active, payload }) => {
@@ -3637,11 +3453,11 @@ const MonitoringDashboard = () => {
                                                         cursor="pointer"
                                                         dataKey="value"
                                                         fill="#ec4899"
-                                                        radius={isMobile ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+                                                        radius={[0, 4, 4, 0]}
                                                         animationDuration={1500}
-                                                        label={{ position: isMobile ? 'right' : 'top', fill: '#64748b', fontSize: 10, fontWeight: 'bold' }}
-                                                        barSize={isMobile ? 20 : undefined}
+                                                        barSize={20}
                                                     >
+                                                        <LabelList dataKey="value" position="right" fill="#64748b" fontSize={10} fontWeight="bold" formatter={(value) => value.toLocaleString()} />
                                                         {divisionStats.map((entry, index) => (
                                                             <Cell key={`cell-${index}`} fill={['#ec4899', '#db2777', '#be185d', '#9d174d', '#831843'][index % 5]} />
                                                         ))}

@@ -312,27 +312,38 @@ const TeacherSpecialization = ({ embedded }) => {
         }
     };
 
-    const handleDeleteTeacher = (index) => {
-        setTeacherToDeleteIndex(index);
-        setShowDeleteModal(true);
+    const handleDeleteTeacher = (teacher) => {
+        setTeacherToDelete(teacher);
     };
 
-    const confirmDelete = () => {
-        if (teacherToDeleteIndex !== null) {
-            // Ideally call API to delete or mark inactive
-            // For now, just remove from list and let next save handle it? 
-            // OR strictly, we should probably hit an API to remove it if it's auto-saved.
-            // But the request didn't specify auto-delete endpoint.
-            // We will just update state.
-            const updated = teacherList.filter((_, i) => i !== teacherToDeleteIndex);
-            setTeacherList(updated);
-            setShowDeleteModal(false);
-            setTeacherToDeleteIndex(null);
+    const confirmDeleteTeacher = async () => {
+        if (!teacherToDelete) return;
 
-            // Adjust page if empty
-            if (currentPage > 1 && updated.length <= (currentPage - 1) * itemsPerPage) {
-                setCurrentPage(currentPage - 1);
+        // 1. Optimistic UI Update
+        setTeacherList(prev => prev.filter(t => t.control_num !== teacherToDelete.control_num));
+        setTeacherToDelete(null);
+
+        // 2. Adjust Pagination if needed
+        // If the current page becomes empty and it's not the first page, go back one
+        const remainingOnPage = teacherList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).length - 1;
+        if (remainingOnPage === 0 && currentPage > 1) {
+            setCurrentPage(curr => curr - 1);
+        }
+
+        // 3. Backend Call
+        try {
+            // Only call API if it has a real ID (not a temp one, though we assigned one)
+            // But wait, our 'control_num' is our ID.
+            if (teacherToDelete.control_num) {
+                await fetch(`/api/delete-teacher-personnel/${schoolId}/${teacherToDelete.control_num}`, {
+                    method: 'DELETE'
+                });
             }
+        } catch (e) {
+            console.error("Delete failed", e);
+            // Optionally revert UI if needed, but since we want "snappy", we assume success
+            // or show a toast on error.
+            alert("Failed to delete from server. Please refresh.");
         }
     };
 
