@@ -2740,6 +2740,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'class_size' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -2836,6 +2837,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'shifting' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -2892,6 +2894,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'delivery' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -2947,6 +2950,7 @@ const MonitoringDashboard = () => {
                                             </div>
                                         </>
                                     )}
+
 
                                     {insightsMetric === 'adm' && (
                                         <>
@@ -3005,6 +3009,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'teachers' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -3060,6 +3065,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'multigrade' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -3112,6 +3118,7 @@ const MonitoringDashboard = () => {
                                             </div>
                                         </>
                                     )}
+
 
                                     {insightsMetric === 'experience' && (
                                         <>
@@ -3301,6 +3308,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'classrooms' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -3358,6 +3366,7 @@ const MonitoringDashboard = () => {
                                         </>
                                     )}
 
+
                                     {insightsMetric === 'rooms' && (
                                         <>
                                             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
@@ -3413,6 +3422,7 @@ const MonitoringDashboard = () => {
                                             </div>
                                         </>
                                     )}
+
 
                                     {insightsMetric === 'site' && (
                                         <>
@@ -3478,6 +3488,7 @@ const MonitoringDashboard = () => {
                                             </div>
                                         </>
                                     )}
+
 
                                     {insightsMetric === 'demographic' && (
                                         <>
