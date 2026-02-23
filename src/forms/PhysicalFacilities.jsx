@@ -1413,10 +1413,10 @@ const PhysicalFacilities = ({ embedded }) => {
                                                 return (
                                                     <div
                                                         key={rIdx}
-                                                        onClick={() => !isRepairSubmitted && !isReadOnly && openEditRoom(bIdx, rIdx)}
-                                                        className={`group p-4 rounded-[1.25rem] border transition-all flex items-center justify-between active:scale-[0.98] ${isRepairSubmitted || isSaved || isReadOnly
+                                                        onClick={() => openEditRoom(bIdx, rIdx)}
+                                                        className={`group p-4 rounded-[1.25rem] border transition-all flex items-center justify-between active:scale-[0.98] cursor-pointer ${isRepairSubmitted || isSaved || isReadOnly
                                                             ? 'bg-slate-50 border-slate-100'
-                                                            : 'bg-white border-slate-100 hover:border-orange-200 hover:shadow-md cursor-pointer'
+                                                            : 'bg-white border-slate-100 hover:border-orange-200 hover:shadow-md'
                                                             } `}
                                                     >
                                                         <div className="flex-1 min-w-0 pr-2">

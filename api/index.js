@@ -137,7 +137,8 @@ const initDB = async () => {
       DROP COLUMN IF EXISTS data_health_description,
       DROP COLUMN IF EXISTS forms_to_recheck;
     `);
-    console.log("✅ DB Init: Schema verified (dropped health columns but preserved school_head_validation).");
+
+
 
 
     // --- MIGRATION: LGU FORMS AND IMAGES (REMOVED) ---
@@ -3997,7 +3998,7 @@ app.post('/api/register-school', async (req, res) => {
     const insertQuery = `
         INSERT INTO school_profiles (
             school_id, school_name, region, province, division, district, 
-            municipality, legislative_district, barangay, mother_school_id, 
+            municipality, leg_district, barangay, mother_school_id, 
             latitude, longitude, 
             submitted_by, iern, email, curricular_offering, submitted_at
         ) VALUES (
@@ -4408,7 +4409,7 @@ app.post('/api/save-school', async (req, res) => {
     const query = `
       INSERT INTO school_profiles (
         school_id, school_name, region, province, division, district, 
-        municipality, legislative_district, barangay, mother_school_id, 
+        municipality, leg_district, barangay, mother_school_id, 
         latitude, longitude, submitted_by, submitted_at, 
         curricular_offering,
         history_logs,
@@ -4427,7 +4428,7 @@ app.post('/api/save-school', async (req, res) => {
         division = EXCLUDED.division,
         district = EXCLUDED.district,
         municipality = EXCLUDED.municipality,
-        legislative_district = EXCLUDED.legislative_district,
+        leg_district = EXCLUDED.leg_district,
         barangay = EXCLUDED.barangay,
         mother_school_id = EXCLUDED.mother_school_id,
         latitude = EXCLUDED.latitude,

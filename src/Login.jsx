@@ -503,7 +503,40 @@ const Login = () => {
         }
     };
 
-    // --- 5. RENDER UI ---
+    // --- 5. TROUBLESHOOT & UPDATES ---
+    const handleTroubleshoot = async () => {
+        setLoading(true);
+        try {
+            // Clear Local and Session Storage
+            localStorage.clear();
+            sessionStorage.clear();
+
+            // Unregister Service Workers
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (let registration of registrations) {
+                    await registration.unregister();
+                }
+            }
+
+            // Clear Cache Storage
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                for (let cacheName of cacheNames) {
+                    await caches.delete(cacheName);
+                }
+            }
+
+            alert("Cache cleared. App will now reload to fetch the latest updates.");
+            window.location.reload(true);
+        } catch (error) {
+            console.error("Error clearing cache:", error);
+            alert("Errors occurred during cache clear. Reloading...");
+            window.location.reload(true);
+        }
+    };
+
+    // --- 6. RENDER UI ---
     if (loading) {
         return <LoadingScreen />;
     }
@@ -642,6 +675,20 @@ const Login = () => {
                             </button>
                         </div>
                     )}
+
+                    {/* TROUBLESHOOT & UPDATES TRIGGER (OUTSIDE PANEL) */}
+                    <div className="mt-4 flex justify-center">
+                        <button
+                            type="button"
+                            onClick={handleTroubleshoot}
+                            className="flex items-center gap-2 px-6 py-3 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-slate-600 text-sm font-bold shadow-lg hover:bg-white/20 transition-all active:scale-95"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                            </svg>
+                            <span>Troubleshoot & Updates</span>
+                        </button>
+                    </div>
 
                     {/* FOOTER NOTE */}
                     <div className="text-center mt-6">

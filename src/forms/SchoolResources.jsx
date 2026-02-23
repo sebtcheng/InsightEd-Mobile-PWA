@@ -59,14 +59,24 @@ const SelectField = ({ label, name, options, formData, handleChange, isLocked, v
     </div>
 );
 
-const SeatRow = ({ label, enrollment, seatKey, formData, handleChange, isLocked, viewOnly }) => {
+const SeatRow = ({ label, enrollment, seatKey, formData, handleChange, isLocked, viewOnly, shiftModality }) => {
     const seats = formData[seatKey] || 0;
-    const shortage = enrollment - seats;
+
+    const isDoubleShift = seatKey === 'seats_kinder' || shiftModality === 'Double Shift';
+
+    const requiredSeats = isDoubleShift
+        ? Math.ceil(enrollment / 2)
+        : enrollment;
+
+    const shortage = Math.max(0, requiredSeats - seats);
     const isShortage = shortage > 0;
 
     return (
         <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors group">
-            <td className="py-4 px-4 text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">{label}</td>
+            <td className="py-4 px-4 text-xs font-bold text-slate-600 group-hover:text-blue-600 transition-colors">
+                {label}
+                {isDoubleShift && <span className="block text-[8px] text-blue-500 uppercase mt-0.5">Double Shift</span>}
+            </td>
             <td className="py-4 px-4 text-center">
                 <span className="bg-blue-50 text-blue-700 text-[10px] px-2.5 py-1 rounded-lg font-bold">
                     {enrollment}
@@ -200,6 +210,9 @@ const SchoolResources = ({ embedded }) => {
     const [formData, setFormData] = useState({});
     // const isDummy = location.state?.isDummy || false; // Moved up
     const [originalData, setOriginalData] = useState(null);
+
+    // --- SHIFTING DATA STATE ---
+    const [shiftingData, setShiftingData] = useState({});
 
     // --- BUILDABLE SPACES STATE ---
     const [spaces, setSpaces] = useState([]);
@@ -444,6 +457,16 @@ const SchoolResources = ({ embedded }) => {
                     } catch (e) { console.error("Resources cache error", e); }
                 }
 
+                // Load Shifting Cache (For Double Shift logic)
+                const CACHE_KEY_SHIFTING = `CACHE_SHIFTING_${user.uid}`;
+                const cachedShifting = localStorage.getItem(CACHE_KEY_SHIFTING);
+                if (cachedShifting) {
+                    try {
+                        const parsed = JSON.parse(cachedShifting);
+                        setShiftingData(parsed.shifts || {});
+                    } catch (e) { console.error("Shifting cache error", e); }
+                }
+
                 try {
                     // 2. CHECK OUTBOX
                     let restored = false;
@@ -477,18 +500,38 @@ const SchoolResources = ({ embedded }) => {
                             resourcesFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
                         }
 
+                        let shiftingFetchUrl = `/api/learning-modalities/${user.uid}`;
+                        if (isAuditMode) {
+                            shiftingFetchUrl = `/api/monitoring/school-detail/${auditTargetId}`;
+                        } else if ((viewOnly || isCORole) && schoolIdParam) {
+                            shiftingFetchUrl = `/api/monitoring/school-detail/${schoolIdParam}`;
+                        }
+
                         // Only show loading if we didn't load from cache
                         if (!loadedFromCache) setLoading(true);
 
                         // Fetch All in Parallel
-                        const [userDoc, profileRes, resourcesRes] = await Promise.all([
+                        const [userDoc, profileRes, resourcesRes, shiftingRes] = await Promise.all([
                             getDoc(doc(db, "users", user.uid)).catch(() => ({ exists: () => false })),
                             fetch(profileFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
-                            fetch(resourcesFetchUrl).then(r => r.json()).catch(e => ({ exists: false }))
+                            fetch(resourcesFetchUrl).then(r => r.json()).catch(e => ({ exists: false })),
+                            fetch(shiftingFetchUrl).then(r => r.json()).catch(e => ({ exists: false }))
                         ]);
 
                         // Handle Role
                         if (userDoc.exists()) setUserRole(userDoc.data().role);
+
+                        // Handle Shifting Modalities
+                        if (shiftingRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
+                            const dbData = ((viewOnly && schoolIdParam) || isAuditMode) ? shiftingRes : (shiftingRes.data || {});
+                            // Map shift_kinder, shift_g1, etc.
+                            const loadedShifts = {};
+                            const LEVELS = ["kinder", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"];
+                            LEVELS.forEach(lvl => {
+                                loadedShifts[`shift_${lvl}`] = dbData[`shift_${lvl}`] || '';
+                            });
+                            setShiftingData(loadedShifts);
+                        }
 
                         // Handle Profile (Enrollment updates)
                         if (profileRes.exists || (viewOnly && schoolIdParam) || isAuditMode) {
@@ -1222,31 +1265,31 @@ const SchoolResources = ({ embedded }) => {
                                 {showElem() && (
                                     <>
                                         <>
-                                            <SeatRow label="Kinder" enrollment={enrollmentData.gradeKinder || 0} seatKey="seats_kinder" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 1" enrollment={enrollmentData.grade1 || 0} seatKey="seats_grade_1" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 2" enrollment={enrollmentData.grade2 || 0} seatKey="seats_grade_2" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 3" enrollment={enrollmentData.grade3 || 0} seatKey="seats_grade_3" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 4" enrollment={enrollmentData.grade4 || 0} seatKey="seats_grade_4" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 5" enrollment={enrollmentData.grade5 || 0} seatKey="seats_grade_5" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 6" enrollment={enrollmentData.grade6 || 0} seatKey="seats_grade_6" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Kinder" enrollment={enrollmentData.gradeKinder || 0} seatKey="seats_kinder" shiftModality={shiftingData.shift_kinder} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 1" enrollment={enrollmentData.grade1 || 0} seatKey="seats_grade_1" shiftModality={shiftingData.shift_g1} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 2" enrollment={enrollmentData.grade2 || 0} seatKey="seats_grade_2" shiftModality={shiftingData.shift_g2} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 3" enrollment={enrollmentData.grade3 || 0} seatKey="seats_grade_3" shiftModality={shiftingData.shift_g3} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 4" enrollment={enrollmentData.grade4 || 0} seatKey="seats_grade_4" shiftModality={shiftingData.shift_g4} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 5" enrollment={enrollmentData.grade5 || 0} seatKey="seats_grade_5" shiftModality={shiftingData.shift_g5} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 6" enrollment={enrollmentData.grade6 || 0} seatKey="seats_grade_6" shiftModality={shiftingData.shift_g6} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                         </>
                                     </>
                                 )}
                                 {showJHS() && (
                                     <>
                                         <>
-                                            <SeatRow label="Grade 7" enrollment={enrollmentData.grade7 || 0} seatKey="seats_grade_7" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 8" enrollment={enrollmentData.grade8 || 0} seatKey="seats_grade_8" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 9" enrollment={enrollmentData.grade9 || 0} seatKey="seats_grade_9" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 10" enrollment={enrollmentData.grade10 || 0} seatKey="seats_grade_10" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 7" enrollment={enrollmentData.grade7 || 0} seatKey="seats_grade_7" shiftModality={shiftingData.shift_g7} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 8" enrollment={enrollmentData.grade8 || 0} seatKey="seats_grade_8" shiftModality={shiftingData.shift_g8} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 9" enrollment={enrollmentData.grade9 || 0} seatKey="seats_grade_9" shiftModality={shiftingData.shift_g9} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 10" enrollment={enrollmentData.grade10 || 0} seatKey="seats_grade_10" shiftModality={shiftingData.shift_g10} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                         </>
                                     </>
                                 )}
                                 {showSHS() && (
                                     <>
                                         <>
-                                            <SeatRow label="Grade 11" enrollment={enrollmentData.grade11 || 0} seatKey="seats_grade_11" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
-                                            <SeatRow label="Grade 12" enrollment={enrollmentData.grade12 || 0} seatKey="seats_grade_12" formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 11" enrollment={enrollmentData.grade11 || 0} seatKey="seats_grade_11" shiftModality={shiftingData.shift_g11} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
+                                            <SeatRow label="Grade 12" enrollment={enrollmentData.grade12 || 0} seatKey="seats_grade_12" shiftModality={shiftingData.shift_g12} formData={formData} handleChange={handleChange} isLocked={isLocked} viewOnly={viewOnly} />
                                         </>
                                     </>
                                 )}
