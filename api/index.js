@@ -3098,7 +3098,7 @@ app.get('/api/sdo/location-options', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT DISTINCT 
-        province, municipality, district, legislative_district, barangay
+        province, municipality, district, leg_district, barangay
       FROM schools
       WHERE region = $1 AND division = $2
       ORDER BY province, municipality, district, barangay

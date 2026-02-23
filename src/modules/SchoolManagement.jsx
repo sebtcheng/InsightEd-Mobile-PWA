@@ -11,7 +11,6 @@ import { TbSchool } from 'react-icons/tb';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import locationData from '../locations.json';
 
 // Fix for default marker icon in Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -291,23 +290,17 @@ const SchoolManagement = () => {
 
     // Derived Options based on selections
     const provinceOptions = useMemo(() => {
-        if (userData?.region && locationData[userData.region]) {
-            return Object.keys(locationData[userData.region]).sort();
-        }
         return [...new Set(locationOptions.map(item => item.province).filter(Boolean))].sort();
-    }, [locationOptions, userData?.region]);
+    }, [locationOptions]);
 
     const municipalityOptions = useMemo(() => {
         if (!formData.province) return [];
-        if (userData?.region && locationData[userData.region] && locationData[userData.region][formData.province]) {
-            return Object.keys(locationData[userData.region][formData.province]).sort();
-        }
         return [...new Set(locationOptions
             .filter(item => item.province === formData.province)
             .map(item => item.municipality)
             .filter(Boolean)
         )].sort();
-    }, [locationOptions, formData.province, userData?.region]);
+    }, [locationOptions, formData.province]);
 
     const districtOptions = useMemo(() => {
         if (!formData.municipality) return [];
@@ -320,17 +313,10 @@ const SchoolManagement = () => {
 
     const barangayOptions = useMemo(() => {
         if (!formData.municipality) return [];
-        if (userData?.region && formData.province && locationData[userData.region]?.[formData.province]?.[formData.municipality]) {
-            return [...locationData[userData.region][formData.province][formData.municipality]].sort();
-        }
+
         let filtered = locationOptions.filter(item => item.municipality === formData.municipality);
 
-        // If district is selected, further filter? 
-        // Some datasets might not strict link barangay to district in the table row, but usually they are.
-        // Let's stick to municipality filter for barangays to be safe, unless the list is huge.
-        // Actually, let's include district filter if available to narrow it down if desired, 
-        // but often barangay is the child of municipality.
-        // Let's check if the user selected a district.
+        // If district is selected, further filter
         if (formData.district) {
             const withDistrict = filtered.filter(item => item.district === formData.district);
             if (withDistrict.length > 0) {
@@ -339,7 +325,7 @@ const SchoolManagement = () => {
         }
 
         return [...new Set(filtered.map(item => item.barangay).filter(Boolean))].sort();
-    }, [locationOptions, formData.municipality, formData.district, formData.province, userData?.region]);
+    }, [locationOptions, formData.municipality, formData.district]);
 
     const legDistrictOptions = useMemo(() => {
         if (!formData.municipality) return [];
