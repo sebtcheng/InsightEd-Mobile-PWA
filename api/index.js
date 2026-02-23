@@ -672,6 +672,39 @@ const initMasterlistDB = async () => {
 
 // --- MASTERLIST API ENDPOINTS ---
 
+app.get('/api/import-masterlist-teachers/:schoolId', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT "first", "middle", "last", "position" FROM teachers_list WHERE "school.id" = $1',
+      [schoolId]
+    );
+
+    const mappedData = result.rows.map(t => {
+      let fName = '';
+      if (t.last) fName += t.last.toUpperCase();
+      if (t.first) {
+        if (fName) fName += ', ';
+        fName += t.first.toUpperCase();
+      }
+      if (t.middle) {
+        if (fName) fName += ' ';
+        fName += t.middle.toUpperCase().charAt(0) + '.';
+      }
+
+      return {
+        full_name: fName || 'UNKNOWN',
+        position: t.position || 'TBD'
+      };
+    });
+
+    res.json(mappedData);
+  } catch (err) {
+    console.error('❌ Error importing teachers:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/debug-integrity', async (req, res) => {
   try {
     const client = await pool.connect();

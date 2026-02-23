@@ -1,7 +1,7 @@
 // src/forms/TeacherSpecialization.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiArrowLeft, FiBriefcase, FiCheckCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiPieChart, FiAlertCircle, FiChevronsLeft, FiChevronsRight } from 'react-icons/fi';
+import { FiArrowLeft, FiBriefcase, FiCheckCircle, FiHelpCircle, FiInfo, FiSave, FiTrash2, FiPlus, FiPieChart, FiAlertCircle, FiChevronsLeft, FiChevronsRight, FiRefreshCw } from 'react-icons/fi';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from "firebase/auth";
 import { addToOutbox, getOutbox } from '../db';
@@ -73,6 +73,7 @@ const TeacherSpecialization = ({ embedded }) => {
 
     // New Teacher State
     const [newTeacher, setNewTeacher] = useState({ full_name: '', position: '', specialization: 'GENERAL EDUCATION' });
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // --- PAGINATION STATE ---
     const [currentPage, setCurrentPage] = useState(1);
@@ -134,7 +135,7 @@ const TeacherSpecialization = ({ embedded }) => {
         return Object.entries(stats).map(([spec, data]) => ({
             name: spec,
             count: data.count,
-            load: data.load
+            avgLoad: data.count > 0 ? (data.load / data.count) : 0
         })).sort((a, b) => b.count - a.count);
     }, [teacherList]);
 
@@ -347,6 +348,55 @@ const TeacherSpecialization = ({ embedded }) => {
         }
     };
 
+    const handleSyncMasterlist = async () => {
+        setIsSyncing(true);
+        try {
+            const response = await fetch(`/api/import-masterlist-teachers/${schoolId}`);
+            if (response.ok) {
+                const masterlistData = await response.json();
+
+                // Filter out teachers that already exist in the current teacherList
+                // Using full_name as the matching criteria (assuming it's relatively unique per school)
+                const existingNames = new Set(teacherList.map(t => t.full_name?.toUpperCase()));
+
+                const newTeachers = masterlistData.filter(t => !existingNames.has(t.full_name?.toUpperCase()));
+
+                if (newTeachers.length === 0) {
+                    alert("No missing teachers found. Your list is already synced with the masterlist.");
+                    setIsSyncing(false);
+                    return;
+                }
+
+                const mappedData = newTeachers.map((t, index) => ({
+                    control_num: 'SYNCED-' + Date.now() + index,
+                    full_name: t.full_name,
+                    position: t.position,
+                    specialization: '',
+                    load_hours: 0,
+                    load_minutes: 0,
+                    school_id: schoolId
+                }));
+
+                // Update local list
+                const totalLength = teacherList.length + mappedData.length;
+                setTeacherList(prev => [...prev, ...mappedData]);
+
+                // Go to last page sequentially
+                setCurrentPage(Math.ceil(totalLength / itemsPerPage));
+
+                alert(`Successfully synced ${newTeachers.length} new teacher(s) from the masterlist.`);
+            } else {
+                console.warn("Failed to sync teachers.");
+                alert("Failed to sync teachers from masterlist.");
+            }
+        } catch (e) {
+            console.error("Error syncing:", e);
+            alert("Error syncing teachers.");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     const handleAddTeacher = () => {
         if (!newTeacher.full_name || !newTeacher.position) {
             alert("Please enter Name and Position.");
@@ -354,7 +404,7 @@ const TeacherSpecialization = ({ embedded }) => {
         }
 
         const toAdd = {
-            control_num: `MANUAL-${Date.now()}`, // Temporary ID
+            control_num: `MANUAL - ${Date.now()} `, // Temporary ID
             school_id: schoolId,
             full_name: newTeacher.full_name,
             position: newTeacher.position,
@@ -483,7 +533,7 @@ const TeacherSpecialization = ({ embedded }) => {
     );
 
     return (
-        <div className={`min-h-screen font-sans pb-32 relative ${embedded ? '' : 'bg-slate-50'}`}>
+        <div className={`min - h - screen font - sans pb - 32 relative ${embedded ? '' : 'bg-slate-50'} `}>
             {/* Header */}
             {!embedded && (
                 <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
@@ -505,7 +555,7 @@ const TeacherSpecialization = ({ embedded }) => {
                 </div>
             )}
 
-            <div className={`px-5 relative z-20 max-w-5xl mx-auto space-y-6 ${embedded ? '' : '-mt-12'}`}>
+            <div className={`px - 5 relative z - 20 max - w - 5xl mx - auto space - y - 6 ${embedded ? '' : '-mt-12'} `}>
 
                 {/* --- NEW: SUMMARY DASHBOARD --- */}
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
@@ -531,8 +581,8 @@ const TeacherSpecialization = ({ embedded }) => {
                                             <span className="font-bold">{stat.count}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-slate-700 text-xs font-medium">
-                                            <span>Total Load:</span>
-                                            <span className="font-bold">{Number(stat.load).toFixed(1)} h</span>
+                                            <span>Avg Load:</span>
+                                            <span className="font-bold">{Number(stat.avgLoad).toFixed(1)} h</span>
                                         </div>
                                     </div>
                                 </div>
@@ -555,16 +605,58 @@ const TeacherSpecialization = ({ embedded }) => {
                         </div>
 
                         {(!isLocked && !viewOnly && !isReadOnly) && (
-                            <button onClick={() => setShowAddModal(true)} className="bg-green-50 text-green-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-green-100 transition-colors">
-                                <FiPlus /> Add Teacher
-                            </button>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSyncMasterlist}
+                                    disabled={isSyncing}
+                                    className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                                >
+                                    {isSyncing ? (
+                                        <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-700 rounded-full animate-spin" />
+                                    ) : (
+                                        <><FiRefreshCw /> Sync Masterlist</>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => setShowAddModal(true)}
+                                    className="bg-green-50 text-green-700 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-green-100 transition-colors"
+                                >
+                                    <FiPlus /> Add Teacher
+                                </button>
+                            </div>
                         )}
                     </div>
 
                     <div className="p-4 space-y-4 bg-slate-50/50">
                         {teacherList.length === 0 ? (
-                            <div className="p-8 text-center text-slate-400 text-sm bg-white rounded-2xl border border-dashed border-slate-200">
-                                No teachers found. Click "Add Teacher" to start.
+                            <div className="flex flex-col items-center justify-center p-12 bg-white rounded-2xl border-2 border-dashed border-slate-200 gap-4">
+                                <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-2">
+                                    <FiBriefcase size={32} />
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-700">No Teachers Found</h3>
+                                <p className="text-sm text-slate-500 text-center max-w-sm">
+                                    Start building your roster by importing data from the masterlist or adding teachers manually.
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-3 mt-2 w-full max-w-md justify-center">
+                                    <button
+                                        onClick={handleSyncMasterlist}
+                                        disabled={isSyncing || isLocked || viewOnly || isReadOnly}
+                                        className="flex-1 bg-[#004A99] text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-800 transition-colors shadow-md shadow-blue-900/10 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        {isSyncing ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        ) : (
+                                            <><FiRefreshCw /> Sync from Masterlist</>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowAddModal(true)}
+                                        disabled={isLocked || viewOnly || isReadOnly}
+                                        className="flex-1 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        ➕ Add Manually
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <>
@@ -573,7 +665,7 @@ const TeacherSpecialization = ({ embedded }) => {
                                     const realIndex = (currentPage - 1) * itemsPerPage + pIndex;
 
                                     return (
-                                        <div key={realIndex} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
+                                        <div key={teacher.iern || teacher.id || teacher.control_num || realIndex} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
                                             {/* Row 1: Name & Delete */}
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="flex-1">

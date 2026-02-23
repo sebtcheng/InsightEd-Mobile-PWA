@@ -60,6 +60,7 @@ const SchoolHeadDashboard = () => {
     // --- SINGLE SCHOOL VALIDATION STATE ---
     const [isValidating, setIsValidating] = useState(true); // Start with loading to prevent score flash
     const [showExcellentModal, setShowExcellentModal] = useState(false);
+    const [showHealthUpdatedModal, setShowHealthUpdatedModal] = useState(false);
 
     useEffect(() => {
         let timer;
@@ -139,7 +140,7 @@ const SchoolHeadDashboard = () => {
                             if (profileJson.data.data_health_score === 100 || profileJson.data.data_health_description === 'Excellent') {
                                 setShowExcellentModal(true);
                             } else {
-                                alert("Validation complete. Data Health Score updated.");
+                                setShowHealthUpdatedModal(true);
                             }
                         }
                     }
@@ -617,6 +618,27 @@ const SchoolHeadDashboard = () => {
                             </div>
                         )}
 
+                        {/* --- HEALTH SCORE UPDATED MODAL --- */}
+                        {showHealthUpdatedModal && (
+                            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-5 relative overflow-hidden border border-blue-200 dark:border-blue-900/40 text-center">
+                                    <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                                        <FiCheckSquare className="text-blue-600 w-8 h-8" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-slate-800 dark:text-white">Validation Complete</h3>
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                                        Data Health Score has been successfully updated.
+                                    </p>
+                                    <button
+                                        onClick={() => setShowHealthUpdatedModal(false)}
+                                        className="w-full py-3 rounded-xl bg-[#004A99] hover:bg-blue-800 text-white font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+                                    >
+                                        Got it
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* --- NEW UPDATE MODAL --- */}
                         {isUpdateAvailable && (
                             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
@@ -673,16 +695,18 @@ const SchoolHeadDashboard = () => {
                             </div>
 
                             {/* Data Health Score Highlight */}
-                            <div className={`col-span-1 p-4 rounded-2xl shadow-xl flex flex-col justify-center items-center text-center text-white relative overflow-hidden ${isValidating
-                                ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
-                                : schoolProfile?.data_health_score === 100
-                                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-600 dark:to-emerald-800 shadow-emerald-900/20'
-                                    : schoolProfile?.data_health_score >= 80
-                                        ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
-                                        : schoolProfile?.data_health_score >= 50
-                                            ? 'bg-gradient-to-br from-amber-500 to-amber-700 dark:from-amber-600 dark:to-amber-800 shadow-amber-900/20'
-                                            : 'bg-gradient-to-br from-red-500 to-red-700 dark:from-red-600 dark:to-red-800 shadow-red-900/20'
-                                }`}>
+                            <div
+                                onClick={() => !isValidating && handleValidateDataHealth(true)}
+                                className={`col-span-1 p-4 rounded-2xl shadow-xl flex flex-col justify-center items-center text-center text-white relative overflow-hidden cursor-pointer hover:shadow-2xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ${isValidating
+                                    ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
+                                    : schoolProfile?.data_health_score === 100
+                                        ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-emerald-600 dark:to-emerald-800 shadow-emerald-900/20'
+                                        : schoolProfile?.data_health_score >= 80
+                                            ? 'bg-gradient-to-br from-[#004A99] to-[#003377] dark:from-blue-600 dark:to-blue-800 shadow-blue-900/20'
+                                            : schoolProfile?.data_health_score >= 50
+                                                ? 'bg-gradient-to-br from-amber-500 to-amber-700 dark:from-amber-600 dark:to-amber-800 shadow-amber-900/20'
+                                                : 'bg-gradient-to-br from-red-500 to-red-700 dark:from-red-600 dark:to-red-800 shadow-red-900/20'
+                                    }`}>
                                 <div className="absolute top-0 right-0 p-2 opacity-10">
                                     <FiCheckSquare size={40} />
                                 </div>
@@ -694,7 +718,7 @@ const SchoolHeadDashboard = () => {
                                 ) : (
                                     <>
                                         <p className="text-2xl font-bold leading-none">{schoolProfile?.data_health_score ?? '--'}</p>
-                                        <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1">Health Score</p>
+                                        <p className="text-[10px] text-blue-200 font-bold uppercase tracking-wide mt-1 flex items-center gap-1">Health Score <span className="opacity-70 lowercase font-normal">(tap to refresh)</span></p>
                                     </>
                                 )}
                             </div>

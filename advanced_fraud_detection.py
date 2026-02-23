@@ -5,6 +5,12 @@ from sqlalchemy import create_engine, text
 from scipy.stats import zscore, chi2
 from sklearn.covariance import MinCovDet
 import sys
+import argparse
+
+# --- ARGUMENT PARSING ---
+parser = argparse.ArgumentParser(description='Advanced Fraud Detection')
+parser.add_argument('--school_id', type=str, help='Specific school ID to validate')
+args = parser.parse_args()
 
 # Database Connection
 DB_CONNECTION_STRING = "postgresql+psycopg2://Administrator1:pRZTbQ2T1JD7@stride-posgre-prod-01.postgres.database.azure.com:5432/insightEd"
@@ -16,7 +22,17 @@ def connect_and_load_data():
         # Load all columns to scan for correlations, but focus on school_profiles
         query = "SELECT * FROM school_profiles"
         df = pd.read_sql(query, engine)
-        print(f"Successfully loaded {len(df)} records.")
+        
+        # --- FILTER DATA IF SCHOOL_ID PROVIDED ---
+        if args.school_id:
+            df = df[df['school_id'].astype(str) == str(args.school_id)]
+            if df.empty:
+                print(f"No data found for school {args.school_id}")
+                sys.exit(0)
+            print(f"Successfully loaded {len(df)} records for school {args.school_id}.")
+        else:
+            print(f"Successfully loaded {len(df)} records (Full Batch).")
+            
         return df, engine
     except Exception as e:
         print(f"Error connecting to database: {e}")
