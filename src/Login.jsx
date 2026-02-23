@@ -197,42 +197,28 @@ const Login = () => {
 
         // --- NORMAL LOGIN (SMART SCHOOL ID STRATEGY) ---
         try {
-            let loginEmail = loginId.trim();
-            const isSchoolId = /^\d+$/.test(loginEmail); // Basic check if it's just numbers
+            const originalInput = loginId.trim();
+            const isSchoolId = /^\d+$/.test(originalInput);
 
-            // A. If it's a School ID, use the NEW LOOKUP API
-            if (isSchoolId) {
-                try {
-                    console.log(`Looking up email for School ID: ${loginEmail}...`);
-                    // Use the NEW backend endpoint to find the real email
-                    const lookupRes = await fetch(`/api/auth/lookup-email/${loginEmail}`);
-
-                    if (lookupRes.ok) {
-                        const data = await lookupRes.json();
-                        if (data.found && data.email) {
-                            console.log(`✅ Lookup found email: ${data.email}`);
-                            loginEmail = data.email; // Use the found email (e.g., 100001@insighted.app)
-                        } else {
-                            console.warn("❌ Lookup returned no email. Falling back to default.");
-                            // Fallback: Default to @deped.gov.ph if lookup fails (Legacy behavior)
-                            loginEmail = `${loginEmail}@deped.gov.ph`;
-                        }
-                    } else {
-                        console.warn("⚠️ Lookup API Error. Falling back to default.");
-                        loginEmail = `${loginEmail}@deped.gov.ph`;
-                    }
-                } catch (lookupErr) {
-                    console.error("Lookup Request Failed:", lookupErr);
-                    // Network error? Fallback to default
-                    loginEmail = `${loginEmail}@deped.gov.ph`;
-                }
-            }
-
-            // B. Proceed with Login (using either the typed email OR the looked-up email)
             await setPersistence(auth, browserLocalPersistence);
-            await signInWithEmailAndPassword(auth, loginEmail, password);
 
-            // The Listener will catch the Auth Change -> checkUserRole -> Navigate
+            if (isSchoolId) {
+                // 1. Try the new standard (@insighted.app)
+                try {
+                    await signInWithEmailAndPassword(auth, `${originalInput}@insighted.app`, password);
+                } catch (firstErr) {
+                    // 2. If it fails, instantly try the legacy domain (@deped.gov.ph)
+                    if (firstErr.code === 'auth/user-not-found' || firstErr.code === 'auth/invalid-credential') {
+                        console.log("Trying legacy deped.gov.ph email...");
+                        await signInWithEmailAndPassword(auth, `${originalInput}@deped.gov.ph`, password);
+                    } else {
+                        throw firstErr; // Throw other errors (like network issues or wrong password)
+                    }
+                }
+            } else {
+                // Standard email login (if they manually typed an @ symbol)
+                await signInWithEmailAndPassword(auth, originalInput, password);
+            }
         } catch (error) {
             console.error(error);
             // Friendly error message mapping
