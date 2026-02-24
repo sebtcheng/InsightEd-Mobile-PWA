@@ -133,6 +133,7 @@ const initDB = async () => {
     await pool.query(`
       ALTER TABLE school_profiles
       ADD COLUMN IF NOT EXISTS school_head_validation BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS multigrade_classes JSONB DEFAULT '[]'::jsonb,
       DROP COLUMN IF EXISTS data_health_score,
       DROP COLUMN IF EXISTS data_health_description,
       DROP COLUMN IF EXISTS forms_to_recheck;
@@ -281,6 +282,21 @@ const initDB = async () => {
       ADD COLUMN IF NOT EXISTS has_buildable_space BOOLEAN;
     `);
     console.log("✅ DB Init: Buildable Spaces schema verified.");
+
+    // --- MIGRATION: ADD SDO SCHOOL DOCUMENTS ---
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS school_documents (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        pending_id INT, 
+        doc_type TEXT NOT NULL, 
+        file_data TEXT, 
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_school_documents_school_id ON school_documents(school_id);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_school_documents_pending_id ON school_documents(pending_id);`);
+    console.log("✅ DB Init: School Documents schema verified.");
 
     // --- MIGRATION: ADD FACILITY REPAIRS ---
     await pool.query(`
@@ -3280,6 +3296,74 @@ app.post('/api/sdo/submit-school', async (req, res) => {
   }
 });
 
+// POST - SDO Upload Document (Base64)
+app.post('/api/sdo/upload-document', async (req, res) => {
+  const { pending_id, school_id, type, base64 } = req.body;
+
+  if (!type || !base64) {
+    return res.status(400).json({ error: "Document type and base64 data are required" });
+  }
+
+  try {
+    const query = `
+      INSERT INTO school_documents (pending_id, school_id, doc_type, file_data)
+      VALUES ($1, $2, $3, $4)
+    `;
+    await pool.query(query, [pending_id || null, school_id || null, type, base64]);
+    console.log(`✅ Document uploaded directly to Database: ${type} for School ID: ${school_id || 'Pending ' + pending_id}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ SDO Document Upload Error:", err.message);
+    res.status(500).json({ error: "Failed to save document" });
+  }
+});
+
+// GET - SDO Retrieve Document (Base64)
+app.get('/api/sdo/document/:id/:type', async (req, res) => {
+  const { id, type } = req.params;
+  const { isPending } = req.query; // e.g. ?isPending=true
+
+  try {
+    let query = '';
+    let params = [id, type];
+
+    if (isPending === 'true') {
+      query = 'SELECT file_data FROM school_documents WHERE pending_id = $1 AND doc_type = $2 ORDER BY created_at DESC LIMIT 1';
+    } else {
+      query = 'SELECT file_data FROM school_documents WHERE school_id = $1 AND doc_type = $2 ORDER BY created_at DESC LIMIT 1';
+    }
+
+    const docRes = await pool.query(query, params);
+
+    if (docRes.rows.length === 0) {
+      return res.status(404).json({ error: "Document not found" });
+    }
+
+    const base64Str = docRes.rows[0].file_data;
+
+    // Handle standard data URI format: data:application/pdf;base64,...
+    const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+
+    if (matches && matches.length === 3) {
+      const contentType = matches[1];
+      const buffer = Buffer.from(matches[2], 'base64');
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_${id}.pdf"`);
+      res.send(buffer);
+    } else {
+      // Fallback if the string doesn't have the mime type prefix
+      const buffer = Buffer.from(base64Str, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${type}_${id}.pdf"`);
+      res.send(buffer);
+    }
+  } catch (err) {
+    console.error("❌ SDO Document Fetch Error:", err.message);
+    res.status(500).json({ error: "Failed to fetch document" });
+  }
+});
+
 // GET - SDO Fetch Pending Schools (by SDO user)
 app.get('/api/sdo/pending-schools', async (req, res) => {
   const { sdo_uid } = req.query;
@@ -5905,7 +5989,7 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
                 classes_kinder, classes_grade_1, classes_grade_2, classes_grade_3,
                 classes_grade_4, classes_grade_5, classes_grade_6,
                 classes_grade_7, classes_grade_8, classes_grade_9, classes_grade_10,
-                classes_grade_11, classes_grade_12,
+                classes_grade_11, classes_grade_12, multigrade_classes,
                 
                 cnt_less_kinder, cnt_within_kinder, cnt_above_kinder,
                 cnt_less_g1, cnt_within_g1, cnt_above_g1,
@@ -5955,7 +6039,8 @@ app.get('/api/organized-classes/:uid', async (req, res) => {
         cnt_less_g9: row.cnt_less_g9, cnt_within_g9: row.cnt_within_g9, cnt_above_g9: row.cnt_above_g9,
         cnt_less_g10: row.cnt_less_g10, cnt_within_g10: row.cnt_within_g10, cnt_above_g10: row.cnt_above_g10,
         cnt_less_g11: row.cnt_less_g11, cnt_within_g11: row.cnt_within_g11, cnt_above_g11: row.cnt_above_g11,
-        cnt_less_g12: row.cnt_less_g12, cnt_within_g12: row.cnt_within_g12, cnt_above_g12: row.cnt_above_g12
+        cnt_less_g12: row.cnt_less_g12, cnt_within_g12: row.cnt_within_g12, cnt_above_g12: row.cnt_above_g12,
+        multigrade_classes: typeof row.multigrade_classes === 'string' ? JSON.parse(row.multigrade_classes) : (row.multigrade_classes || [])
       }
     });
 
@@ -5991,6 +6076,7 @@ app.post('/api/save-organized-classes', async (req, res) => {
                 cnt_less_g10 = $42, cnt_within_g10 = $43, cnt_above_g10 = $44,
                 cnt_less_g11 = $45, cnt_within_g11 = $46, cnt_above_g11 = $47,
                 cnt_less_g12 = $48, cnt_within_g12 = $49, cnt_above_g12 = $50,
+                multigrade_classes = $54,
 
                 updated_at = CURRENT_TIMESTAMP
             WHERE school_id = $1
@@ -6016,7 +6102,9 @@ app.post('/api/save-organized-classes', async (req, res) => {
       data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
       data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
 
-      data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0
+      data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0,
+
+      JSON.stringify(data.multigradeClasses) || '[]'
     ]);
 
     if (result.rowCount === 0) {
@@ -6052,7 +6140,9 @@ app.post('/api/save-organized-classes', async (req, res) => {
           data.cntLessG11 || 0, data.cntWithinG11 || 0, data.cntAboveG11 || 0,
           data.cntLessG12 || 0, data.cntWithinG12 || 0, data.cntAboveG12 || 0,
 
-          data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0
+          data.cntLessKinder || 0, data.cntWithinKinder || 0, data.cntAboveKinder || 0,
+
+          JSON.stringify(data.multigradeClasses) || '[]'
         ]);
 
         // 2. Snapshot Update (Secondary)

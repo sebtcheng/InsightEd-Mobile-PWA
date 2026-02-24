@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 import BottomNav from './BottomNav';
 import PageTransition from '../components/PageTransition';
 import { FiMapPin, FiCheck, FiX, FiClock, FiSave, FiList } from 'react-icons/fi';
@@ -80,9 +78,10 @@ const SchoolManagement = () => {
     const [mapStatus, setMapStatus] = useState(''); // Idle, Searching..., Found
     const [submitting, setSubmitting] = useState(false);
     const [pendingSchools, setPendingSchools] = useState([]);
-    const [uploading, setUploading] = useState(false);
+    const [uploading, setUploading] = useState(false); // Indicates local processing now
     const [searchLoading, setSearchLoading] = useState(false);
     const [isConverting, setIsConverting] = useState(false);
+    const [documentPayload, setDocumentPayload] = useState(null); // Stores Base64 string
 
     // Confirmation Modal State
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -415,7 +414,7 @@ const SchoolManagement = () => {
         }
     };
 
-    const handleFileUpload = async (e) => {
+    const handleFileUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -432,20 +431,22 @@ const SchoolManagement = () => {
         }
 
         setUploading(true);
-        try {
-            const fileRef = ref(storage, `special_orders/${Date.now()}_${file.name}`);
-            const snapshot = await uploadBytes(fileRef, file);
-            const downloadURL = await getDownloadURL(snapshot.ref);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result;
+            setDocumentPayload(base64String);
 
-            setFormData(prev => ({ ...prev, special_order: downloadURL }));
-            console.log("File uploaded:", downloadURL);
-        } catch (error) {
-            console.error("Upload failed:", error);
-            alert("Failed to upload file. Please try again.");
-            e.target.value = '';
-        } finally {
+            // Just set a dummy URL so validation passes and UI shows "uploaded"
+            setFormData(prev => ({ ...prev, special_order: 'base64_ready' }));
             setUploading(false);
-        }
+        };
+        reader.onerror = () => {
+            console.error("Failed to read file");
+            alert("Failed to process file locally.");
+            setUploading(false);
+            e.target.value = '';
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleInitialSubmit = (e) => {
@@ -504,6 +505,29 @@ const SchoolManagement = () => {
             const data = await res.json();
 
             if (res.ok) {
+                // SEQUENTIAL UPLOAD FOR DOCUMENT
+                if (documentPayload && data.pending_id) {
+                    try {
+                        const docRes = await fetch('/api/sdo/upload-document', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                pending_id: data.pending_id,
+                                school_id: formData.school_id, // Important for conversion that might bypass pending
+                                type: 'SPECIAL_ORDER',
+                                base64: documentPayload
+                            })
+                        });
+                        if (!docRes.ok) {
+                            console.error("Document upload failed after school creation");
+                            alert("School was submitted, but the Special Order document failed to upload.");
+                        }
+                    } catch (docErr) {
+                        console.error("Document upload exception:", docErr);
+                        alert("School was submitted, but an error occurred uploading the Special Order document.");
+                    }
+                }
+
                 alert(isConverting ? 'Converted school application submitted successfully! Awaiting approval.' : 'School submitted successfully! Awaiting admin approval.');
                 // Reset form
                 setFormData({
@@ -519,6 +543,7 @@ const SchoolManagement = () => {
                     curricular_offering: '',
                     special_order: '',
                 });
+                setDocumentPayload(null); // Clear payload
                 setMapPosition([14.5995, 120.9842]);
                 setIsConverting(false); // Reset conversion flag
                 fetchPendingSchools(); // Refresh list
@@ -586,6 +611,7 @@ const SchoolManagement = () => {
                                     curricular_offering: '',
                                     special_order: '',
                                 });
+                                setDocumentPayload(null);
                                 setMapPosition([14.5995, 120.9842]);
                             }}
                             className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${activeView === 'form'
@@ -681,6 +707,7 @@ const SchoolManagement = () => {
                                                 curricular_offering: '',
                                                 special_order: '',
                                             });
+                                            setDocumentPayload(null);
                                             setMapPosition([14.5995, 120.9842]);
                                         }}
                                         className="text-sm font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -919,13 +946,33 @@ const SchoolManagement = () => {
                                 </div>
 
                                 <div className="bg-slate-100 dark:bg-slate-700 p-4 rounded-xl flex flex-wrap justify-between items-center gap-4 text-sm font-mono">
-                                    <div className="flex items-center gap-6">
-                                        <span className="font-bold text-slate-600 dark:text-slate-300">
-                                            Lat: <span className="text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 px-2 py-1 rounded ml-2">{mapPosition[0].toFixed(6)}</span>
-                                        </span>
-                                        <span className="font-bold text-slate-600 dark:text-slate-300">
-                                            Lng: <span className="text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 px-2 py-1 rounded ml-2">{mapPosition[1].toFixed(6)}</span>
-                                        </span>
+                                    <div className="flex sm:flex-row flex-col items-start sm:items-center gap-4">
+                                        <label className="font-bold text-slate-600 dark:text-slate-300 flex items-center">
+                                            Lat:
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={mapPosition[0]}
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    setMapPosition([isNaN(val) ? 0 : val, mapPosition[1]]);
+                                                }}
+                                                className="text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 px-2 py-1.5 rounded ml-2 w-32 outline-none border border-slate-200 dark:border-slate-600 focus:border-blue-500 font-mono text-sm"
+                                            />
+                                        </label>
+                                        <label className="font-bold text-slate-600 dark:text-slate-300 flex items-center">
+                                            Lng:
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={mapPosition[1]}
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    setMapPosition([mapPosition[0], isNaN(val) ? 0 : val]);
+                                                }}
+                                                className="text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-800 px-2 py-1.5 rounded ml-2 w-32 outline-none border border-slate-200 dark:border-slate-600 focus:border-blue-500 font-mono text-sm"
+                                            />
+                                        </label>
                                     </div>
                                     <div className="text-xs text-slate-400 dark:text-slate-500 italic">
                                         {mapStatus}

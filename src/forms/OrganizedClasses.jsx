@@ -94,6 +94,7 @@ const OrganizedClasses = ({ embedded }) => {
         cntLessG12: 0, cntWithinG12: 0, cntAboveG12: 0
     });
     const [originalData, setOriginalData] = useState(null);
+    const [multigradeClasses, setMultigradeClasses] = useState([]);
 
     const goBack = () => {
         if (isDummy) {
@@ -276,6 +277,7 @@ const OrganizedClasses = ({ embedded }) => {
 
                             setFormData(prev => ({ ...prev, ...newFormData }));
                             setClassSizeData(prev => ({ ...prev, ...newClassSize }));
+                            setMultigradeClasses(dbData.multigrade_classes || []);
 
                             // Create Structured Cache
                             const cachePayload = {
@@ -343,8 +345,8 @@ const OrganizedClasses = ({ embedded }) => {
         const off = getOfferingLower();
         return off.includes("senior") || off.includes("secondary") || off.includes("k-12") || isPermissive();
     };
-    const getTotalClasses = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0);
-    const getElemTotal = () => (formData.kinder || 0) + (formData.g1 || 0) + (formData.g2 || 0) + (formData.g3 || 0) + (formData.g4 || 0) + (formData.g5 || 0) + (formData.g6 || 0);
+    const getTotalClasses = () => Object.values(formData).reduce((a, b) => a + (parseInt(b) || 0), 0) + multigradeClasses.length;
+    const getElemTotal = () => (formData.kinder || 0) + (formData.g1 || 0) + (formData.g2 || 0) + (formData.g3 || 0) + (formData.g4 || 0) + (formData.g5 || 0) + (formData.g6 || 0) + multigradeClasses.length;
     const getJHSTotal = () => (formData.g7 || 0) + (formData.g8 || 0) + (formData.g9 || 0) + (formData.g10 || 0);
     const getSHSTotal = () => (formData.g11 || 0) + (formData.g12 || 0);
 
@@ -368,6 +370,27 @@ const OrganizedClasses = ({ embedded }) => {
         const intValue = cleanValue === '' ? '' : parseInt(cleanValue, 10);
 
         setClassSizeData(prev => ({ ...prev, [name]: intValue }));
+    };
+
+    const handleAddMultigrade = () => {
+        setMultigradeClasses(prev => [...prev, { id: Date.now(), grades: [] }]);
+    };
+
+    const handleRemoveMultigrade = (id) => {
+        setMultigradeClasses(prev => prev.filter(mg => mg.id !== id));
+    };
+
+    const handleToggleGrade = (id, gradeNum) => {
+        setMultigradeClasses(prev => prev.map(mg => {
+            if (mg.id === id) {
+                const hasGrade = mg.grades.includes(gradeNum);
+                const newGrades = hasGrade
+                    ? mg.grades.filter(g => g !== gradeNum)
+                    : [...mg.grades, gradeNum];
+                return { ...mg, grades: newGrades };
+            }
+            return mg;
+        }));
     };
 
     // --- ACTIONS ---
@@ -418,7 +441,8 @@ const OrganizedClasses = ({ embedded }) => {
             g4: showElem() ? formData.g4 : 0, g5: showElem() ? formData.g5 : 0, g6: showElem() ? formData.g6 : 0,
             g7: showJHS() ? formData.g7 : 0, g8: showJHS() ? formData.g8 : 0, g9: showJHS() ? formData.g9 : 0, g10: showJHS() ? formData.g10 : 0,
             g11: showSHS() ? formData.g11 : 0, g12: showSHS() ? formData.g12 : 0,
-            ...classSizeData
+            ...classSizeData,
+            multigradeClasses: multigradeClasses
         };
 
         if (!navigator.onLine) {
@@ -515,6 +539,77 @@ const OrganizedClasses = ({ embedded }) => {
                                 ))}
                             </div>
                         </GridSection>
+                    )}
+
+                    {/* --- MULTIGRADE CLASSES --- */}
+                    {showElem() && (
+                        <div className="mt-8 p-6 bg-gray-50 rounded-xl border border-gray-200 mb-6">
+                            <h3 className="text-base font-bold text-slate-800 mb-4">Multigrade Classes (Optional)</h3>
+
+                            {(!isReadOnly && !isLocked && !viewOnly && !isDummy) ? (
+                                <div>
+                                    {multigradeClasses.map((mg) => (
+                                        <div key={mg.id} className="bg-white p-4 rounded-lg shadow-sm border border-slate-100 mb-3 flex flex-col md:flex-row gap-4 items-start md:items-center">
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold text-slate-500 mb-2">Select Combined Grades</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {[1, 2, 3, 4, 5, 6].map(g => {
+                                                        const isGradeTakenByOther = multigradeClasses.some(otherMg => otherMg.id !== mg.id && otherMg.grades.includes(g));
+                                                        return (
+                                                            <label key={g} title={isGradeTakenByOther ? "Grade already used in another combination" : ""} className={`flex items-center gap-1 px-2 py-1 rounded border ${isGradeTakenByOther ? 'bg-slate-100 border-slate-200 cursor-not-allowed opacity-60' : 'bg-slate-50 border-slate-200 cursor-pointer hover:bg-blue-50'} transition-colors`}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={mg.grades.includes(g)}
+                                                                    disabled={isGradeTakenByOther}
+                                                                    onChange={() => handleToggleGrade(mg.id, g)}
+                                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 disabled:cursor-not-allowed"
+                                                                />
+                                                                <span className={`text-sm font-medium ${isGradeTakenByOther ? 'text-slate-400' : 'text-slate-700'}`}>Grade {g}</span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div className="w-full md:w-auto flex justify-end">
+                                                <button
+                                                    onClick={() => handleRemoveMultigrade(mg.id)}
+                                                    className="text-red-500 hover:text-red-700 p-2 md:mt-5 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                                    title="Remove Combination"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <button
+                                        onClick={handleAddMultigrade}
+                                        className="mt-2 text-sm font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 py-2 px-4 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                    >
+                                        + Add Multigrade Combination
+                                    </button>
+                                </div>
+                            ) : (
+                                <div>
+                                    {multigradeClasses.length === 0 ? (
+                                        <p className="text-gray-500 italic">No multigrade classes organized.</p>
+                                    ) : (
+                                        <ul className="list-disc pl-5 space-y-2">
+                                            {multigradeClasses.map(mg => {
+                                                const sortedGrades = [...mg.grades].sort((a, b) => a - b);
+                                                const gradeString = sortedGrades.join(', ');
+                                                return (
+                                                    <li key={mg.id} className="text-slate-700">
+                                                        <span className="font-bold">Grades {gradeString}</span>{' '}
+                                                        <span className="font-medium text-slate-500">= 1 Class</span>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     )}
 
                     {/* --- JHS --- */}

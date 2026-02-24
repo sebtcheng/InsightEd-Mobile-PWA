@@ -533,7 +533,7 @@ const TeacherSpecialization = ({ embedded }) => {
     );
 
     return (
-        <div className={`min - h - screen font - sans pb - 32 relative ${embedded ? '' : 'bg-slate-50'} `}>
+        <div className={`min-h-screen font-sans pb-48 relative ${embedded ? '' : 'bg-slate-50'}`}>
             {/* Header */}
             {!embedded && (
                 <div className="bg-[#004A99] px-6 pt-10 pb-20 rounded-b-[3rem] shadow-xl relative overflow-hidden">
@@ -762,8 +762,8 @@ const TeacherSpecialization = ({ embedded }) => {
                                 })}
 
                                 {/* PAGINATION CONTROLS */}
-                                {totalPages > 1 && (
-                                    <div className="flex items-center justify-center gap-2 pt-4">
+                                {teacherList.length > 0 && (
+                                    <div className="flex flex-wrap items-center justify-center gap-2 pt-4 pb-12 mb-12">
                                         <button
                                             onClick={() => setCurrentPage(1)}
                                             disabled={currentPage === 1}

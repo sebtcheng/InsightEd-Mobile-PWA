@@ -680,7 +680,7 @@ const AdminDashboard = () => {
                                             <div className="mt-4">
                                                 <span className="text-sm text-gray-500 block mb-1 font-bold">Special Order:</span>
                                                 <a
-                                                    href={school.special_order}
+                                                    href={`/api/sdo/document/${school.pending_id}/SPECIAL_ORDER?isPending=true`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-semibold transition-colors border border-red-200"
@@ -746,7 +746,7 @@ const AdminDashboard = () => {
                                         <div className="mt-3">
                                             <span className="text-xs text-gray-500 block mb-1 font-bold tracking-wide uppercase">Special Order:</span>
                                             <a
-                                                href={school.special_order}
+                                                href={`/api/sdo/document/${school.school_id}/SPECIAL_ORDER`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-[11px] font-semibold transition-colors border border-red-200"
