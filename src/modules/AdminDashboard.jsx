@@ -66,6 +66,10 @@ const AdminDashboard = () => {
     const [maintenanceMode, setMaintenanceMode] = useState(false);
     const [togglingMaintenance, setTogglingMaintenance] = useState(false);
 
+    // Fraud Detection State
+    const [isRunningFraud, setIsRunningFraud] = useState(false);
+    const [fraudOutput, setFraudOutput] = useState(null);
+
     // --- FETCH DATA ---
     const fetchPendingSchools = async () => {
         try {
@@ -463,6 +467,36 @@ const AdminDashboard = () => {
         }
     };
 
+    const handleRunFraudDetection = async () => {
+        if (!window.confirm("Run Advanced Fraud Detection global scan? This will validate input data across all schools and recalculate health scores.")) return;
+
+        setIsRunningFraud(true);
+        setFraudOutput(null);
+        try {
+            const user = auth.currentUser;
+            const res = await fetch('/api/admin/run-fraud-detection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminUid: user ? user.uid : 'unknown' })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setFraudOutput(data.output);
+                alert("✅ Global Fraud Detection Completed Successfully!");
+                fetchAllData(); // Refresh counts/logs
+            } else {
+                const err = await res.json();
+                alert("❌ Execution Failed: " + (err.details || err.error));
+            }
+        } catch (error) {
+            console.error(error);
+            alert("❌ Network Error: " + error.message);
+        } finally {
+            setIsRunningFraud(false);
+        }
+    };
+
     // --- RENDERERS ---
 
     const renderOverview = () => (
@@ -542,6 +576,40 @@ const AdminDashboard = () => {
                     {togglingMaintenance ? 'Saving...' : (maintenanceMode ? 'Turn OFF' : 'Turn ON')}
                 </button>
             </div>
+
+            {/* FRAUD DETECTION MODE CARD */}
+            <div className={`mt-4 p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between transition-colors bg-white hover:border-blue-100`}>
+                <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-full ${isRunningFraud ? 'bg-blue-100 text-blue-600 animate-pulse' : 'bg-blue-50 text-blue-500'}`}>
+                        <FiActivity size={20} />
+                    </div>
+                    <div>
+                        <h3 className={`text-xs font-bold uppercase tracking-wider text-blue-600`}>Advanced Fraud Detection</h3>
+                        <p className={`text-xs mb-1 text-gray-500`}>
+                            {isRunningFraud ? 'Processing global scanning...' : 'Run validation mode to check health score problems.'}
+                        </p>
+                    </div>
+                </div>
+                <button
+                    onClick={handleRunFraudDetection}
+                    disabled={isRunningFraud}
+                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 bg-[#004A99] text-white hover:bg-blue-800`}
+                >
+                    {isRunningFraud ? 'Running...' : 'Run Scan'}
+                </button>
+            </div>
+
+            {fraudOutput && (
+                <div className="mt-2 p-3 bg-slate-900 rounded-lg border border-slate-700 font-mono text-[9px] text-green-400 max-h-40 overflow-y-auto overflow-x-hidden">
+                    <div className="flex justify-between items-center mb-1 text-slate-500 border-b border-slate-800 pb-1">
+                        <span>Terminal Output</span>
+                        <button onClick={() => setFraudOutput(null)} className="hover:text-white">Clear</button>
+                    </div>
+                    {fraudOutput.split('\n').map((line, i) => (
+                        <p key={i} className="whitespace-pre-wrap">{line}</p>
+                    ))}
+                </div>
+            )}
 
             {/* Recent Activity Mini-Feed */}
             <div className='flex justify-between items-end mt-6 mb-2'>

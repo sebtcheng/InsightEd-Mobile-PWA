@@ -1718,8 +1718,6 @@ app.post('/api/validate-school-health', async (req, res) => {
 
   console.log(`Running Fraud Detection for School: ${school_id}...`);
 
-  // Explicitly resolve the script. On some VMs the app structure changes when deployed.
-  // We'll check multiple common paths (current dir, parent dir, or explicitly the root).
   const rootDir = process.cwd();
   const fileDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1727,12 +1725,7 @@ app.post('/api/validate-school-health', async (req, res) => {
   if (!fs.existsSync(scriptPath)) {
     scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
   }
-  if (!fs.existsSync(scriptPath)) {
-    // Ultimate fallback if restructuring happened on VM
-    scriptPath = path.join(rootDir, '..', 'advanced_fraud_detection.py');
-  }
 
-  // Use python3 on non-windows systems, or an environment variable override
   const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
   const command = `"${pythonCmd}" "${scriptPath}" --school_id "${school_id}"`;
 
@@ -1748,13 +1741,53 @@ app.post('/api/validate-school-health', async (req, res) => {
       });
     }
 
-    // Log stdout/stderr but don't fail if just warnings
     console.log(`Validator Output: ${stdout}`);
     if (stderr) console.warn(`Validator Warnings/Errors: ${stderr}`);
 
     res.json({ success: true, message: 'Validation completed successfully.', output: stdout });
   });
 });
+
+// --- RUN GLOBAL FRAUD DETECTION ---
+app.post('/api/admin/run-fraud-detection', async (req, res) => {
+  const { adminUid } = req.body;
+
+  console.log(`Admin ${adminUid} is triggering Global Fraud Detection...`);
+
+  const rootDir = process.cwd();
+  const fileDir = path.dirname(fileURLToPath(import.meta.url));
+
+  let scriptPath = path.join(rootDir, 'advanced_fraud_detection.py');
+  if (!fs.existsSync(scriptPath)) {
+    scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
+  }
+
+  const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
+  const command = `"${pythonCmd}" "${scriptPath}"`; // No school_id = Full Batch
+
+  console.log(`Executing Global Fraud Detection: ${command}`);
+
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).json({
+        error: 'Global Fraud Detection failed to execute.',
+        details: stderr || error.message
+      });
+    }
+
+    console.log(`Global Fraud Detection Output: ${stdout}`);
+    if (stderr) console.warn(`Global Fraud Detection Warnings: ${stderr}`);
+
+    res.json({
+      success: true,
+      message: 'Global Fraud Detection completed successfully.',
+      output: stdout
+    });
+  });
+});
+
+
 
 // --- HELPER: Auto-Fill Teachers from Master List ---
 const autoFillSchoolTeachers = async (schoolId) => {
