@@ -452,7 +452,7 @@ const SchoolManagement = () => {
         e.preventDefault();
 
         // Validate all required fields
-        const requiredFields = ['school_id', 'school_name', 'district', 'province', 'municipality', 'barangay', 'curricular_offering'];
+        const requiredFields = ['school_id', 'school_name', 'district', 'province', 'municipality', 'barangay', 'curricular_offering', 'special_order'];
         const missing = requiredFields.filter(field => !formData[field]);
 
         if (missing.length > 0) {
@@ -855,7 +855,7 @@ const SchoolManagement = () => {
                             {/* Special Order Upload */}
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
-                                    Special Order (PDF) <span className="text-xs text-slate-500">(Max 5MB)</span>
+                                    Special Order (PDF) * <span className="text-xs text-slate-500">(Max 5MB)</span>
                                 </label>
                                 <div className="flex items-center gap-4">
                                     <input

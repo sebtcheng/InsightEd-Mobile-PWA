@@ -1439,20 +1439,34 @@ app.post('/api/validate-school-health', async (req, res) => {
 
   console.log(`Running Fraud Detection for School: ${school_id}...`);
 
-  // Assuming the python script is in the parent directory or specific path
-  // Adjust path as needed. Based on file system, it's in the root of the project.
-  // api/index.js is in api/ folder, so script is ../advanced_fraud_detection.py
-  // But usually running from root context?
-  // Let's assume standard execution from project root if possible, or use absolute path.
-  // The user runs `npm run dev:full` from `c:\Users\user\OneDrive - Department of Education\001 DepEd Seb\InsightED\InsightEd-Mobile-PWA`
+  // Explicitly resolve the script. On some VMs the app structure changes when deployed.
+  // We'll check multiple common paths (current dir, parent dir, or explicitly the root).
+  const rootDir = process.cwd();
+  const fileDir = path.dirname(fileURLToPath(import.meta.url));
 
-  const scriptPath = path.join(path.resolve(), 'advanced_fraud_detection.py');
-  const command = `python "${scriptPath}" --school_id "${school_id}"`;
+  let scriptPath = path.join(rootDir, 'advanced_fraud_detection.py');
+  if (!fs.existsSync(scriptPath)) {
+    scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
+  }
+  if (!fs.existsSync(scriptPath)) {
+    // Ultimate fallback if restructuring happened on VM
+    scriptPath = path.join(rootDir, '..', 'advanced_fraud_detection.py');
+  }
+
+  // Use python3 on non-windows systems, or an environment variable override
+  const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
+  const command = `"${pythonCmd}" "${scriptPath}" --school_id "${school_id}"`;
+
+  console.log(`Executing validation command: ${command}`);
 
   exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`exec error: ${error}`);
-      return res.status(500).json({ error: 'Validation failed', details: stderr || error.message });
+      return res.status(500).json({
+        error: 'Validation failed to execute.',
+        commandAttempted: command,
+        details: stderr || error.message
+      });
     }
 
     // Log stdout/stderr but don't fail if just warnings
@@ -3222,7 +3236,7 @@ app.post('/api/sdo/submit-school', async (req, res) => {
     district,
     province,
     municipality,
-    legislative_district,
+    leg_district,
     barangay,
     street_address,
     mother_school_id,
@@ -3242,14 +3256,14 @@ app.post('/api/sdo/submit-school', async (req, res) => {
   try {
     const result = await pool.query(`
       INSERT INTO pending_schools (
-        school_id, school_name, region, division, district, province, municipality, legislative_district,
+        school_id, school_name, region, division, district, province, municipality, leg_district,
         barangay, street_address, mother_school_id, curricular_offering,
         latitude, longitude, submitted_by, submitted_by_name, special_order
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       RETURNING pending_id
     `, [
-      school_id, school_name, region, division, district, province, municipality, legislative_district,
+      school_id, school_name, region, division, district, province, municipality, leg_district,
       barangay, street_address, mother_school_id, curricular_offering,
       latitude, longitude, submitted_by, submitted_by_name, special_order
     ]);
@@ -3431,14 +3445,14 @@ app.post('/api/admin/approve-school/:pending_id', async (req, res) => {
     // 2. Insert into schools table
     await pool.query(`
       INSERT INTO schools (
-        school_id, school_name, region, division, district, province, municipality, legislative_district,
+        school_id, school_name, region, division, district, province, municipality, leg_district,
         barangay, street_address, mother_school_id, curricular_offering, latitude, longitude, special_order
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       ON CONFLICT (school_id) DO NOTHING
     `, [
       school.school_id, school.school_name, school.region, school.division, school.district,
-      school.province, school.municipality, school.legislative_district, school.barangay,
+      school.province, school.municipality, school.leg_district, school.barangay,
       school.street_address, school.mother_school_id, school.curricular_offering,
       school.latitude, school.longitude, school.special_order
     ]);
@@ -9042,16 +9056,18 @@ app.get('/api/migrate-special-order-schema', async (req, res) => {
     const client = await pool.connect();
     const results = [];
 
-    // 1. Add special_order to pending_schools
+    // 1. Add special_order and legislative_district to pending_schools
     try {
       await client.query('ALTER TABLE "pending_schools" ADD COLUMN IF NOT EXISTS special_order TEXT');
-      results.push("Added special_order to pending_schools");
+      await client.query('ALTER TABLE "pending_schools" ADD COLUMN IF NOT EXISTS legislative_district VARCHAR(100)');
+      results.push("Added special_order and legislative_district to pending_schools");
     } catch (e) { results.push(`Failed pending_schools: ${e.message}`); }
 
-    // 2. Add special_order to schools
+    // 2. Add special_order and legislative_district to schools
     try {
       await client.query('ALTER TABLE "schools" ADD COLUMN IF NOT EXISTS special_order TEXT');
-      results.push("Added special_order to schools");
+      await client.query('ALTER TABLE "schools" ADD COLUMN IF NOT EXISTS legislative_district VARCHAR(100)');
+      results.push("Added special_order and legislative_district to schools");
     } catch (e) { results.push(`Failed schools: ${e.message}`); }
 
     client.release();

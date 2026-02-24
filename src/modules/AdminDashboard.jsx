@@ -667,17 +667,6 @@ const AdminDashboard = () => {
                                                 {school.school_id}
                                             </span>
                                             <h3 className="text-xl font-bold text-slate-800">{school.school_name}</h3>
-                                            {school.special_order && (
-                                                <a
-                                                    href={school.special_order}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="ml-2 text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded font-bold hover:bg-indigo-100 flex items-center gap-1"
-                                                    title="View Special Order PDF"
-                                                >
-                                                    📎 Special Order
-                                                </a>
-                                            )}
                                         </div>
                                         <p className="text-sm text-slate-500 mb-4 flex items-center gap-2">
                                             <FiMapPin /> {school.municipality}, {school.province}
@@ -687,6 +676,25 @@ const AdminDashboard = () => {
                                             <span className="bg-slate-100 px-2 py-1 rounded">Type: {school.curricular_offering}</span>
                                             <span className="bg-slate-100 px-2 py-1 rounded">By: {school.submitted_by_name}</span>
                                         </div>
+                                        {school.special_order ? (
+                                            <div className="mt-4">
+                                                <span className="text-sm text-gray-500 block mb-1 font-bold">Special Order:</span>
+                                                <a
+                                                    href={school.special_order}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-sm font-semibold transition-colors border border-red-200"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                    View PDF
+                                                </a>
+                                            </div>
+                                        ) : (
+                                            <div className="mt-4">
+                                                <span className="text-sm text-gray-500 block mb-1 font-bold">Special Order:</span>
+                                                <span className="text-xs text-slate-400 italic">No document uploaded</span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex gap-2">
                                         <button
@@ -728,24 +736,32 @@ const AdminDashboard = () => {
                                             }`}>
                                             {school.status}
                                         </span>
-                                        {school.special_order && (
-                                            <a
-                                                href={school.special_order}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="ml-2 text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded font-bold hover:bg-indigo-100 flex items-center gap-1"
-                                                title="View Special Order PDF"
-                                                onClick={(e) => e.stopPropagation()} // Prevent card click if any
-                                            >
-                                                📎 Special Order
-                                            </a>
-                                        )}
                                     </div>
                                     <div className="text-xs text-slate-500 mt-1 flex gap-4">
                                         <span>ID: {school.school_id}</span>
                                         <span>Reviewed by: {school.reviewed_by_name}</span>
                                         <span>{new Date(school.reviewed_at).toLocaleDateString()}</span>
                                     </div>
+                                    {school.special_order ? (
+                                        <div className="mt-3">
+                                            <span className="text-xs text-gray-500 block mb-1 font-bold tracking-wide uppercase">Special Order:</span>
+                                            <a
+                                                href={school.special_order}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-[11px] font-semibold transition-colors border border-red-200"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                View PDF
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div className="mt-3">
+                                            <span className="text-xs text-gray-500 block mb-1 font-bold tracking-wide uppercase">Special Order:</span>
+                                            <span className="text-[11px] text-slate-400 italic">No document uploaded</span>
+                                        </div>
+                                    )}
                                     {school.status === 'rejected' && school.rejection_reason && (
                                         <p className="text-xs text-rose-500 mt-1 italic">
                                             Reason: {school.rejection_reason}
