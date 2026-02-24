@@ -1277,7 +1277,7 @@ const MonitoringDashboard = () => {
                         <>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
                                         <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl col-span-1">
                                             {(() => {
@@ -3656,7 +3656,7 @@ const MonitoringDashboard = () => {
                                     </button>
                                 </div>
                                 <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
-                                    <div className="grid grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="text-center">
                                             <p className="text-4xl font-black text-[#004A99] dark:text-blue-400">{engStats?.total_projects || 0}</p>
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Total Projects</p>
