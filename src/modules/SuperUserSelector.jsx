@@ -172,7 +172,7 @@ const SuperUserSelector = () => {
             {/* Logout Button */}
             <button
                 onClick={handleLogout}
-                className="absolute top-6 right-6 flex items-center gap-2 bg-white/80 backdrop-blur-md text-slate-600 px-4 py-2 rounded-xl shadow-sm hover:bg-slate-100 hover:text-red-500 transition-all font-medium z-50 border border-slate-200"
+                className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-2 bg-white/80 backdrop-blur-md text-slate-600 px-3 py-1.5 md:px-4 md:py-2 rounded-xl shadow-sm hover:bg-slate-100 hover:text-red-500 transition-all font-medium z-50 border border-slate-200 text-xs md:text-sm"
             >
                 <FiLogOut />
                 <span>Log Out</span>

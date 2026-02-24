@@ -593,7 +593,7 @@ const SchoolManagement = () => {
 
                 <div className="max-w-5xl mx-auto px-6 -mt-12 space-y-6 relative z-30">
                     {/* Tab Switcher */}
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-2 flex gap-2">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg p-2 flex flex-wrap gap-2">
                         <button
                             onClick={() => {
                                 setActiveView('form');

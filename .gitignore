@@ -25,6 +25,7 @@ dist-ssr
 .env
 server/.env
 public/Oct2025-GMIS-Filled_Minified.csv
+public/956_hor_withbuildable-withownership-accessible-READY_TO_BUILD.csv
 **/service-account.json
 **/service-account.json
 full_backup_neon.sql

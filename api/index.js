@@ -975,7 +975,7 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
     const { query: whereBase, params } = buildMasterlistQuery('', req.query);
     const whereClause = whereBase.trim() ? `AND ${whereBase.replace('WHERE', '').trim()}` : '';
 
-    const [pgoRes, mgoRes, cgoRes, dpwhRes, depedRes, csoRes, forDecisionRes] = await Promise.all([
+    const resultsArr = await Promise.all([
       pool.query(`
         SELECT "governor" as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
         FROM masterlist_26_30 WHERE prov_implemented = true ${whereClause}
@@ -1004,7 +1004,7 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
         FROM masterlist_26_30 WHERE cso_ngo_implemented = true ${whereClause}
       `, params),
       pool.query(`
-        SELECT 'Multiple Agencies' as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms
+        SELECT 'Multiple Agencies' as name, COUNT(*) as projects, COALESCE(SUM("proposed_no_of_cl"), 0) as classrooms, COALESCE(SUM("est_classroom_cost"), 0) as cost
         FROM masterlist_26_30 
         WHERE (
           COALESCE(prov_implemented::int, 0) + 
@@ -1014,12 +1014,22 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
           COALESCE(deped_implemented::int, 0) + 
           COALESCE(cso_ngo_implemented::int, 0)
         ) > 1 AND (resolved_partnership IS NULL OR resolved_partnership = '') ${whereClause}
-      `, params)
+      `, params),
+      // New: Count assigned congressional initiatives
+      pool.query(`
+        SELECT assigned_to, COUNT(*) as projects, COALESCE(SUM(amount), 0) as amount
+        FROM congressional_initiatives
+        WHERE assigned_to IS NOT NULL
+        GROUP BY assigned_to
+      `)
     ]);
 
+    const [pgoRes, mgoRes, cgoRes, dpwhRes, depedRes, csoRes, forDecisionRes, assignedRes] = resultsArr;
+    const assignedCounts = assignedRes.rows;
+
     // Format single-row results (DPWH, DepEd, CSO, For Decision)
-    const formatSingle = (resArr) => {
-      const row = resArr.rows[0];
+    const formatSingle = (resObj) => {
+      const row = resObj.rows[0];
       return row && Number(row.projects) > 0 ? [row] : [];
     };
 
@@ -1028,12 +1038,12 @@ app.get('/api/masterlist/partnerships', async (req, res) => {
         governor_count: pgoRes.rows.length,
         mayor_count: mgoRes.rows.length + cgoRes.rows.length
       },
-      pgo: pgoRes.rows,
-      mgo: mgoRes.rows,
-      cgo: cgoRes.rows,
-      dpwh: formatSingle(dpwhRes),
-      deped: formatSingle(depedRes),
-      cso: formatSingle(csoRes),
+      pgo: pgoRes.rows.map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'PGO')?.projects || 0) })),
+      mgo: mgoRes.rows.map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'MGO')?.projects || 0) })),
+      cgo: cgoRes.rows.map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'CGO')?.projects || 0) })),
+      dpwh: formatSingle(dpwhRes).map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'DPWH')?.projects || 0) })),
+      deped: formatSingle(depedRes).map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'DEPED')?.projects || 0) })),
+      cso: formatSingle(csoRes).map(r => ({ ...r, assigned_projects: Number(assignedCounts.find(a => a.assigned_to === 'CSO')?.projects || 0) })),
       forDecision: formatSingle(forDecisionRes)
     });
   } catch (err) {
@@ -1102,7 +1112,8 @@ app.get('/api/masterlist/partnership-schools', async (req, res) => {
         "school_name", 
         "proposed_no_of_cl" as classrooms, 
         "est_classroom_shortage" as shortage,
-        "est_classroom_cost" as cost
+        "est_classroom_cost" as cost,
+        prov_implemented, muni_implemented, city_implemented, dpwh_implemented, deped_implemented, cso_ngo_implemented
       FROM masterlist_26_30 
       WHERE ${baseWhere.join(' AND ')}
       ORDER BY classrooms DESC
@@ -1112,6 +1123,258 @@ app.get('/api/masterlist/partnership-schools', async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Masterlist Partnership Schools Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- CONGRESSIONAL INITIATIVES ---
+
+// One-time: import CSV into DB table
+app.post('/api/congressional-initiatives/import', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    // Create table if not exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS congressional_initiatives (
+        id SERIAL PRIMARY KEY,
+        school_id TEXT,
+        project_name TEXT,
+        school_name TEXT,
+        amount NUMERIC,
+        masterlist_status TEXT,
+        region TEXT,
+        division TEXT,
+        legislative_district TEXT,
+        ownership_type_preloaded TEXT,
+        ownership_type_confirmed TEXT,
+        accessibility_rating TEXT,
+        buildable_space_dimensions TEXT,
+        has_buildable_space TEXT,
+        assigned_to TEXT
+      )
+    `);
+
+    // Migration for existing table
+    await client.query(`ALTER TABLE congressional_initiatives ADD COLUMN IF NOT EXISTS assigned_to TEXT`);
+
+    // Read CSV from public folder
+    const fs = await import('fs');
+    const path = await import('path');
+    const csvPath = path.default.join(process.cwd(), 'public', '956_hor_withbuildable-withownership-accessible-READY_TO_BUILD.csv');
+    const csvText = fs.default.readFileSync(csvPath, 'utf8');
+
+    // Parse CSV manually (handle quoted multiline fields)
+    const lines = csvText.split('\n');
+    const headers = lines[0].replace('\r', '').split(',');
+
+    // Truncate and re-import
+    await client.query('TRUNCATE TABLE congressional_initiatives');
+
+    let imported = 0;
+    let i = 1;
+    while (i < lines.length) {
+      let line = lines[i].replace('\r', '');
+      // Handle lines that are continuations of multiline quoted fields
+      while ((line.match(/"/g) || []).length % 2 !== 0 && i + 1 < lines.length) {
+        i++;
+        line += '\n' + lines[i].replace('\r', '');
+      }
+      i++;
+
+      if (!line.trim()) continue;
+
+      // Parse CSV row
+      const values = [];
+      let current = '';
+      let inQuote = false;
+      for (let c = 0; c < line.length; c++) {
+        const ch = line[c];
+        if (ch === '"') {
+          inQuote = !inQuote;
+        } else if (ch === ',' && !inQuote) {
+          values.push(current.trim() === 'NULL' ? null : current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      values.push(current.trim() === 'NULL' ? null : current.trim());
+
+      if (values.length < headers.length) continue;
+
+      await client.query(
+        `INSERT INTO congressional_initiatives (school_id, project_name, school_name, amount, masterlist_status, region, division, legislative_district, ownership_type_preloaded, ownership_type_confirmed, accessibility_rating, buildable_space_dimensions, has_buildable_space, assigned_to)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [
+          values[0] || null,
+          values[1] || null,
+          values[2] || null,
+          values[3] ? Number(values[3]) : null,
+          values[4] || null,
+          values[5] || null,
+          values[6] || null,
+          values[7] || null,
+          values[8] || null,
+          values[9] || null,
+          values[10] || null,
+          values[11] || null,
+          values[12] || null,
+          null
+        ]
+      );
+      imported++;
+    }
+
+    res.json({ success: true, imported });
+  } catch (err) {
+    console.error('❌ Congressional Initiatives Import Error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET: Fetch Congressional Initiatives details with optional filters
+app.get('/api/congressional-initiatives', async (req, res) => {
+  try {
+    const { region, division, legislative_district, search } = req.query;
+
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
+    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (legislative_district && legislative_district !== 'undefined') {
+      where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
+    }
+    if (search) {
+      where.push(`(school_name ILIKE $${pIdx} OR school_id ILIKE $${pIdx} OR project_name ILIKE $${pIdx})`);
+      params.push(`%${search}%`);
+      pIdx++;
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    const query = `
+      SELECT
+        school_id,
+        school_name,
+        project_name,
+        amount,
+        masterlist_status,
+        region,
+        division,
+        legislative_district,
+        ownership_type_preloaded,
+        ownership_type_confirmed,
+        accessibility_rating,
+        buildable_space_dimensions,
+        has_buildable_space,
+        id,
+        assigned_to
+      FROM congressional_initiatives
+      ${whereClause}
+      ORDER BY amount DESC NULLS LAST
+    `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Congressional Initiatives Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Summary stats for Congressional Initiatives
+app.get('/api/congressional-initiatives/summary', async (req, res) => {
+  try {
+    const { region, division, legislative_district } = req.query;
+
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
+    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (legislative_district && legislative_district !== 'undefined') {
+      where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) as total_projects,
+        COUNT(DISTINCT school_id) as total_schools,
+        COALESCE(SUM(amount), 0) as total_amount,
+        COUNT(DISTINCT region) as total_regions,
+        COUNT(DISTINCT legislative_district) as total_districts
+      FROM congressional_initiatives
+      ${whereClause}
+    `, params);
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('❌ Congressional Initiatives Summary Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Distribution stats for Congressional Initiatives (for drilldown)
+app.get('/api/congressional-initiatives/distribution', async (req, res) => {
+  try {
+    const { groupBy, region, division, legislative_district } = req.query;
+
+    const validGroupBys = ['region', 'division', 'municipality', 'legislative_district'];
+    const groupField = validGroupBys.includes(groupBy) ? groupBy : 'region';
+
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
+    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (legislative_district && legislative_district !== 'undefined') {
+      where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const finalQuery = `
+      SELECT
+        "${groupField}" as name,
+        COUNT(*) as projects,
+        COALESCE(SUM(amount), 0) as amount,
+        COUNT(DISTINCT school_id) as schools
+      FROM congressional_initiatives
+      ${whereClause}
+      ${whereClause ? 'AND' : 'WHERE'} "${groupField}" IS NOT NULL
+      GROUP BY "${groupField}"
+      ORDER BY amount DESC
+    `;
+
+    const result = await pool.query(finalQuery, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Congressional Initiatives Distribution Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Post: Assign a congressional initiative to an agency
+app.post('/api/congressional-initiatives/assign', async (req, res) => {
+  try {
+    const { id, assigned_to } = req.body;
+    if (!id) return res.status(400).json({ error: 'id is required' });
+
+    await pool.query(
+      `UPDATE congressional_initiatives SET assigned_to = $1 WHERE id = $2`,
+      [assigned_to || null, id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Assign Initiative Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2989,20 +3252,47 @@ app.get('/api/admin/users', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
     const search = req.query.search || '';
+    const role = req.query.role || '';
+    const region = req.query.region || '';
+    const division = req.query.division || '';
 
     // Base Query
     let baseQuery = `FROM users`;
     const params = [];
+    let whereClauses = [];
+
+    // Role Filter
+    if (role) {
+      params.push(role);
+      whereClauses.push(`role = $${params.length}`);
+    }
+
+    // Region Filter
+    if (region) {
+      params.push(region);
+      whereClauses.push(`region = $${params.length}`);
+    }
+
+    // Division Filter
+    if (division) {
+      params.push(division);
+      whereClauses.push(`division = $${params.length}`);
+    }
 
     // Search Filter
     if (search) {
-      baseQuery += ` WHERE (
-        first_name ILIKE $1 OR 
-        last_name ILIKE $1 OR 
-        email ILIKE $1 OR
-        role ILIKE $1
-      )`;
       params.push(`%${search}%`);
+      const searchIdx = params.length;
+      whereClauses.push(`(
+        first_name ILIKE $${searchIdx} OR 
+        last_name ILIKE $${searchIdx} OR 
+        email ILIKE $${searchIdx} OR
+        role ILIKE $${searchIdx}
+      )`);
+    }
+
+    if (whereClauses.length > 0) {
+      baseQuery += ` WHERE ` + whereClauses.join(' AND ');
     }
 
     // Data Query
@@ -3037,8 +3327,79 @@ app.get('/api/admin/users', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch users" });
   }
 });
+app.get('/api/admin/user-stats', async (req, res) => {
+  try {
+    const { region, division, role } = req.query;
 
-// POST Toggle User Status (Enable/Disable)
+    let whereClause = "WHERE 1=1";
+    const params = [];
+
+    if (role) {
+      params.push(role);
+      whereClause += ` AND role = $${params.length}`;
+    }
+    if (region) {
+      params.push(region);
+      whereClause += ` AND region = $${params.length}`;
+    }
+    if (division) {
+      params.push(division);
+      whereClause += ` AND division = $${params.length}`;
+    }
+
+    const totalRes = await pool.query(`SELECT COUNT(*) as total FROM users ${whereClause === "WHERE 1=1" ? "" : whereClause}`, params);
+
+    // For breakdown, we want counts per role given the OTHER filters
+    let breakdownWhereClause = "WHERE role IS NOT NULL AND role != ''";
+    const breakdownParams = [];
+    if (region) {
+      breakdownParams.push(region);
+      breakdownWhereClause += ` AND region = $${breakdownParams.length}`;
+    }
+    if (division) {
+      breakdownParams.push(division);
+      breakdownWhereClause += ` AND division = $${breakdownParams.length}`;
+    }
+
+    const breakdownRes = await pool.query(`
+      SELECT role, COUNT(*) as count 
+      FROM users 
+      ${breakdownWhereClause}
+      GROUP BY role 
+      ORDER BY count DESC
+    `, breakdownParams);
+
+    res.json({
+      total: parseInt(totalRes.rows[0].total),
+      breakdown: breakdownRes.rows.map(row => ({
+        role: row.role,
+        count: parseInt(row.count)
+      }))
+    });
+  } catch (err) {
+    console.error("User Stats Error:", err);
+    res.status(500).json({ error: "Failed to fetch user statistics" });
+  }
+});
+
+// GET Filter Options for Admin Dashboard
+app.get('/api/admin/filter-options', async (req, res) => {
+  try {
+    const regionsRes = await pool.query('SELECT DISTINCT region FROM users WHERE region IS NOT NULL AND region != \'\' ORDER BY region');
+    const divisionsRes = await pool.query('SELECT DISTINCT division, region FROM users WHERE division IS NOT NULL AND division != \'\' ORDER BY division');
+    const rolesRes = await pool.query('SELECT DISTINCT role FROM users WHERE role IS NOT NULL AND role != \'\' ORDER BY role');
+
+    res.json({
+      regions: regionsRes.rows.map(r => r.region),
+      divisions: divisionsRes.rows.map(d => ({ name: d.division, region: d.region })),
+      roles: rolesRes.rows.map(r => r.role)
+    });
+  } catch (err) {
+    console.error("Filter Options Error:", err);
+    res.status(500).json({ error: "Failed to fetch filter options" });
+  }
+});
+
 // POST Toggle User Status (Enable/Disable)
 app.post('/api/admin/users/:uid/status', async (req, res) => {
   const { uid } = req.params;

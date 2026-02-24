@@ -241,7 +241,7 @@ const SchoolJurisdictionList = () => {
 
                                 <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700/50">
                                     <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">View Selection</p>
-                                    <div className="grid grid-cols-4 gap-2">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                         <button
                                             onClick={() => navigate(`/school-profile?viewOnly=true&schoolId=${school.school_id}`)}
                                             className="p-2 aspect-square flex flex-col items-center justify-center bg-blue-50 dark:bg-blue-900/40 rounded-xl hover:bg-blue-100 transition-colors"

@@ -40,6 +40,16 @@ const AdminDashboard = () => {
     const [auditLogs, setAuditLogs] = useState([]);
     const [feedbackList, setFeedbackList] = useState([]); // New state for feedback
 
+    // Statistics States
+    const [userStats, setUserStats] = useState({ total: 0, breakdown: [] });
+    const [roleFilter, setRoleFilter] = useState('');
+    const [geoRegionFilter, setGeoRegionFilter] = useState('');
+    const [geoDivisionFilter, setGeoDivisionFilter] = useState('');
+    const [availableRegions, setAvailableRegions] = useState([]);
+    const [availableDivisions, setAvailableDivisions] = useState([]); // All divisions from API
+    const [filteredDivisions, setFilteredDivisions] = useState([]); // Divisions for current region
+    const [availableRoles, setAvailableRoles] = useState([]);
+
 
     // Loading States
     const [loading, setLoading] = useState(false);
@@ -84,6 +94,32 @@ const AdminDashboard = () => {
             }
         } catch (err) {
             console.error("Failed to fetch reviewed schools:", err);
+        }
+    };
+
+    const fetchUserStats = async () => {
+        try {
+            const res = await fetch(`/api/admin/user-stats?region=${geoRegionFilter}&division=${geoDivisionFilter}&role=${roleFilter}`);
+            if (res.ok) {
+                const data = await res.json();
+                setUserStats(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch user stats:", err);
+        }
+    };
+
+    const fetchFilterOptions = async () => {
+        try {
+            const res = await fetch('/api/admin/filter-options');
+            if (res.ok) {
+                const data = await res.json();
+                setAvailableRegions(data.regions);
+                setAvailableDivisions(data.divisions);
+                setAvailableRoles(data.roles);
+            }
+        } catch (err) {
+            console.error("Failed to fetch filter options:", err);
         }
     };
 
@@ -162,7 +198,7 @@ const AdminDashboard = () => {
             // Only search users if we are on the accounts tab to save bandwidth
             if (activeTab !== 'accounts') return;
 
-            const res = await fetch(`/api/admin/users?page=${usersPage}&limit=${usersLimit}&search=${searchTerm}`);
+            const res = await fetch(`/api/admin/users?page=${usersPage}&limit=${usersLimit}&search=${searchTerm}&role=${roleFilter}&region=${geoRegionFilter}&division=${geoDivisionFilter}`);
             const data = await res.json();
 
             if (data.data) {
@@ -183,13 +219,34 @@ const AdminDashboard = () => {
             }
         }, 500);
         return () => clearTimeout(delayDebounceFn);
-    }, [searchTerm, usersPage, activeTab]);
+    }, [searchTerm, usersPage, activeTab, roleFilter, geoRegionFilter, geoDivisionFilter]);
+
+    // Update stats when filters change
+    useEffect(() => {
+        if (activeTab === 'accounts') {
+            fetchUserStats();
+        }
+    }, [roleFilter, geoRegionFilter, geoDivisionFilter]);
+
+    // Filter divisions based on region
+    useEffect(() => {
+        if (geoRegionFilter) {
+            const filtered = availableDivisions.filter(d => d.region === geoRegionFilter);
+            setFilteredDivisions(filtered.map(d => d.name));
+        } else {
+            setFilteredDivisions(availableDivisions.map(d => d.name));
+        }
+    }, [geoRegionFilter, availableDivisions]);
 
     // Fetch pending/reviewed schools when school management tab is active
     useEffect(() => {
         if (activeTab === 'school-management') {
             fetchPendingSchools();
             fetchReviewedSchools();
+        }
+        if (activeTab === 'accounts') {
+            fetchUserStats();
+            fetchFilterOptions();
         }
     }, [activeTab]);
 
@@ -783,6 +840,111 @@ const AdminDashboard = () => {
 
         return (
             <div className="animate-in fade-in duration-300">
+                {/* GEOGRAPHIC & ROLE FILTERS */}
+                <div className="flex flex-col md:flex-row gap-4 mb-6 bg-slate-50 p-4 rounded-xl border border-gray-100 shadow-sm">
+                    <div className="flex-1">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block ml-1">User Role</label>
+                        <select 
+                            value={roleFilter}
+                            onChange={(e) => {
+                                setRoleFilter(e.target.value);
+                                if (e.target.value) setSearchTerm('');
+                            }}
+                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 transition-colors font-semibold"
+                        >
+                            <option value="">All Roles</option>
+                            {availableRoles.map(role => (
+                                <option key={role} value={role}>{role}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex-1">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block ml-1">Regional Office</label>
+                        <select 
+                            value={geoRegionFilter}
+                            onChange={(e) => {
+                                setGeoRegionFilter(e.target.value);
+                                setGeoDivisionFilter(''); // Reset division when region changes
+                            }}
+                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 transition-colors"
+                        >
+                            <option value="">All Regions</option>
+                            {availableRegions.map(reg => (
+                                <option key={reg} value={reg}>{reg}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex-1">
+                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block ml-1">School Division Office</label>
+                        <select 
+                            value={geoDivisionFilter}
+                            onChange={(e) => setGeoDivisionFilter(e.target.value)}
+                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 transition-colors"
+                        >
+                            <option value="">All Divisions</option>
+                            {filteredDivisions.map(div => (
+                                <option key={div} value={div}>{div}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex items-end">
+                        <button 
+                            onClick={() => {
+                                setGeoRegionFilter('');
+                                setGeoDivisionFilter('');
+                                setRoleFilter('');
+                                setSearchTerm('');
+                            }}
+                            className="bg-white text-gray-400 text-xs font-bold px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 hover:text-gray-600 transition-all mb-[1px]"
+                        >
+                            Reset All
+                        </button>
+                    </div>
+                </div>
+
+                {/* STATISTICS MINI-DASHBOARD */}
+                <div className="mb-6">
+                    <div className="flex justify-between items-end mb-3">
+                        <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-wider ml-1">Registration Breakdown</h3>
+                        {/* Summary of filters */}
+                        <div className="flex gap-2">
+                            {roleFilter && (
+                                <span className="text-[9px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-bold uppercase">{roleFilter}</span>
+                            )}
+                            {geoRegionFilter && (
+                                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold uppercase">{geoRegionFilter}</span>
+                            )}
+                            {geoDivisionFilter && (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold uppercase">{geoDivisionFilter}</span>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                        {/* Total Card */}
+                        <div 
+                            onClick={() => setRoleFilter('')}
+                            className={`min-w-[140px] p-3 rounded-xl border transition-all cursor-pointer ${roleFilter === '' ? 'bg-[#004A99] border-blue-600 shadow-md' : 'bg-white border-gray-100 hover:border-blue-200'}`}
+                        >
+                            <p className={`text-[9px] font-bold uppercase tracking-wider ${roleFilter === '' ? 'text-blue-100' : 'text-gray-400'}`}>
+                                {roleFilter ? `Total ${roleFilter}s` : 'Total Registrations'}
+                            </p>
+                            <p className={`text-xl font-black mt-0.5 ${roleFilter === '' ? 'text-white' : 'text-gray-800'}`}>{userStats.total}</p>
+                        </div>
+                        
+                        {/* Role Breakdown Cards */}
+                        {userStats.breakdown.map((item, idx) => (
+                            <div 
+                                key={idx}
+                                onClick={() => { setRoleFilter(item.role); setSearchTerm(''); }}
+                                className={`min-w-[120px] p-3 rounded-xl border transition-all cursor-pointer ${roleFilter === item.role ? 'bg-blue-600 border-blue-700 shadow-md' : 'bg-white border-gray-100 hover:border-blue-200'}`}
+                            >
+                                <p className={`text-[9px] font-bold uppercase tracking-wider truncate ${roleFilter === item.role ? 'text-blue-100' : 'text-gray-400'}`}>{item.role}</p>
+                                <p className={`text-xl font-black mt-0.5 ${roleFilter === item.role ? 'text-white' : 'text-gray-800'}`}>{item.count}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
                 <div className="flex items-center gap-2 mb-4 bg-white p-2 rounded-xl border border-gray-100 shadow-sm">
                     <FiSearch className="text-gray-400 ml-2" />
                     <input
@@ -792,6 +954,7 @@ const AdminDashboard = () => {
                         value={searchTerm}
                         onChange={(e) => {
                             setSearchTerm(e.target.value);
+                            setRoleFilter(''); // Clear role filter when searching broad
                             setUsersPage(1);
                         }}
                     />
