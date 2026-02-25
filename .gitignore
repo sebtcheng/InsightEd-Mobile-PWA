@@ -30,3 +30,4 @@ public/956_hor_withbuildable-withownership-accessible-READY_TO_BUILD.csv
 **/service-account.json
 full_backup_neon.sql
 scripts/migrate_db.ps1
+source_schema.json

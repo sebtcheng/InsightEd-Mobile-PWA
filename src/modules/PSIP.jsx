@@ -507,7 +507,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
             <div className="flex items-center gap-2 mb-6 text-sm">
                 <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold transition-colors">Dashboard</button>
                 <FiChevronRight className="text-slate-300" />
-                <span className="text-amber-600 font-black uppercase tracking-widest">DepEd Infrariorities</span>
+                <span className="text-amber-600 font-black uppercase tracking-widest">DepEd Priorities 2026 Infrastructure</span>
             </div>
 
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden flex flex-col flex-1">
@@ -518,7 +518,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                             <FiAlertCircle size={24} />
                         </div>
                         <div>
-                            <h3 className="text-white font-black text-2xl">DepEd Infrariorities</h3>
+                            <h3 className="text-white font-black text-2xl">DepEd Priorities 2026 Infrastructure</h3>
                             <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest">{rows.length} Total Projects Tracked</p>
                         </div>
                     </div>
@@ -542,7 +542,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                     <FiDatabase className="mx-auto w-16 h-16 mb-6 opacity-20 text-slate-400" />
                                     <h4 className="text-xl font-bold text-slate-800">No initiatives data found</h4>
                                     <p className="text-slate-500 mt-2 mb-8">Please import the latest CSV file to begin tracking.</p>
-                                    <button onClick={onImport} className="bg-amber-500 text-white font-black px-10 py-4 rounded-2xl hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all active:scale-95">Import Infrariorities Data</button>
+                                    <button onClick={onImport} className="bg-amber-500 text-white font-black px-10 py-4 rounded-2xl hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all active:scale-95">Import Priorities 2026 Infrastructure Data</button>
                                 </div>
                             ) : (
                                 <>
@@ -576,8 +576,8 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                      <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 flex items-start gap-4">
                                         <FiInfo className="text-amber-500 shrink-0 mt-1" size={20} />
                                         <div className="text-slate-600 leading-relaxed">
-                                            <p className="font-bold text-slate-800 mb-1">About DepEd Infrariorities</p>
-                                            <p className="text-sm italic">DepEd Infrariorities represent high-priority school infrastructure projects identified for strategic implementation. These projects are specifically allocated and can be assigned to various implementing agencies for streamlined monitoring and progression. Accurate tracking here ensures that critical infrastructure gaps are addressed efficiently through our partnership network.</p>
+                                            <p className="font-bold text-slate-800 mb-1">About DepEd Priorities 2026 Infrastructure</p>
+                                            <p className="text-sm italic">DepEd Priorities 2026 Infrastructure represent high-priority school infrastructure projects identified for strategic implementation. These projects are specifically allocated and can be assigned to various implementing agencies for streamlined monitoring and progression. Accurate tracking here ensures that critical infrastructure gaps are addressed efficiently through our partnership network.</p>
                                         </div>
                                     </div>
                                     <p className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-widest text-right italic">data displayed is as of February 23, 2026. 5:45 pm</p>
@@ -770,7 +770,7 @@ const HomeView = ({
             drilldown: partnerships.cso || []
         },
         {
-            id: 'FOR_DECISION', title: 'DepEd Infrariorities',
+            id: 'FOR_DECISION', title: 'DepEd Priorities 2026 Infrastructure',
             icon: <FiAlertCircle className="w-6 h-6" />, color: 'bg-yellow-100 text-yellow-600',
             count: partnerships.forDecision?.length > 0 ? Number(partnerships.forDecision[0].projects) : 0,
             drilldown: partnerships.forDecision || []

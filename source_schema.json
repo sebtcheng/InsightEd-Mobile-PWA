@@ -1,0 +1,200 @@
+[
+  {
+    "column_name": "school_id",
+    "data_type": "integer",
+    "is_nullable": "NO",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 32,
+    "numeric_scale": 0
+  },
+  {
+    "column_name": "building_code",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 50,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "building_no",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 20,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "building_type",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 100,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "fund_source",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "specific_fund_source",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "building_condition",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 100,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "number_of_storeys",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 32,
+    "numeric_scale": 0
+  },
+  {
+    "column_name": "number_of_rooms",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 32,
+    "numeric_scale": 0
+  },
+  {
+    "column_name": "year_completed_implemented",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 32,
+    "numeric_scale": 0
+  },
+  {
+    "column_name": "classification_of_building",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 100,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "is_building_pwd_accessible",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 3,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "undergone_major_repair_last_5_years",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 3,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "with_certificate_of_acceptance",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 3,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "included_in_deped_book_of_accounts",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 3,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "building_material",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": 100,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "date_of_acquisition",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 32,
+    "numeric_scale": 0
+  },
+  {
+    "column_name": "acquisition_cost",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 18,
+    "numeric_scale": 2
+  },
+  {
+    "column_name": "book_value",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": 18,
+    "numeric_scale": 2
+  },
+  {
+    "column_name": "insurance_information",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "remarks",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": null,
+    "numeric_scale": null
+  },
+  {
+    "column_name": "remarks_2",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null,
+    "character_maximum_length": null,
+    "numeric_precision": null,
+    "numeric_scale": null
+  }
+]
