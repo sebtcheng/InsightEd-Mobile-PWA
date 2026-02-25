@@ -1277,7 +1277,7 @@ const MonitoringDashboard = () => {
                         <>
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-lg border border-slate-100 dark:border-slate-700">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Jurisdiction Overview</h2>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
                                         <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-2xl col-span-1">
                                             {(() => {
@@ -1333,6 +1333,34 @@ const MonitoringDashboard = () => {
                                             })()}
                                         </div>
                                     )}
+
+                                    {/* NEW: Registered School Heads Count */}
+                                    {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
+                                        <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl col-span-1">
+                                            {(() => {
+                                                const displayTotal = jurisdictionTotal;
+                                                const registeredCount = parseInt(stats?.registered_heads_count || 0);
+                                                const percentage = displayTotal > 0 ? ((registeredCount / displayTotal) * 100).toFixed(1) : 0;
+
+                                                return (
+                                                    <div className="flex items-center justify-between h-full">
+                                                        <div>
+                                                            <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+                                                                {percentage}%
+                                                            </span>
+                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
+                                                                Registered School Heads <br />
+                                                                <span className="text-emerald-600 dark:text-emerald-300">({registeredCount} / {displayTotal})</span>
+                                                            </p>
+                                                        </div>
+                                                        <TbSchool size={40} className="text-emerald-200" />
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+
+
 
                                     {(activeTab === 'infra') && (
                                         <div className={`p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl ${activeTab === 'infra' ? 'col-span-2' : ''}`}>

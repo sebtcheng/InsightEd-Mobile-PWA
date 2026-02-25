@@ -1154,7 +1154,7 @@ app.get('/api/masterlist/partnership-schools', async (req, res) => {
   }
 });
 
-// --- DEPED INFRARIORITIES (formerly Congressional Initiatives) ---
+// --- DEPED PRIORITIES 2026 INFRASTRUCTURE (formerly Congressional Initiatives) ---
 
 // One-time: import CSV into DB table
 app.post('/api/deped-infrariorities/import', async (req, res) => {
@@ -1254,14 +1254,14 @@ app.post('/api/deped-infrariorities/import', async (req, res) => {
 
     res.json({ success: true, imported });
   } catch (err) {
-    console.error('❌ DepEd Infrariorities Import Error:', err);
+    console.error('❌ DepEd Priorities 2026 Infrastructure Import Error:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
 
-// GET: Fetch DepEd Infrariorities details with optional filters
+// GET: Fetch DepEd Priorities 2026 Infrastructure details with optional filters
 app.get('/api/deped-infrariorities', async (req, res) => {
   try {
     const { region, division, legislative_district, search } = req.query;
@@ -1308,12 +1308,12 @@ app.get('/api/deped-infrariorities', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ DepEd Infrariorities Error:', err);
+    console.error('❌ DepEd Priorities 2026 Infrastructure Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Summary stats for DepEd Infrariorities
+// GET: Summary stats for DepEd Priorities 2026 Infrastructure
 app.get('/api/deped-infrariorities/summary', async (req, res) => {
   try {
     const { region, division, legislative_district } = req.query;
@@ -1343,12 +1343,12 @@ app.get('/api/deped-infrariorities/summary', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('❌ DepEd Infrariorities Summary Error:', err);
+    console.error('❌ DepEd Priorities 2026 Infrastructure Summary Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Distribution stats for DepEd Infrariorities (for drilldown)
+// GET: Distribution stats for DepEd Priorities 2026 Infrastructure (for drilldown)
 app.get('/api/deped-infrariorities/distribution', async (req, res) => {
   try {
     const { groupBy, region, division, legislative_district } = req.query;
@@ -1383,12 +1383,12 @@ app.get('/api/deped-infrariorities/distribution', async (req, res) => {
     const result = await pool.query(finalQuery, params);
     return res.json(result.rows || []);
   } catch (err) {
-    console.error('❌ DepEd Infrariorities Distribution Error:', err);
+    console.error('❌ DepEd Priorities 2026 Infrastructure Distribution Error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Specific projects for DepEd Infrariorities (for drilldown list)
+// GET: Specific projects for DepEd Priorities 2026 Infrastructure (for drilldown list)
 app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
   try {
     const { region, division, legislative_district, limit = 50, offset = 0 } = req.query;
@@ -1415,7 +1415,7 @@ app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
     const result = await pool.query(finalQuery, finalParams);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ DepEd Infrariorities Projects Fetch Error:', err);
+    console.error('❌ DepEd Priorities 2026 Infrastructure Projects Fetch Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -7725,7 +7725,16 @@ app.get('/api/monitoring/stats', async (req, res) => {
         -- System Validated Count (Completed AND Excellent from school_summary OR Manually Validated)
         COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND (ss.data_health_description = 'Excellent' OR sp.school_head_validation = TRUE) THEN 1 END), 0) as validated_schools_count,
         -- For Validation Count (Completed AND NOT Excellent from school_summary)
-        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END), 0) as for_validation_count
+        COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END), 0) as for_validation_count,
+
+        -- REGISTERED SCHOOL HEADS COUNT
+        (
+            SELECT COUNT(*) FROM users u 
+            WHERE u.role = 'School Head' 
+            AND TRIM(u.region) = TRIM(s.region)
+            ${division ? 'AND TRIM(u.division) = TRIM(s.division)' : ''}
+            ${req.query.district ? 'AND TRIM(u.office) = TRIM(s.district)' : ''}
+        ) as registered_heads_count
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
@@ -7743,10 +7752,12 @@ app.get('/api/monitoring/stats', async (req, res) => {
       params.push(req.query.district);
     }
 
+    statsQuery += ` GROUP BY s.region ${division ? ', s.division' : ''} ${req.query.district ? ', s.district' : ''}`;
+
     const result = await pool.query(statsQuery, params);
 
     // Safety: Ensure we return numbers
-    const row = result.rows[0];
+    const row = result.rows[0] || {};
     const safeRow = {
       total_schools: parseInt(row.total_schools || 0),
       profile: parseInt(row.profile || 0),
@@ -7758,9 +7769,10 @@ app.get('/api/monitoring/stats', async (req, res) => {
       specialization: parseInt(row.specialization || 0),
       resources: parseInt(row.resources || 0),
       facilities: parseInt(row.facilities || 0),
-      learner_stats: parseInt(row.learner_stats || 0), // Added explicit return if needed
+      learner_stats: parseInt(row.learner_stats || 0),
       completed_schools_count: parseInt(row.completed_schools_count || 0),
-      validated_schools_count: parseInt(row.validated_schools_count || 0)
+      validated_schools_count: parseInt(row.validated_schools_count || 0),
+      registered_heads_count: parseInt(row.registered_heads_count || 0)
     };
 
     res.json(safeRow);
