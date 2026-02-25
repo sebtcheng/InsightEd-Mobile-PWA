@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiChevronRight, FiLayers, FiMap, FiUser, FiTv, FiSettings, FiDatabase, FiTrendingUp, FiDollarSign, FiBarChart2, FiTarget, FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiClock, FiLoader, FiCpu, FiSend, FiX, FiInfo, FiList } from 'react-icons/fi';
+import { FiChevronRight, FiLayers, FiMap, FiUser, FiTv, FiSettings, FiDatabase, FiTrendingUp, FiDollarSign, FiBarChart2, FiTarget, FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiClock, FiLoader, FiCpu, FiSend, FiX, FiInfo, FiList, FiSearch } from 'react-icons/fi';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, LabelList } from 'recharts';
 import BottomNav from './BottomNav';
 
@@ -53,10 +53,18 @@ const EmptyState = () => (
 const KpiDrilldownModal = ({ kpi, onClose }) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('chart'); // 'chart' | 'projects'
+    const [projects, setProjects] = useState([]);
+    const [projectsLoading, setProjectsLoading] = useState(false);
     const [viewBy, setViewBy] = useState('region'); // Default to Region, but allows Municipality or Leg District
     const [localRegion, setLocalRegion] = useState('');
     const [localDivision, setLocalDivision] = useState('');
     const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    
+    // Pagination and Search state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [searchQuery, setSearchQuery] = useState('');
+    const recordsPerPage = 10;
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -74,13 +82,18 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
                 if (localDivision) params.append('division', localDivision);
 
                 const endpoint = kpi.source === 'congress' 
-                    ? `${API_BASE}/api/congressional-initiatives/distribution`
+                    ? `${API_BASE}/api/deped-infrariorities/distribution`
                     : `${API_BASE}/api/masterlist/distribution`;
 
-                const res = await fetch(`${endpoint}?${params.toString()}`);
-                const json = await res.json();
+                const url = `${endpoint}?${params.toString()}`;
+                const res = await fetch(url);
+                
+                if (!res.ok) {
+                    setData([]);
+                    return;
+                }
 
-                // Sort descending based on chosen KPI
+                const json = await res.json();
                 const sorted = json.sort((a, b) => Number(b[kpi.key]) - Number(a[kpi.key]));
                 setData(sorted);
             } catch (err) {
@@ -92,6 +105,54 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
         fetchData();
     }, [kpi, viewBy, localRegion, localDivision]);
 
+    useEffect(() => {
+        const fetchProjects = async () => {
+            if (activeTab !== 'projects') return;
+            setProjectsLoading(true);
+            try {
+                const params = new URLSearchParams();
+                if (localRegion) params.append('region', localRegion);
+                if (localDivision) params.append('division', localDivision);
+                if (viewBy === 'municipality') params.append('municipality', localDivision); // Approximation or handle properly
+                // If the user specificially chose a municipality/dist in the dropdown, we'd need that too
+                
+                const endpoint = kpi.source === 'congress'
+                    ? `${API_BASE}/api/deped-infrariorities/distribution-projects`
+                    : `${API_BASE}/api/masterlist/distribution-projects`;
+                
+                const res = await fetch(`${endpoint}?${params.toString()}`);
+                const json = await res.json();
+                setProjects(json);
+            } catch (err) {
+                console.error("Projects fetch error", err);
+            } finally {
+                setProjectsLoading(false);
+            }
+        };
+        fetchProjects();
+    }, [activeTab, localRegion, localDivision, kpi.source]);
+
+    // Reset page on filters, tab change, or search
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [localRegion, localDivision, activeTab, viewBy, searchQuery]);
+
+    // Search and Pagination logic
+    const filteredProjects = projects.filter(p => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            (p.school_id || '').toLowerCase().includes(q) ||
+            (p.school_name || '').toLowerCase().includes(q) ||
+            (p.project_name || '').toLowerCase().includes(q)
+        );
+    });
+
+    const indexOfLastProject = currentPage * recordsPerPage;
+    const indexOfFirstProject = indexOfLastProject - recordsPerPage;
+    const currentProjects = filteredProjects.slice(indexOfFirstProject, indexOfLastProject);
+    const totalPages = Math.ceil(filteredProjects.length / recordsPerPage);
+
     const handleBarClick = (entry) => {
         if (!entry || !entry.name) return;
         if (viewBy === 'region') {
@@ -99,7 +160,7 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
             setViewBy('division');
         } else if (viewBy === 'division') {
             setLocalDivision(entry.name);
-            setViewBy('municipality');
+            setViewBy('legislative_district'); // Priority: Legislative District
         }
     };
 
@@ -156,7 +217,7 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
                         </p>
                     </div>
 
-                    {/* View By Selector - Only show in Municipality/Legislative District view */}
+                    {/* View By Selector - Simplified to prioritize Legislative District */}
                     {(viewBy === 'municipality' || viewBy === 'legislative_district') && (
                         <div className="flex items-center gap-3 sm:pr-8">
                             <label className="text-xs font-bold text-slate-500 uppercase">View By:</label>
@@ -165,75 +226,209 @@ const KpiDrilldownModal = ({ kpi, onClose }) => {
                                 onChange={(e) => setViewBy(e.target.value)}
                                 className="bg-slate-50 border border-slate-200 p-2 rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 cursor-pointer"
                             >
-                                <option value="municipality">Municipality</option>
                                 <option value="legislative_district">Legislative District</option>
+                                <option value="municipality">Municipality</option>
                             </select>
                         </div>
                     )}
+
+                    <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+                        <button 
+                            onClick={() => setActiveTab('chart')}
+                            className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'chart' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <FiBarChart2 size={14} /> Summary Chart
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('projects')}
+                            className={`px-4 py-2 rounded-lg text-xs font-black transition-all flex items-center gap-2 ${activeTab === 'projects' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <FiList size={14} /> Projects Tab
+                        </button>
+                    </div>
 
                     <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors absolute top-6 right-6">
                         <FiX size={20} />
                     </button>
                 </div>
 
-                <div className="p-6 flex-1 overflow-y-auto bg-white min-h-[400px]">
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center h-full space-y-4">
-                            <FiLoader className="w-8 h-8 text-blue-500 animate-spin" />
-                            <p className="text-slate-500 font-medium text-sm">Crunching KPI data...</p>
-                        </div>
-                    ) : data.length === 0 ? (
-                        <div className="text-center py-12">
-                            <p className="text-slate-500 font-medium">No distribution data available.</p>
-                        </div>
+                <div className="p-6 flex-1 overflow-y-auto bg-white min-h-[450px]">
+                    {activeTab === 'chart' ? (
+                        <>
+                            {loading ? (
+                                <div className="flex flex-col items-center justify-center h-full space-y-4">
+                                    <FiLoader className="w-8 h-8 text-blue-500 animate-spin" />
+                                    <p className="text-slate-500 font-medium text-sm">Crunching KPI data...</p>
+                                </div>
+                            ) : data.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <p className="text-slate-500 font-medium">No distribution data available.</p>
+                                </div>
+                            ) : (
+                                <ResponsiveContainer width="100%" height={isMobile ? data.length * 40 + 100 : 380}>
+                                    <BarChart 
+                                        data={data} 
+                                        layout={isMobile ? "vertical" : "horizontal"}
+                                        margin={isMobile ? { top: 20, right: 30, left: 100, bottom: 20 } : { top: 20, right: 30, left: 20, bottom: 60 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={!isMobile} vertical={isMobile} />
+                                        {isMobile ? (
+                                            <>
+                                                <XAxis type="number" hide />
+                                                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} width={90} />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-45} textAnchor="end" height={80} />
+                                                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => Number(v).toLocaleString()} />
+                                            </>
+                                        )}
+                                        <Tooltip
+                                            cursor={{ fill: '#f8fafc' }}
+                                            formatter={(value) => [Number(value).toLocaleString(), kpi.title]}
+                                            contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 'bold' }}
+                                        />
+                                        <Bar
+                                            dataKey={kpi.key}
+                                            fill={kpi.color}
+                                            radius={isMobile ? [0, 6, 6, 0] : [6, 6, 0, 0]}
+                                            cursor={(viewBy === 'region' || viewBy === 'division') ? 'pointer' : 'default'}
+                                            onClick={handleBarClick}
+                                            barSize={isMobile ? 25 : undefined}
+                                        >
+                                            <LabelList
+                                                dataKey={kpi.key}
+                                                position={isMobile ? "right" : "top"}
+                                                offset={10}
+                                                style={{ fontSize: '10px', fontWeight: 'bold', fill: '#64748b' }}
+                                                formatter={(val) => {
+                                                    if (kpi.key === 'amount') {
+                                                        if (val >= 1_000_000_000) return `₱${(val / 1_000_000_000).toFixed(1)}B`;
+                                                        return `₱${(val / 1_000_000).toFixed(1)}M`;
+                                                    }
+                                                    return Math.round(val).toLocaleString();
+                                                }}
+                                            />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            )}
+                        </>
                     ) : (
-                        <ResponsiveContainer width="100%" height={isMobile ? data.length * 40 + 100 : 380}>
-                            <BarChart 
-                                data={data} 
-                                layout={isMobile ? "vertical" : "horizontal"}
-                                margin={isMobile ? { top: 20, right: 30, left: 100, bottom: 20 } : { top: 20, right: 30, left: 20, bottom: 60 }}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={!isMobile} vertical={isMobile} />
-                                {isMobile ? (
-                                    <>
-                                        <XAxis type="number" hide />
-                                        <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: '#64748b', fontWeight: 'bold' }} width={90} />
-                                    </>
-                                ) : (
-                                    <>
-                                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} angle={-45} textAnchor="end" height={80} />
-                                        <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => Number(v).toLocaleString()} />
-                                    </>
-                                )}
-                                <Tooltip
-                                    cursor={{ fill: '#f8fafc' }}
-                                    formatter={(value) => [Number(value).toLocaleString(), kpi.title]}
-                                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 'bold' }}
-                                />
-                                <Bar
-                                    dataKey={kpi.key}
-                                    fill={kpi.color}
-                                    radius={isMobile ? [0, 6, 6, 0] : [6, 6, 0, 0]}
-                                    cursor={(viewBy === 'region' || viewBy === 'division') ? 'pointer' : 'default'}
-                                    onClick={handleBarClick}
-                                    barSize={isMobile ? 25 : undefined}
-                                >
-                                    <LabelList
-                                        dataKey={kpi.key}
-                                        position={isMobile ? "right" : "top"}
-                                        offset={10}
-                                        style={{ fontSize: '10px', fontWeight: 'bold', fill: '#64748b' }}
-                                        formatter={(val) => {
-                                            if (kpi.key === 'amount') {
-                                                if (val >= 1_000_000_000) return `₱${(val / 1_000_000_000).toFixed(1)}B`;
-                                                return `₱${(val / 1_000_000).toFixed(1)}M`;
-                                            }
-                                            return Math.round(val).toLocaleString();
-                                        }}
-                                    />
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
+                        <div className="animate-in fade-in duration-500">
+                             {projectsLoading ? (
+                                <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                    <FiLoader className="w-8 h-8 text-blue-500 animate-spin" />
+                                    <p className="text-slate-500 font-medium text-sm">Fetching projects list...</p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col h-full space-y-4">
+                                    {/* Search Bar UI */}
+                                    <div className="relative group max-w-md">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <FiSearch className="text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder="Search by school ID, name, or project..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 pl-11 pr-4 py-3 rounded-2xl text-sm font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all placeholder:text-slate-400"
+                                        />
+                                    </div>
+
+                                    {filteredProjects.length === 0 ? (
+                                        <div className="text-center py-12 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                                            <FiTarget className="mx-auto w-12 h-12 text-slate-300 mb-4" />
+                                            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">No projects found for "{searchQuery}"</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="overflow-x-auto rounded-2xl border border-slate-100 shadow-sm">
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-slate-50 border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">School ID</th>
+                                                    <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">School Name</th>
+                                                    {kpi.source === 'congress' && <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Project</th>}
+                                                    <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Region</th>
+                                                    <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider">Division</th>
+                                                    <th className="px-6 py-4 font-black uppercase text-slate-500 tracking-wider text-right">Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {currentProjects.map((p, idx) => (
+                                                    <tr key={idx} className="hover:bg-blue-50/40 transition-colors group">
+                                                        <td className="px-6 py-4 font-mono text-slate-500 group-hover:text-blue-600 transition-colors">{p.school_id}</td>
+                                                        <td className="px-6 py-4 font-bold text-slate-800 truncate max-w-[220px]" title={p.school_name}>{p.school_name}</td>
+                                                        {kpi.source === 'congress' && <td className="px-6 py-4 font-medium text-slate-600 truncate max-w-[220px]" title={p.project_name}>{p.project_name}</td>}
+                                                        <td className="px-6 py-4 text-slate-500">{p.region}</td>
+                                                        <td className="px-6 py-4 text-slate-500">{p.division}</td>
+                                                        <td className="px-6 py-4 font-black text-slate-900 text-right">
+                                                            <span className="px-3 py-1 bg-slate-100 rounded-lg group-hover:bg-blue-100 group-hover:text-blue-700 transition-all">
+                                                                {kpi.source === 'congress' 
+                                                                    ? `₱${(Number(p.amount) / 1_000_000).toFixed(1)}M` 
+                                                                    : `${Number(p.classrooms).toLocaleString()} CL`
+                                                                }
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                            {/* Pagination Controls */}
+                                            {totalPages > 1 && (
+                                                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4 border-t border-slate-50">
+                                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                                        Showing <span className="text-slate-700">{indexOfFirstProject + 1}</span> to <span className="text-slate-700">{Math.min(indexOfLastProject, filteredProjects.length)}</span> of <span className="text-slate-700">{filteredProjects.length}</span> projects
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                                            disabled={currentPage === 1}
+                                                            className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                                        >
+                                                            <FiChevronRight className="rotate-180" size={18} />
+                                                        </button>
+                                                        
+                                                        <div className="flex items-center gap-1">
+                                                            {[...Array(totalPages)].map((_, i) => {
+                                                                const p = i + 1;
+                                                                // Simple pagination logic: show first, last, and current +/- 1
+                                                                if (p === 1 || p === totalPages || (p >= currentPage - 1 && p <= currentPage + 1)) {
+                                                                    return (
+                                                                        <button
+                                                                            key={p}
+                                                                            onClick={() => setCurrentPage(p)}
+                                                                            className={`w-9 h-9 rounded-xl text-xs font-black transition-all ${currentPage === p ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-500 hover:bg-slate-100'}`}
+                                                                        >
+                                                                            {p}
+                                                                        </button>
+                                                                    );
+                                                                } else if (p === currentPage - 2 || p === currentPage + 2) {
+                                                                    return <span key={p} className="text-slate-300 px-1">...</span>;
+                                                                }
+                                                                return null;
+                                                            })}
+                                                        </div>
+
+                                                        <button 
+                                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                                            disabled={currentPage === totalPages}
+                                                            className="p-2 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                                        >
+                                                            <FiChevronRight size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </motion.div>
@@ -260,7 +455,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
 
     const handleAssign = async (id, agency) => {
         try {
-            const res = await fetch(`${API_BASE}/api/congressional-initiatives/assign`, {
+            const res = await fetch(`${API_BASE}/api/deped-infrariorities/assign`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id, assigned_to: agency })
@@ -312,7 +507,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
             <div className="flex items-center gap-2 mb-6 text-sm">
                 <button onClick={onClose} className="text-slate-400 hover:text-slate-600 font-bold transition-colors">Dashboard</button>
                 <FiChevronRight className="text-slate-300" />
-                <span className="text-amber-600 font-black uppercase tracking-widest">Congressional Initiatives</span>
+                <span className="text-amber-600 font-black uppercase tracking-widest">DepEd Infrariorities</span>
             </div>
 
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden flex flex-col flex-1">
@@ -323,7 +518,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                             <FiAlertCircle size={24} />
                         </div>
                         <div>
-                            <h3 className="text-white font-black text-2xl">Congressional Initiatives</h3>
+                            <h3 className="text-white font-black text-2xl">DepEd Infrariorities</h3>
                             <p className="text-amber-100 text-[10px] font-black uppercase tracking-widest">{rows.length} Total Projects Tracked</p>
                         </div>
                     </div>
@@ -347,7 +542,7 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                     <FiDatabase className="mx-auto w-16 h-16 mb-6 opacity-20 text-slate-400" />
                                     <h4 className="text-xl font-bold text-slate-800">No initiatives data found</h4>
                                     <p className="text-slate-500 mt-2 mb-8">Please import the latest CSV file to begin tracking.</p>
-                                    <button onClick={onImport} className="bg-amber-500 text-white font-black px-10 py-4 rounded-2xl hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all active:scale-95">Import Congressional Data</button>
+                                    <button onClick={onImport} className="bg-amber-500 text-white font-black px-10 py-4 rounded-2xl hover:bg-amber-600 shadow-lg shadow-amber-200 transition-all active:scale-95">Import Infrariorities Data</button>
                                 </div>
                             ) : (
                                 <>
@@ -381,8 +576,8 @@ const CongressView = ({ isVisible, onClose, rows, loading, onImport, importMsg, 
                                      <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 flex items-start gap-4">
                                         <FiInfo className="text-amber-500 shrink-0 mt-1" size={20} />
                                         <div className="text-slate-600 leading-relaxed">
-                                            <p className="font-bold text-slate-800 mb-1">About Congressional Initiatives</p>
-                                            <p className="text-sm italic">Congressional initiatives are special projects allocated for specific schools. These can be assigned to different implementing agencies to track progress through the partnership dashboard. Assigning a project here will automatically update the corresponding agency's project count in the main dashboard.</p>
+                                            <p className="font-bold text-slate-800 mb-1">About DepEd Infrariorities</p>
+                                            <p className="text-sm italic">DepEd Infrariorities represent high-priority school infrastructure projects identified for strategic implementation. These projects are specifically allocated and can be assigned to various implementing agencies for streamlined monitoring and progression. Accurate tracking here ensures that critical infrastructure gaps are addressed efficiently through our partnership network.</p>
                                         </div>
                                     </div>
                                     <p className="text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-widest text-right italic">data displayed is as of February 23, 2026. 5:45 pm</p>
@@ -575,7 +770,7 @@ const HomeView = ({
             drilldown: partnerships.cso || []
         },
         {
-            id: 'FOR_DECISION', title: 'Congressional Initiatives',
+            id: 'FOR_DECISION', title: 'DepEd Infrariorities',
             icon: <FiAlertCircle className="w-6 h-6" />, color: 'bg-yellow-100 text-yellow-600',
             count: partnerships.forDecision?.length > 0 ? Number(partnerships.forDecision[0].projects) : 0,
             drilldown: partnerships.forDecision || []
@@ -1433,7 +1628,7 @@ const PSIP = () => {
     const loadCongressData = async () => {
         setCongressLoading(true);
         try {
-            const res = await fetch(`${API_BASE}/api/congressional-initiatives`);
+            const res = await fetch(`${API_BASE}/api/deped-infrariorities`);
             const data = await res.json();
             setCongressRows(data);
         } catch (err) {
@@ -1446,7 +1641,7 @@ const PSIP = () => {
     const handleCongressImport = async () => {
         try {
             setCongressLoading(true);
-            const res = await fetch(`${API_BASE}/api/congressional-initiatives/import`, { method: 'POST' });
+            const res = await fetch(`${API_BASE}/api/deped-infrariorities/import`, { method: 'POST' });
             const data = await res.json();
             setCongressImportMsg(data.message);
             loadCongressData();

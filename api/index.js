@@ -914,6 +914,33 @@ app.get('/api/masterlist/distribution', async (req, res) => {
   }
 });
 
+// Distribution Projects API (Lists specific projects for drilldown)
+app.get('/api/masterlist/distribution-projects', async (req, res) => {
+  try {
+    const { region, division, municipality, legislative_district, limit = 50, offset = 0 } = req.query;
+
+    const base = `
+      SELECT
+        "school_id", "school_name", "region", "division", "municipality", "legislative_district",
+        "proposed_no_of_cl" as classrooms,
+        "est_classroom_cost" as cost,
+        "proposed_funding_year" as funding_year,
+        "sty_count", "cl_count"
+      FROM masterlist_26_30
+    `;
+    const { query, params } = buildMasterlistQuery(base, { region, division, municipality, legislative_district });
+
+    const finalQuery = `${query} ORDER BY "proposed_no_of_cl" DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const finalParams = [...params, Number(limit), Number(offset)];
+
+    const result = await pool.query(finalQuery, finalParams);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Masterlist Projects Fetch Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // By Storey Breakdown (e.g., 2sty4cl)
 app.get('/api/masterlist/storey-breakdown', async (req, res) => {
   try {
@@ -1127,10 +1154,10 @@ app.get('/api/masterlist/partnership-schools', async (req, res) => {
   }
 });
 
-// --- CONGRESSIONAL INITIATIVES ---
+// --- DEPED INFRARIORITIES (formerly Congressional Initiatives) ---
 
 // One-time: import CSV into DB table
-app.post('/api/congressional-initiatives/import', async (req, res) => {
+app.post('/api/deped-infrariorities/import', async (req, res) => {
   const client = await pool.connect();
   try {
     // Create table if not exists
@@ -1227,15 +1254,15 @@ app.post('/api/congressional-initiatives/import', async (req, res) => {
 
     res.json({ success: true, imported });
   } catch (err) {
-    console.error('❌ Congressional Initiatives Import Error:', err);
+    console.error('❌ DepEd Infrariorities Import Error:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
 
-// GET: Fetch Congressional Initiatives details with optional filters
-app.get('/api/congressional-initiatives', async (req, res) => {
+// GET: Fetch DepEd Infrariorities details with optional filters
+app.get('/api/deped-infrariorities', async (req, res) => {
   try {
     const { region, division, legislative_district, search } = req.query;
 
@@ -1281,13 +1308,13 @@ app.get('/api/congressional-initiatives', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ Congressional Initiatives Error:', err);
+    console.error('❌ DepEd Infrariorities Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Summary stats for Congressional Initiatives
-app.get('/api/congressional-initiatives/summary', async (req, res) => {
+// GET: Summary stats for DepEd Infrariorities
+app.get('/api/deped-infrariorities/summary', async (req, res) => {
   try {
     const { region, division, legislative_district } = req.query;
 
@@ -1316,13 +1343,13 @@ app.get('/api/congressional-initiatives/summary', async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('❌ Congressional Initiatives Summary Error:', err);
+    console.error('❌ DepEd Infrariorities Summary Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET: Distribution stats for Congressional Initiatives (for drilldown)
-app.get('/api/congressional-initiatives/distribution', async (req, res) => {
+// GET: Distribution stats for DepEd Infrariorities (for drilldown)
+app.get('/api/deped-infrariorities/distribution', async (req, res) => {
   try {
     const { groupBy, region, division, legislative_district } = req.query;
 
@@ -1354,15 +1381,47 @@ app.get('/api/congressional-initiatives/distribution', async (req, res) => {
     `;
 
     const result = await pool.query(finalQuery, params);
+    return res.json(result.rows || []);
+  } catch (err) {
+    console.error('❌ DepEd Infrariorities Distribution Error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET: Specific projects for DepEd Infrariorities (for drilldown list)
+app.get('/api/deped-infrariorities/distribution-projects', async (req, res) => {
+  try {
+    const { region, division, legislative_district, limit = 50, offset = 0 } = req.query;
+
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (region) { where.push(`region = $${pIdx++}`); params.push(region); }
+    if (division) { where.push(`division = $${pIdx++}`); params.push(division); }
+    if (legislative_district && legislative_district !== 'undefined') {
+      where.push(`legislative_district = $${pIdx++}`); params.push(legislative_district);
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const finalQuery = `
+      SELECT * FROM congressional_initiatives
+      ${whereClause}
+      ORDER BY amount DESC
+      LIMIT $${pIdx++} OFFSET $${pIdx++}
+    `;
+    const finalParams = [...params, Number(limit), Number(offset)];
+
+    const result = await pool.query(finalQuery, finalParams);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ Congressional Initiatives Distribution Error:', err);
+    console.error('❌ DepEd Infrariorities Projects Fetch Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Post: Assign a congressional initiative to an agency
-app.post('/api/congressional-initiatives/assign', async (req, res) => {
+// Post: Assign a deped-infrariorities project to an agency
+app.post('/api/deped-infrariorities/assign', async (req, res) => {
   try {
     const { id, assigned_to } = req.body;
     if (!id) return res.status(400).json({ error: 'id is required' });
@@ -1718,8 +1777,6 @@ app.post('/api/validate-school-health', async (req, res) => {
 
   console.log(`Running Fraud Detection for School: ${school_id}...`);
 
-  // Explicitly resolve the script. On some VMs the app structure changes when deployed.
-  // We'll check multiple common paths (current dir, parent dir, or explicitly the root).
   const rootDir = process.cwd();
   const fileDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1727,12 +1784,7 @@ app.post('/api/validate-school-health', async (req, res) => {
   if (!fs.existsSync(scriptPath)) {
     scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
   }
-  if (!fs.existsSync(scriptPath)) {
-    // Ultimate fallback if restructuring happened on VM
-    scriptPath = path.join(rootDir, '..', 'advanced_fraud_detection.py');
-  }
 
-  // Use python3 on non-windows systems, or an environment variable override
   const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
   const command = `"${pythonCmd}" "${scriptPath}" --school_id "${school_id}"`;
 
@@ -1748,13 +1800,53 @@ app.post('/api/validate-school-health', async (req, res) => {
       });
     }
 
-    // Log stdout/stderr but don't fail if just warnings
     console.log(`Validator Output: ${stdout}`);
     if (stderr) console.warn(`Validator Warnings/Errors: ${stderr}`);
 
     res.json({ success: true, message: 'Validation completed successfully.', output: stdout });
   });
 });
+
+// --- RUN GLOBAL FRAUD DETECTION ---
+app.post('/api/admin/run-fraud-detection', async (req, res) => {
+  const { adminUid } = req.body;
+
+  console.log(`Admin ${adminUid} is triggering Global Fraud Detection...`);
+
+  const rootDir = process.cwd();
+  const fileDir = path.dirname(fileURLToPath(import.meta.url));
+
+  let scriptPath = path.join(rootDir, 'advanced_fraud_detection.py');
+  if (!fs.existsSync(scriptPath)) {
+    scriptPath = path.join(fileDir, '..', 'advanced_fraud_detection.py');
+  }
+
+  const pythonCmd = process.env.PYTHON_CMD || (process.platform === 'win32' ? 'python' : 'python3');
+  const command = `"${pythonCmd}" "${scriptPath}"`; // No school_id = Full Batch
+
+  console.log(`Executing Global Fraud Detection: ${command}`);
+
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).json({
+        error: 'Global Fraud Detection failed to execute.',
+        details: stderr || error.message
+      });
+    }
+
+    console.log(`Global Fraud Detection Output: ${stdout}`);
+    if (stderr) console.warn(`Global Fraud Detection Warnings: ${stderr}`);
+
+    res.json({
+      success: true,
+      message: 'Global Fraud Detection completed successfully.',
+      output: stdout
+    });
+  });
+});
+
+
 
 // --- HELPER: Auto-Fill Teachers from Master List ---
 const autoFillSchoolTeachers = async (schoolId) => {
