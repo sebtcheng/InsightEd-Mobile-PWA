@@ -5542,6 +5542,7 @@ app.post('/api/save-enrolment', async (req, res) => {
         aral_math_g5=$53, aral_read_g5=$54, aral_sci_g5=$55,
         aral_math_g6=$56, aral_read_g6=$57, aral_sci_g6=$58,
         aral_total=$59,
+        sned_learners=$60, non_graded_learners=$61,
 
         submitted_at = CURRENT_TIMESTAMP,
         history_logs = history_logs || $40::jsonb
@@ -5576,7 +5577,10 @@ app.post('/api/save-enrolment', async (req, res) => {
       data.aral_math_g4 || 0, data.aral_read_g4 || 0, data.aral_sci_g4 || 0,
       data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0,
       data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,
-      data.aral_total || 0
+      data.aral_total || 0,
+      
+      // Inclusive Options
+      data.sned_learners || 0, data.non_graded_learners || 0
     ];
 
     const result = await pool.query(query, values);

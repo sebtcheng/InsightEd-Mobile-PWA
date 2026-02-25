@@ -505,12 +505,54 @@ const OrganizedClasses = ({ embedded }) => {
             <div className={`px-5 relative z-20 max-w-4xl mx-auto space-y-5 ${embedded ? '' : '-mt-12'}`}>
 
                 {/* TOTAL BANNER MATCHING ENROLMENT */}
-                <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-blue-900/5 border border-slate-100 flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Classes</p>
-                        <p className="text-[10px] text-slate-400 font-medium">Grand Total (ES + JHS + SHS)</p>
+                <div className="bg-white p-6 rounded-[2rem] shadow-xl shadow-blue-900/5 border border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div className="flex items-center gap-6">
+                        <div>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Classes</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Grand Total (ES + JHS + SHS)</p>
+                        </div>
+                        <div className="text-5xl font-black text-[#004A99] tracking-tighter">{getTotalClasses()}</div>
                     </div>
-                    <div className="text-5xl font-black text-[#004A99] tracking-tighter">{getTotalClasses()}</div>
+
+                    {/* Class Size Distribution Summary */}
+                    {Object.values(classSizeData).some(v => v > 0) && (() => {
+                        const allPrefixes = ['Kinder', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12'];
+                        const totalLess = allPrefixes.reduce((sum, p) => sum + (classSizeData[`cntLess${p}`] || 0), 0);
+                        const totalWithin = allPrefixes.reduce((sum, p) => sum + (classSizeData[`cntWithin${p}`] || 0), 0);
+                        const totalAbove = allPrefixes.reduce((sum, p) => sum + (classSizeData[`cntAbove${p}`] || 0), 0);
+                        const grandTotal = totalLess + totalWithin + totalAbove;
+                        
+                        const calcPct = (part, total) => {
+                            if (!total || total === 0) return "0%";
+                            return `${Math.round((part / total) * 100)}%`;
+                        };
+
+                        return (
+                            <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50/80 rounded-2xl border border-slate-100 mb-[-10px] lg:mb-0 w-full lg:w-auto">
+                                <div className="text-center px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 flex-1 min-w-[80px]">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Less</p>
+                                    <div className="flex items-baseline justify-center gap-1">
+                                        <span className="text-xl font-black text-emerald-600">{totalLess}</span>
+                                        <span className="text-[10px] font-bold text-emerald-600/70">({calcPct(totalLess, grandTotal)})</span>
+                                    </div>
+                                </div>
+                                <div className="text-center px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 flex-1 min-w-[80px]">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Within</p>
+                                    <div className="flex items-baseline justify-center gap-1">
+                                        <span className="text-xl font-black text-blue-600">{totalWithin}</span>
+                                        <span className="text-[10px] font-bold text-blue-600/70">({calcPct(totalWithin, grandTotal)})</span>
+                                    </div>
+                                </div>
+                                <div className="text-center px-4 py-2 bg-white rounded-xl shadow-sm border border-slate-100 flex-1 min-w-[80px]">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Above</p>
+                                    <div className="flex items-baseline justify-center gap-1">
+                                        <span className="text-xl font-black text-red-600">{totalAbove}</span>
+                                        <span className="text-[10px] font-bold text-red-600/70">({calcPct(totalAbove, grandTotal)})</span>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 <form onSubmit={(e) => e.preventDefault()}>

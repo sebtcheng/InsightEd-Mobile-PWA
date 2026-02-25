@@ -108,6 +108,9 @@ const Enrolment = ({ embedded = false }) => {
         aral_math_g5: '', aral_read_g5: '', aral_sci_g5: '',
         aral_math_g6: '', aral_read_g6: '', aral_sci_g6: '',
 
+        // Inclusive Education
+        sned_learners: '', non_graded_learners: '',
+
         // Totals (Computed)
         es_enrollment: 0, jhs_enrollment: 0, shs_enrollment: 0, total_enrollment: 0,
         aral_total: 0, grade_11: 0, grade_12: 0
@@ -261,7 +264,8 @@ const Enrolment = ({ embedded = false }) => {
                 (prev.arts_12 || 0) + (prev.sports_12 || 0);
 
             const shs = g11 + g12;
-            const grand = es + jhs + shs;
+            const inclusive = (prev.sned_learners || 0) + (prev.non_graded_learners || 0);
+            const grand = es + jhs + shs + inclusive;
 
             const aral = Object.keys(prev)
                 .filter(k => k.startsWith('aral_') && k !== 'aral_total')
@@ -536,6 +540,36 @@ const Enrolment = ({ embedded = false }) => {
                         </div>
                     </GridSection>
                 )}
+
+                {/* --- INCLUSIVE EDUCATION --- */}
+                <GridSection label="Inclusive Education (Optional)" icon={<TbSchool />} color="text-emerald-600 bg-emerald-500">
+                    <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
+                        <div className="text-center group">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-emerald-500 transition-colors w-full truncate">SNED Learners</label>
+                            <input
+                                type="text" inputMode="numeric" pattern="[0-9]*"
+                                value={formData.sned_learners === '' || formData.sned_learners === null ? '' : formData.sned_learners}
+                                onChange={(e) => handleChange('sned_learners', e.target.value)}
+                                disabled={isLocked || viewOnly || isDummy || isReadOnly}
+                                className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm hover:border-emerald-200"
+                                onFocus={() => formData.sned_learners === 0 && handleChange('sned_learners', '')}
+                                onBlur={() => (formData.sned_learners === '' || formData.sned_learners === null) && handleChange('sned_learners', 0)}
+                            />
+                        </div>
+                        <div className="text-center group">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase mb-1 block group-hover:text-emerald-500 transition-colors w-full truncate">Non-Graded Learners</label>
+                            <input
+                                type="text" inputMode="numeric" pattern="[0-9]*"
+                                value={formData.non_graded_learners === '' || formData.non_graded_learners === null ? '' : formData.non_graded_learners}
+                                onChange={(e) => handleChange('non_graded_learners', e.target.value)}
+                                disabled={isLocked || viewOnly || isDummy || isReadOnly}
+                                className="w-full h-12 text-center font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm hover:border-emerald-200"
+                                onFocus={() => formData.non_graded_learners === 0 && handleChange('non_graded_learners', '')}
+                                onBlur={() => (formData.non_graded_learners === '' || formData.non_graded_learners === null) && handleChange('non_graded_learners', 0)}
+                            />
+                        </div>
+                    </div>
+                </GridSection>
 
                 {/* --- ARAL --- */}
                 {showElem() && (

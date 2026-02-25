@@ -383,22 +383,58 @@ const Login = () => {
                     }
                 } else {
                     console.warn("Firestore doc missing");
+                    // Try fetching from Postgres
+                    try {
+                        const valRes = await fetch(`/api/auth/validate/${uid}`);
+                        if (valRes.ok) {
+                            const valData = await valRes.json();
+                            if (valData.valid) {
+                                role = valData.role;
+                                userData = { role: valData.role, firstName: 'User' };
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch from Postgres fallback', e);
+                    }
                 }
             } catch (firestoreErr) {
                 console.warn("Firestore blocked or slow, trying fallback...", firestoreErr);
 
-                // Fallback: Check Local Storage
-                const storedRole = localStorage.getItem('userRole');
-                if (storedRole) {
-                    console.log("Recovered role from LocalStorage:", storedRole);
-                    role = storedRole;
-                    // Mock data so the rest of the function doesn't crash
-                    userData = { role: storedRole, firstName: 'User' };
-                } else {
-                    // CRITICAL FALLBACK: If fresh login and blocked, assume School Head or ask user (For now default to School Head if desperate)
-                    console.error("Connection Blocked. Cannot determine role.");
-                    alert("Connection blocked (AdBlocker?). Attempting to enter offline mode.");
-                    role = 'School Head'; // Fallback for testing
+                // Fallback: Check SQL Database FIRST, then Local Storage
+                try {
+                    const valRes = await fetch(`/api/auth/validate/${uid}`);
+                    if (valRes.ok) {
+                        const valData = await valRes.json();
+                        if (valData.valid) {
+                            role = valData.role;
+                            userData = { role: valData.role, firstName: 'User' };
+                        } else {
+                            if (valData.reason === 'disabled') {
+                                alert("Your account has been disabled. Please contact the administrator.");
+                            } else {
+                                alert("Account not found. Please contact support.");
+                            }
+                            await auth.signOut();
+                            setLoading(false);
+                            return;
+                        }
+                    } else {
+                        throw new Error('Backend unresposive');
+                    }
+                } catch (sqlErr) {
+                    console.warn("SQL fallback failed, trying Local Storage", sqlErr);
+                    const storedRole = localStorage.getItem('userRole');
+                    if (storedRole) {
+                        console.log("Recovered role from LocalStorage:", storedRole);
+                        role = storedRole;
+                        // Mock data so the rest of the function doesn't crash
+                        userData = { role: storedRole, firstName: 'User' };
+                    } else {
+                        // CRITICAL FALLBACK: If fresh login and blocked, assume School Head or ask user (For now default to School Head if desperate)
+                        console.error("Connection Blocked. Cannot determine role.");
+                        alert("Connection blocked (AdBlocker?). Attempting to enter offline mode.");
+                        role = 'School Head'; // Fallback for testing
+                    }
                 }
             }
 
