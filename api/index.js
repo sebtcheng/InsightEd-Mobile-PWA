@@ -686,6 +686,22 @@ const initMasterlistDB = async () => {
   }
 }); */
 
+// --- REFERENCE API ENDPOINTS ---
+app.get('/api/reference/building-types', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT building_type 
+      FROM nsbi_24_25_buildings 
+      WHERE building_type IS NOT NULL 
+      ORDER BY building_type ASC;
+    `);
+    res.json(result.rows.map(row => row.building_type));
+  } catch (err) {
+    console.error('❌ Error fetching building types:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- MASTERLIST API ENDPOINTS ---
 
 app.get('/api/import-masterlist-teachers/:schoolId', async (req, res) => {
@@ -3723,6 +3739,35 @@ app.post('/api/sdo/submit-school', async (req, res) => {
   }
 
   try {
+    // Check if school_id already exists in pending_schools
+    const existingRes = await pool.query('SELECT pending_id, status FROM pending_schools WHERE school_id = $1', [school_id]);
+    if (existingRes.rows.length > 0) {
+      const existingStatus = existingRes.rows[0].status;
+      if (existingStatus === 'pending' || existingStatus === 'approved') {
+        return res.status(409).json({ error: "School ID already exists in pending submissions" });
+      }
+      
+      if (existingStatus === 'rejected') {
+        const updateResult = await pool.query(`
+          UPDATE pending_schools SET
+            school_name = $2, region = $3, division = $4, district = $5, province = $6,
+            municipality = $7, leg_district = $8, barangay = $9, street_address = $10,
+            mother_school_id = $11, curricular_offering = $12, latitude = $13, longitude = $14,
+            submitted_by = $15, submitted_by_name = $16, special_order = $17,
+            status = 'pending', submitted_at = CURRENT_TIMESTAMP
+          WHERE school_id = $1
+          RETURNING pending_id
+        `, [
+          school_id, school_name, region, division, district, province, municipality, leg_district,
+          barangay, street_address, mother_school_id, curricular_offering,
+          latitude, longitude, submitted_by, submitted_by_name, special_order
+        ]);
+        
+        console.log(`✅ School resubmitted for approval: ${school_name} (${school_id})`);
+        return res.json({ success: true, pending_id: updateResult.rows[0].pending_id });
+      }
+    }
+
     const result = await pool.query(`
       INSERT INTO pending_schools (
         school_id, school_name, region, division, district, province, municipality, leg_district,
@@ -6644,7 +6689,7 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
 
                 -- Departmentalized
                 dept_english, dept_filipino, dept_science, dept_math, dept_ap,
-                dept_mapeh, dept_tle, dept_values, dept_gen_ed, dept_ece, dept_others
+                dept_mapeh, dept_tle, dept_values, dept_gen_ed, dept_ece, dept_others, non_advisory, sned_teachers
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -6691,7 +6736,9 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
         dept_values: row.dept_values,
         dept_gen_ed: row.dept_gen_ed,
         dept_ece: row.dept_ece,
-        dept_others: row.dept_others
+        dept_others: row.dept_others,
+        non_advisory: row.non_advisory,
+        sned_teachers: row.sned_teachers
       }
     });
 
@@ -6739,7 +6786,7 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
                 dept_english = $33::INT, dept_filipino = $34::INT, dept_science = $35::INT,
                 dept_math = $36::INT, dept_ap = $37::INT, dept_mapeh = $38::INT,
                 dept_tle = $39::INT, dept_values = $40::INT, dept_gen_ed = $41::INT,
-                dept_ece = $42::INT, dept_others = $43::INT,
+                dept_ece = $42::INT, dept_others = $43::INT, non_advisory = $44::INT, sned_teachers = $45::INT,
 
                 updated_at = CURRENT_TIMESTAMP
             WHERE TRIM(submitted_by) = TRIM($1)
@@ -6778,7 +6825,8 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       d.dept_english || 0, d.dept_filipino || 0, d.dept_science || 0,
       d.dept_math || 0, d.dept_ap || 0, d.dept_mapeh || 0,
       d.dept_tle || 0, d.dept_values || 0, d.dept_gen_ed || 0,
-      d.dept_ece || 0, d.dept_others || 0
+      d.dept_ece || 0, d.dept_others || 0, d.non_advisory || 0,
+      d.sned_teachers || 0
     ];
 
     const result = await pool.query(query, values);
@@ -7052,6 +7100,7 @@ app.post('/api/save-school-resources', async (req, res) => {
                 male_bowls_func=$39, male_bowls_nonfunc=$40,
                 male_urinals_func=$41, male_urinals_nonfunc=$42,
                 pwd_bowls_func=$43, pwd_bowls_nonfunc=$44,
+                toilet_common_functional=$45, toilet_common_nonfunctional=$46,
 
                 updated_at=CURRENT_TIMESTAMP
             WHERE school_id=$1
@@ -7084,7 +7133,8 @@ app.post('/api/save-school-resources', async (req, res) => {
       data.female_bowls_func || 0, data.female_bowls_nonfunc || 0,
       data.male_bowls_func || 0, data.male_bowls_nonfunc || 0,
       data.male_urinals_func || 0, data.male_urinals_nonfunc || 0,
-      data.pwd_bowls_func || 0, data.pwd_bowls_nonfunc || 0
+      data.pwd_bowls_func || 0, data.pwd_bowls_nonfunc || 0,
+      data.toilet_common_functional || 0, data.toilet_common_nonfunctional || 0
     ];
 
     await pool.query(query, values);

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../firebase';
 import { addToOutbox, getOutbox, addRepairToLocal, getLocalRepairs, deleteLocalRepair } from '../db';
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from 'firebase/firestore';
-import { FiChevronRight, FiEdit, FiTrash2, FiSave, FiCheckCircle, FiInfo, FiAlertCircle, FiPlus, FiArrowRight, FiFileText, FiMapPin, FiHome, FiHelpCircle, FiSearch, FiArrowLeft, FiMoreVertical, FiLayout, FiTruck, FiBox, FiArchive, FiClock } from 'react-icons/fi';
+import { FiChevronRight, FiEdit, FiTrash2, FiSave, FiCheckCircle, FiInfo, FiAlertCircle, FiPlus, FiArrowRight, FiFileText, FiMapPin, FiHome, FiHelpCircle, FiSearch, FiArrowLeft, FiMoreVertical, FiLayout, FiTruck, FiBox, FiArchive, FiClock, FiChevronDown } from 'react-icons/fi';
 import RepairEntryModal from '../components/RepairEntryModal';
 import OfflineSuccessModal from '../components/OfflineSuccessModal';
 import SuccessModal from '../components/SuccessModal';
@@ -113,20 +113,91 @@ const DemolitionEntryModal = ({ isOpen, onClose, onSave, data, setData }) => {
 };
 
 // --- BUILDING INVENTORY MODAL ---
-const CATEGORY_OPTIONS = [
-    'New Construction', 'Electrification', 'Health', 'QRF',
-    'LMS', 'ALS-CLC', 'Gabaldon', 'Repairs'
-];
+
+const SearchableDropdown = ({ options, value, onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const dropdownRef = useRef(null);
+
+    const filteredOptions = options.filter(option =>
+        option.toLowerCase().includes(query.toLowerCase())
+    );
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <div
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 cursor-pointer flex justify-between items-center focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all"
+                onClick={() => setIsOpen(!isOpen)}
+                tabIndex={0}
+            >
+                <span className={value ? "text-slate-700" : "text-slate-400"}>
+                    {value || placeholder}
+                </span>
+                <FiChevronDown className="text-slate-400" />
+            </div>
+
+            {isOpen && (
+                <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+                        <div className="relative">
+                            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="text"
+                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-blue-300 transition-colors"
+                                placeholder="Search..."
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                    </div>
+                    <div className="overflow-y-auto p-1 max-h-48">
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map((type, index) => (
+                                <div
+                                    key={index}
+                                    className={`px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                                        value === type ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                    onClick={() => {
+                                        onChange(type);
+                                        setIsOpen(false);
+                                        setQuery('');
+                                    }}
+                                >
+                                    {type}
+                                </div>
+                            ))
+                        ) : (
+                            <div className="px-4 py-3 text-sm text-slate-400 text-center">No results found</div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const defaultInventoryData = {
-    building_name: '', category: 'New Construction',
+    building_name: '', category: '',
     no_of_storeys: 1, no_of_classrooms: '', year_completed: '', remarks: ''
 };
 
-const BuildingInventoryModal = ({ isOpen, onClose, onSave, data, setData, statusLabel, isEditing }) => {
+const BuildingInventoryModal = ({ isOpen, onClose, onSave, data, setData, statusLabel, isEditing, buildingTypes = [] }) => {
     if (!isOpen) return null;
 
     const canSave = data.building_name.trim() &&
+        data.category !== '' &&
         data.no_of_classrooms !== '' && Number(data.no_of_classrooms) > 0;
 
     return (
@@ -150,11 +221,12 @@ const BuildingInventoryModal = ({ isOpen, onClose, onSave, data, setData, status
                     {/* Category Dropdown */}
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Category *</label>
-                        <select value={data.category}
-                            onChange={(e) => setData({ ...data, category: e.target.value })}
-                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-200 transition-all">
-                            {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <SearchableDropdown
+                            options={buildingTypes}
+                            value={data.category}
+                            onChange={(val) => setData({ ...data, category: val })}
+                            placeholder="Select Building Type"
+                        />
                     </div>
 
                     {/* Storey & Classrooms — Side by Side */}
@@ -221,6 +293,23 @@ const PhysicalFacilities = ({ embedded }) => {
     const schoolIdParam = queryParams.get('schoolId');
     const isDummy = location.state?.isDummy || false;
     const isSuperUserReadOnly = useReadOnly(); // Use Hook
+
+    const [buildingTypes, setBuildingTypes] = useState([]);
+
+    useEffect(() => {
+        const fetchBuildingTypes = async () => {
+            try {
+                const res = await fetch('/api/reference/building-types');
+                if (res.ok) {
+                    const data = await res.json();
+                    setBuildingTypes(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch building types:', err);
+            }
+        };
+        fetchBuildingTypes();
+    }, []);
 
     // Super User / Audit Context
     const isSuperUser = localStorage.getItem('userRole') === 'Super User';
@@ -1616,6 +1705,7 @@ const PhysicalFacilities = ({ embedded }) => {
                 setData={setInventoryModalData}
                 statusLabel={inventoryModalTarget === 'new' ? 'Newly Built' : 'Good Condition'}
                 isEditing={editingInventoryIdx !== null}
+                buildingTypes={buildingTypes}
             />
 
             <DemolitionEntryModal

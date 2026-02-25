@@ -381,6 +381,7 @@ const SchoolResources = ({ embedded }) => {
         male_bowls_func: 0, male_bowls_nonfunc: 0,
         male_urinals_func: 0, male_urinals_nonfunc: 0,
         pwd_bowls_func: 0, pwd_bowls_nonfunc: 0,
+        toilet_common_functional: 0, toilet_common_nonfunctional: 0,
 
         // SEATS
         seats_kinder: 0, seats_grade_1: 0, seats_grade_2: 0, seats_grade_3: 0,
@@ -1458,6 +1459,43 @@ const SchoolResources = ({ embedded }) => {
                                         className="w-full text-center font-bold text-rose-600 bg-white border border-rose-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
                                         onFocus={() => formData.pwd_bowls_nonfunc === 0 && handleChange({ target: { name: 'pwd_bowls_nonfunc', value: '' } })}
                                         onBlur={() => (formData.pwd_bowls_nonfunc === '' || formData.pwd_bowls_nonfunc === null) && handleChange({ target: { name: 'pwd_bowls_nonfunc', value: 0 } })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Common Toilets */}
+                        <div className="bg-orange-50/60 border border-orange-100 rounded-2xl p-4 sm:col-span-2">
+                            <p className="text-[10px] font-extrabold text-orange-600 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                <span>🚻</span> Common Toilets (Shared/Gender-Neutral)
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiCheckCircle size={10} /> Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="toilet_common_functional"
+                                        value={formData.toilet_common_functional ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-emerald-700 bg-white border border-emerald-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.toilet_common_functional === 0 && handleChange({ target: { name: 'toilet_common_functional', value: '' } })}
+                                        onBlur={() => (formData.toilet_common_functional === '' || formData.toilet_common_functional === null) && handleChange({ target: { name: 'toilet_common_functional', value: 0 } })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <FiXCircle size={10} /> Non-Functional
+                                    </label>
+                                    <input
+                                        type="number" min="0" name="toilet_common_nonfunctional"
+                                        value={formData.toilet_common_nonfunctional ?? 0}
+                                        onChange={handleChange}
+                                        disabled={isLocked || viewOnly}
+                                        className="w-full text-center font-bold text-rose-600 bg-white border border-rose-200 rounded-xl py-2.5 text-sm focus:ring-2 focus:ring-rose-400 outline-none disabled:bg-transparent disabled:border-transparent shadow-sm"
+                                        onFocus={() => formData.toilet_common_nonfunctional === 0 && handleChange({ target: { name: 'toilet_common_nonfunctional', value: '' } })}
+                                        onBlur={() => (formData.toilet_common_nonfunctional === '' || formData.toilet_common_nonfunctional === null) && handleChange({ target: { name: 'toilet_common_nonfunctional', value: 0 } })}
                                     />
                                 </div>
                             </div>

@@ -19,18 +19,17 @@ def connect_and_load_data():
     print("Connecting to database...")
     try:
         engine = create_engine(DB_CONNECTION_STRING)
-        # Load all columns to scan for correlations, but focus on school_profiles
-        query = "SELECT * FROM school_profiles"
-        df = pd.read_sql(query, engine)
-        
         # --- FILTER DATA IF SCHOOL_ID PROVIDED ---
         if args.school_id:
-            df = df[df['school_id'].astype(str) == str(args.school_id)]
+            query = "SELECT * FROM school_profiles WHERE school_id = %(school_id)s"
+            df = pd.read_sql(query, engine, params={"school_id": str(args.school_id)})
             if df.empty:
                 print(f"No data found for school {args.school_id}")
                 sys.exit(0)
             print(f"Successfully loaded {len(df)} records for school {args.school_id}.")
         else:
+            query = "SELECT * FROM school_profiles"
+            df = pd.read_sql(query, engine)
             print(f"Successfully loaded {len(df)} records (Full Batch).")
             
         return df, engine
@@ -745,8 +744,13 @@ def analyze_school_summary(engine, target_school_id=None):
     try:
         # Load school_summary
         print("Loading school_summary for analysis...")
-        query = "SELECT * FROM school_summary"
-        df = pd.read_sql(query, engine)
+        if target_school_id:
+            query = "SELECT * FROM school_summary WHERE school_id = %(school_id)s"
+            df = pd.read_sql(query, engine, params={"school_id": str(target_school_id)})
+        else:
+            query = "SELECT * FROM school_summary"
+            df = pd.read_sql(query, engine)
+            
         print(f"Loaded {len(df)} schools from summary table.")
         
         # Calculate efficiency ratios using summary columns

@@ -458,8 +458,15 @@ const AdminDashboard = () => {
                 // 3. Show Success & Password via Modal
                 setResetModalData({ email, password: tempPassword });
             } else {
-                const err = await res.json();
-                alert("❌ Failed to reset password: " + err.error);
+                let errText = await res.text();
+                let errMsg = "Unknown error";
+                try {
+                    const errObj = JSON.parse(errText);
+                    errMsg = errObj.error || errObj.message || errText;
+                } catch {
+                    errMsg = errText ? errText.substring(0, 100) : "Empty response from server";
+                }
+                alert("❌ Failed to reset password: " + errMsg);
             }
         } catch (e) {
             console.error(e);

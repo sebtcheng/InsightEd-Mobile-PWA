@@ -96,7 +96,7 @@ const TeachingPersonnel = ({ embedded }) => {
         dept_english: 0, dept_filipino: 0, dept_science: 0,
         dept_math: 0, dept_ap: 0, dept_mapeh: 0,
         dept_tle: 0, dept_values: 0, dept_gen_ed: 0,
-        dept_ece: 0, dept_others: 0,
+        dept_ece: 0, dept_others: 0, non_advisory: 0, sned_teachers: 0,
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -141,7 +141,7 @@ const TeachingPersonnel = ({ embedded }) => {
                     dept_english: 0, dept_filipino: 0, dept_science: 0,
                     dept_math: 0, dept_ap: 0, dept_mapeh: 0,
                     dept_tle: 0, dept_values: 0, dept_gen_ed: 0,
-                    dept_ece: 0, dept_others: 0,
+                    dept_ece: 0, dept_others: 0, non_advisory: 0, sned_teachers: 0,
                 };
 
                 // STEP 2: IMMEDIATE CACHE LOAD
@@ -265,6 +265,8 @@ const TeachingPersonnel = ({ embedded }) => {
                                     dept_gen_ed: dbData.dept_gen_ed || 0,
                                     dept_ece: dbData.dept_ece || 0,
                                     dept_others: dbData.dept_others || 0,
+                                    non_advisory: dbData.non_advisory || 0,
+                                    sned_teachers: dbData.sned_teachers || 0,
                                 };
 
                                 setFormData(initialData);
@@ -310,13 +312,14 @@ const TeachingPersonnel = ({ embedded }) => {
     };
 
     const getTotal = () => {
-        // Calculate total teachers by excluding teaching experience fields (teach_exp_*) and departmentalized (dept_*)
-        return Object.entries(formData).reduce((total, [key, value]) => {
-            if (!key.startsWith('teach_exp_') && !key.startsWith('teach_multi_3plus_flag') && !key.startsWith('dept_')) {
+        // Calculate total teachers by excluding teaching experience fields (teach_exp_*) and multi_3plus_flag
+        const calculatedTotal = Object.entries(formData).reduce((total, [key, value]) => {
+            if (!key.startsWith('teach_exp_') && !key.startsWith('teach_multi_3plus_flag') && key !== 'non_advisory' && key !== 'sned_teachers') {
                 total += parseInt(value) || 0;
             }
             return total;
         }, 0);
+        return calculatedTotal + (parseInt(formData.non_advisory) || 0) + (parseInt(formData.sned_teachers) || 0);
     };
 
     const handleChange = (name, value) => {
@@ -388,7 +391,7 @@ const TeachingPersonnel = ({ embedded }) => {
         // 5. Departmentalized
         const deptFields = [
             'dept_english', 'dept_filipino', 'dept_science', 'dept_math', 'dept_ap',
-            'dept_mapeh', 'dept_tle', 'dept_values', 'dept_gen_ed', 'dept_ece', 'dept_others'
+            'dept_mapeh', 'dept_tle', 'dept_values', 'dept_gen_ed', 'dept_ece', 'dept_others', 'non_advisory', 'sned_teachers'
         ];
         for (const f of deptFields) {
             if (!isValidEntry(formData[f])) return false;
@@ -644,6 +647,22 @@ const TeachingPersonnel = ({ embedded }) => {
 
                     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
                         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                                <FiBriefcase size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-800 font-bold text-lg">Specialized & Other Assignments</h2>
+                                <p className="text-xs text-slate-400 font-medium">Teachers with special designations</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <TeacherInput label="Non-Advisory" name="non_advisory" value={formData.non_advisory ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="SNED Teachers" name="sned_teachers" value={formData.sned_teachers ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
                             <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600">
                                 <FiBookOpen size={20} />
                             </div>
@@ -752,7 +771,7 @@ const TeachingPersonnel = ({ embedded }) => {
                             <FiInfo />
                         </div>
                         <h3 className="font-bold text-lg text-slate-800 text-center">Form Guide</h3>
-                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the total number of teachers assigned to each grade level and their experience profile?'</b></p>
+                        <p className="text-sm text-slate-500 mt-2 mb-6 text-center">This form is answering the question: <b>'What is the total number of teachers assigned to each grade level and their experience profile?'</b><br/><br/>Note: Please ensure that borrowed or reassigned teachers are INCLUDED in your total count.</p>
                         <button onClick={() => setShowInfoModal(false)} className="w-full py-3 bg-[#004A99] text-white rounded-xl font-bold shadow-xl shadow-blue-900/20 hover:bg-blue-800 transition-transform active:scale-95">Got it</button>
                     </div>
                 </div>
