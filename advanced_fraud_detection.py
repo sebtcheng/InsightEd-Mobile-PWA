@@ -92,8 +92,17 @@ def clean_and_impute(df):
     else:
          df['num_classrooms'] = component_sum
 
-    # 3. Toilets
-    toilet_cols = ['res_toilets_female', 'res_toilets_male', 'res_toilets_common', 'res_toilets_pwd']
+    # 3. Toilets (Expanded to include Bowls/Seats)
+    toilet_cols = [
+        'res_toilets_female', 'res_toilets_male', 'res_toilets_common', 'res_toilets_pwd', 
+        'res_toilet_func', 'res_toilet_nonfunc',
+        'total_female_bowls_func', 'total_female_bowls_nonfunc', 
+        'total_male_bowls_func', 'total_male_bowls_nonfunc', 
+        'total_pwd_bowls_func', 'total_pwd_bowls_nonfunc',
+        'female_bowls_func', 'female_bowls_nonfunc', 
+        'male_bowls_func', 'male_bowls_nonfunc', 
+        'pwd_bowls_func', 'pwd_bowls_nonfunc'
+    ]
     df['num_toilets'] = get_numeric(df, toilet_cols).sum(axis=1)
     
     # 4. Furniture
@@ -124,16 +133,8 @@ def clean_and_impute(df):
     ]
     df['total_sections'] = get_numeric(df, classes_cols).sum(axis=1)
 
-    # 8. Total Specialization Teachers
-    spec_cols = [
-        'spec_english_teaching', 'spec_filipino_teaching', 'spec_math_teaching',
-        'spec_science_teaching', 'spec_ap_teaching', 'spec_mapeh_teaching',
-        'spec_esp_teaching', 'spec_tle_teaching', 'spec_guidance', 'spec_librarian',
-        'spec_ict_coord', 'spec_drrm_coord', 'spec_general_teaching', 'spec_ece_teaching',
-        'spec_bio_sci_teaching', 'spec_phys_sci_teaching', 'spec_agri_fishery_teaching',
-        'spec_others_teaching'
-    ]
-    df['total_specialization_teachers'] = get_numeric(df, spec_cols).sum(axis=1)
+    # 8. Total Specialization Teachers (REMOVED)
+    df['total_specialization_teachers'] = df['num_teachers'] # Default to num_teachers to avoid breakages in downstream calc, but no longer used for fraud
 
     # Impute Zero/Missing Values for Analysis (Vectorized)
     # Median of NON-ZERO values
@@ -348,16 +349,7 @@ def audit_data_health_completeness(df):
     mask_underutilized = (df['total_sections'] > 0) & (df['total_enrollment'] > 50) & (avg_class_size < 15)
     add_issue(mask_underutilized, "Data entry error suspected. The ratio of students to sections is suspiciously low.")
 
-    # Rule 3: Teachers vs Specialization
-    t_spec = df['total_specialization_teachers'].fillna(0)
-    
-    # Incomplete Spec
-    mask_inc_spec = (t_reported > 0) & (t_spec > 0) & (t_spec < (t_reported * 0.5))
-    add_issue(mask_inc_spec, "Specialization form incomplete. The number of specialized teachers is much lower than the total teachers reported.")
-    
-    # Spec Mismatch (Too High)
-    mask_high_spec = (t_reported > 0) & (t_spec > (t_reported * 1.5))
-    add_issue(mask_high_spec, "Specialization count mismatch. The number of specialized teachers exceeds the total teachers reported.")
+    # Rule 3: Teachers vs Specialization (REMOVED)
 
     # Rule 4: Classrooms vs Learners
     # SCR = Enrollment / Classrooms
@@ -866,17 +858,14 @@ def analyze_school_summary(engine, target_school_id=None):
             (df['total_teaching_experience'] != df['total_teachers'])
         )
         
-        # 2. Specialized Teachers Mismatch (Tolerance 0)
-        df['flag_spec_mismatch'] = (
-            (df['total_teachers'] > 0) & 
-            (df['total_specialized_teachers'] != df['total_teachers'])
-        )
+        # 2. Specialized Teachers Mismatch (REMOVED)
+        df['flag_spec_mismatch'] = False
         
         # 3. Validation: If mismatches exist, they are flagged as 'other_flags' 
         # which automatically reduces the score by 5 points per flag in the standard calculation.
         
-        # Zero specialization reported (when teachers exist) - redundancy check
-        df['flag_zero_specialization'] = (df['total_specialized_teachers'] == 0) & (df['total_teachers'] > 0)
+        # Zero specialization reported (REMOVED)
+        df['flag_zero_specialization'] = False
         
         # Calculate data health score with HEAVY penalty for zero-value flags
         print("Calculating data health scores...")
@@ -932,8 +921,6 @@ def analyze_school_summary(engine, target_school_id=None):
             ('flag_anomaly_furniture', "Data Inconsistency: The furniture count is inconsistent with the school's size and student population."),
             ('flag_anomaly_organized_classes', "Data Inconsistency: The number of organized classes (sections) is inconsistent with the total enrollment. This often results in extremely large or small class sizes."),
             ('flag_exp_mismatch', "Data Quality Error: The total number of teachers reported does not match the sum of teachers broken down by years of teaching experience. These two figures must be identical."),
-            ('flag_spec_mismatch', "Data Quality Error: The total number of teachers reported does not match the sum of teachers broken down by subject specialization. All teachers must be accounted for in the specialization breakdown."),
-            ('flag_zero_specialization', "Data Inconsistency: Teachers are reported, but there is no breakdown of their subject specializations. Please complete the specialization data."),
             ('flag_outlier_ptr', "Statistical Outlier: The Pupil-Teacher Ratio (PTR) is statistically improbable (extremely high or low). This strongly suggests an error in either the enrollment count or the teacher count."),
             ('flag_outlier_pcr', "Statistical Outlier: The Pupil-Classroom Ratio (PCR) is statistically improbable (extremely high or low). This suggests an error in the enrollment or classroom count."),
             ('flag_outlier_psr', "Statistical Outlier: The Pupil-Seat Ratio (PSR) is statistically improbable. Please verify if the seat inventory and enrollment data are correct."),
