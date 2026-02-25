@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { FiCheck, FiCheckCircle } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
-const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!" }) => {
+const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!", redirectUrl = '/school-forms' }) => {
     const navigate = useNavigate();
     const [countdown, setCountdown] = React.useState(3);
 
@@ -15,7 +15,7 @@ const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!"
                 setCountdown((prev) => {
                     if (prev <= 1) {
                         clearInterval(timer);
-                        navigate('/school-forms');
+                        navigate(redirectUrl);
                         return 0;
                     }
                     return prev - 1;
@@ -50,7 +50,7 @@ const SuccessModal = ({ isOpen, onClose, message = "Changes Saved Successfully!"
                     </p>
 
                     <button
-                        onClick={() => navigate('/school-forms')}
+                        onClick={() => navigate(redirectUrl)}
                         className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-green-900/20 transition-all active:scale-[0.98]"
                     >
                         Great!

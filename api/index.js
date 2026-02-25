@@ -4353,7 +4353,7 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
   const { schoolId } = req.params;
   try {
     const result = await pool.query(`
-      SELECT school_id, school_name, region, division, latitude, longitude 
+      SELECT *
       FROM schools 
       WHERE school_id = $1
     `, [schoolId]);
@@ -4767,6 +4767,14 @@ app.get('/api/locations/districts', async (req, res) => {
   try {
     const result = await pool.query('SELECT DISTINCT district FROM schools WHERE region = $1 AND division = $2 AND district IS NOT NULL AND district != \'\' ORDER BY district ASC', [region, division]);
     res.json(result.rows.map(r => r.district));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/locations/leg-districts', async (req, res) => {
+  const { region } = req.query;
+  try {
+    const result = await pool.query('SELECT DISTINCT leg_district FROM schools WHERE region = $1 AND leg_district IS NOT NULL AND leg_district != \'\' ORDER BY leg_district ASC', [region]);
+    res.json(result.rows.map(r => r.leg_district));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -6536,7 +6544,11 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
                 teach_exp_0_1, teach_exp_2_5, teach_exp_6_10,
                 teach_exp_11_15, teach_exp_16_20, teach_exp_21_25,
                 teach_exp_26_30, teach_exp_31_35, teach_exp_36_40,
-                teach_exp_40_45
+                teach_exp_40_45,
+
+                -- Departmentalized
+                dept_english, dept_filipino, dept_science, dept_math, dept_ap,
+                dept_mapeh, dept_tle, dept_values, dept_gen_ed, dept_ece, dept_others
             FROM school_profiles 
             WHERE submitted_by = $1
         `;
@@ -6570,7 +6582,20 @@ app.get('/api/teaching-personnel/:uid', async (req, res) => {
         teach_exp_26_30: row.teach_exp_26_30,
         teach_exp_31_35: row.teach_exp_31_35,
         teach_exp_36_40: row.teach_exp_36_40,
-        teach_exp_40_45: row.teach_exp_40_45
+        teach_exp_40_45: row.teach_exp_40_45,
+
+        // Departmentalized
+        dept_english: row.dept_english,
+        dept_filipino: row.dept_filipino,
+        dept_science: row.dept_science,
+        dept_math: row.dept_math,
+        dept_ap: row.dept_ap,
+        dept_mapeh: row.dept_mapeh,
+        dept_tle: row.dept_tle,
+        dept_values: row.dept_values,
+        dept_gen_ed: row.dept_gen_ed,
+        dept_ece: row.dept_ece,
+        dept_others: row.dept_others
       }
     });
 
@@ -6614,6 +6639,12 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
                 teach_exp_26_30 = $26::INT, teach_exp_31_35 = $27::INT, teach_exp_36_40 = $28::INT,
                 teach_exp_40_45 = $29::INT,
 
+                -- Departmentalized Teachers
+                dept_english = $33::INT, dept_filipino = $34::INT, dept_science = $35::INT,
+                dept_math = $36::INT, dept_ap = $37::INT, dept_mapeh = $38::INT,
+                dept_tle = $39::INT, dept_values = $40::INT, dept_gen_ed = $41::INT,
+                dept_ece = $42::INT, dept_others = $43::INT,
+
                 updated_at = CURRENT_TIMESTAMP
             WHERE TRIM(submitted_by) = TRIM($1)
             RETURNING school_id;
@@ -6645,7 +6676,13 @@ app.post('/api/save-teaching-personnel', async (req, res) => {
       d.teach_exp_40_45 || 0, // 29
 
       // Calculated Values (30-32)
-      t_es, t_jhs, t_shs
+      t_es, t_jhs, t_shs,
+
+      // Departmentalized (33-43)
+      d.dept_english || 0, d.dept_filipino || 0, d.dept_science || 0,
+      d.dept_math || 0, d.dept_ap || 0, d.dept_mapeh || 0,
+      d.dept_tle || 0, d.dept_values || 0, d.dept_gen_ed || 0,
+      d.dept_ece || 0, d.dept_others || 0
     ];
 
     const result = await pool.query(query, values);

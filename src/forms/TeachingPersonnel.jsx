@@ -91,6 +91,12 @@ const TeachingPersonnel = ({ embedded }) => {
         teach_exp_11_15: 0, teach_exp_16_20: 0, teach_exp_21_25: 0,
         teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
         teach_exp_40_45: 0,
+
+        // DEPARTMENTALIZED TEACHERS
+        dept_english: 0, dept_filipino: 0, dept_science: 0,
+        dept_math: 0, dept_ap: 0, dept_mapeh: 0,
+        dept_tle: 0, dept_values: 0, dept_gen_ed: 0,
+        dept_ece: 0, dept_others: 0,
     });
 
     const [originalData, setOriginalData] = useState(null);
@@ -132,6 +138,10 @@ const TeachingPersonnel = ({ embedded }) => {
                     teach_exp_11_15: 0, teach_exp_16_20: 0, teach_exp_21_25: 0,
                     teach_exp_26_30: 0, teach_exp_31_35: 0, teach_exp_36_40: 0,
                     teach_exp_40_45: 0,
+                    dept_english: 0, dept_filipino: 0, dept_science: 0,
+                    dept_math: 0, dept_ap: 0, dept_mapeh: 0,
+                    dept_tle: 0, dept_values: 0, dept_gen_ed: 0,
+                    dept_ece: 0, dept_others: 0,
                 };
 
                 // STEP 2: IMMEDIATE CACHE LOAD
@@ -242,6 +252,19 @@ const TeachingPersonnel = ({ embedded }) => {
                                     teach_exp_31_35: dbData.teach_exp_31_35 || 0,
                                     teach_exp_36_40: dbData.teach_exp_36_40 || 0,
                                     teach_exp_40_45: dbData.teach_exp_40_45 || 0,
+
+                                    // Departmentalized Teachers
+                                    dept_english: dbData.dept_english || 0,
+                                    dept_filipino: dbData.dept_filipino || 0,
+                                    dept_science: dbData.dept_science || 0,
+                                    dept_math: dbData.dept_math || 0,
+                                    dept_ap: dbData.dept_ap || 0,
+                                    dept_mapeh: dbData.dept_mapeh || 0,
+                                    dept_tle: dbData.dept_tle || 0,
+                                    dept_values: dbData.dept_values || 0,
+                                    dept_gen_ed: dbData.dept_gen_ed || 0,
+                                    dept_ece: dbData.dept_ece || 0,
+                                    dept_others: dbData.dept_others || 0,
                                 };
 
                                 setFormData(initialData);
@@ -287,9 +310,9 @@ const TeachingPersonnel = ({ embedded }) => {
     };
 
     const getTotal = () => {
-        // Calculate total teachers by excluding teaching experience fields (teach_exp_*)
+        // Calculate total teachers by excluding teaching experience fields (teach_exp_*) and departmentalized (dept_*)
         return Object.entries(formData).reduce((total, [key, value]) => {
-            if (!key.startsWith('teach_exp_') && !key.startsWith('teach_multi_3plus_flag')) {
+            if (!key.startsWith('teach_exp_') && !key.startsWith('teach_multi_3plus_flag') && !key.startsWith('dept_')) {
                 total += parseInt(value) || 0;
             }
             return total;
@@ -359,6 +382,15 @@ const TeachingPersonnel = ({ embedded }) => {
             'teach_exp_31_35', 'teach_exp_36_40', 'teach_exp_40_45'
         ];
         for (const f of expFields) {
+            if (!isValidEntry(formData[f])) return false;
+        }
+
+        // 5. Departmentalized
+        const deptFields = [
+            'dept_english', 'dept_filipino', 'dept_science', 'dept_math', 'dept_ap',
+            'dept_mapeh', 'dept_tle', 'dept_values', 'dept_gen_ed', 'dept_ece', 'dept_others'
+        ];
+        for (const f of deptFields) {
             if (!isValidEntry(formData[f])) return false;
         }
 
@@ -609,6 +641,31 @@ const TeachingPersonnel = ({ embedded }) => {
                             </div>
                         </div>
                     )}
+
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">
+                            <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600">
+                                <FiBookOpen size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-800 font-bold text-lg">Departmentalized Teachers by Subject Area</h2>
+                                <p className="text-xs text-slate-400 font-medium">Faculty count by specialization</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <TeacherInput label="English" name="dept_english" value={formData.dept_english ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Filipino" name="dept_filipino" value={formData.dept_filipino ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Science" name="dept_science" value={formData.dept_science ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Math" name="dept_math" value={formData.dept_math ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Araling Panlipunan" name="dept_ap" value={formData.dept_ap ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="MAPEH" name="dept_mapeh" value={formData.dept_mapeh ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="TLE" name="dept_tle" value={formData.dept_tle ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Values Ed" name="dept_values" value={formData.dept_values ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Gen Ed" name="dept_gen_ed" value={formData.dept_gen_ed ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="ECE" name="dept_ece" value={formData.dept_ece ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                            <TeacherInput label="Others" name="dept_others" value={formData.dept_others ?? ''} onChange={handleChange} disabled={isLocked || viewOnly || isDummy || isReadOnly} />
+                        </div>
+                    </div>
 
                     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
                         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-50">

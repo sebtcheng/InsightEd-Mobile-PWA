@@ -34,6 +34,7 @@ const AUTHORIZATION_CODES = {
     'Division Engineer': 'E5T8-B2W3',
     'Local Government Unit': 'L2G7-X4Z9',
     'Central Office Finance': '8XK2-M9P4', // Same as Central Office
+    'Beta Tester': 'B3TA-T3ST', // Added for beta testers
     'Super User': 'SUP3R-US3R', // Added for testing
     // 'Admin' is usually hidden or database-only, but adding for completeness if enabled in dropdown
     'Admin': 'A3M6-Y1K8'
@@ -53,6 +54,7 @@ const getDashboardPath = (role) => {
         'School Division Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
+        'Beta Tester': '/modular-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -333,13 +335,13 @@ const Register = () => {
         e.preventDefault();
 
         // FAKE EMAIL STRATEGY:
-        // If School Head, Auth Email is [SchoolID]@insighted.app
+        // If School Head or Beta Tester, Auth Email is [SchoolID]@insighted.app
         // The "Real" email is stored in formData.schoolEmail and sent to backend
-        const authEmail = (formData.role === 'School Head')
+        const authEmail = (formData.role === 'School Head' || formData.role === 'Beta Tester')
             ? `${selectedSchool.school_id}@insighted.app`
             : (formData.email || '').trim();
 
-        const contactEmail = (formData.role === 'School Head')
+        const contactEmail = (formData.role === 'School Head' || formData.role === 'Beta Tester')
             ? (formData.schoolEmail || '').trim()
             : authEmail; // For others, auth email is contact email
 
@@ -360,7 +362,7 @@ const Register = () => {
             }
         }
 
-        if (formData.role === 'School Head') {
+        if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
             if (!selectedSchool) {
                 alert("Please select a school.");
                 return;
@@ -372,7 +374,7 @@ const Register = () => {
 
             // --- STRICT DEPED EMAIL VALIDATION ---
             const lowerEmail = contactEmail.toLowerCase();
-            if (!lowerEmail.endsWith('@deped.gov.ph')) {
+            if (formData.role === 'School Head' && !lowerEmail.endsWith('@deped.gov.ph')) {
                 alert("Restricted Access: Please use your official DepEd email address (@deped.gov.ph).");
                 return;
             }
@@ -392,7 +394,7 @@ const Register = () => {
 
 
         // STRICT EMAIL VALIDATION (Global Check)
-        if (formData.role !== 'Local Government Unit' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
+        if (formData.role !== 'Local Government Unit' && formData.role !== 'Beta Tester' && !contactEmail.toLowerCase().endsWith('@deped.gov.ph')) {
             alert("Registration is restricted to official DepEd accounts (@deped.gov.ph).");
             return;
         }
@@ -428,8 +430,8 @@ const Register = () => {
         try {
             let regData = null;
 
-            // STEP A: Pre-Checks for School Head
-            if (formData.role === 'School Head') {
+            // STEP A: Pre-Checks for School Head or Beta Tester
+            if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
                 if (!selectedSchool) throw new Error("Please select a school.");
 
                 // Backend Check
@@ -501,7 +503,7 @@ const Register = () => {
             }
 
             // STEP C: Role-Specific Persistence
-            if (formData.role === 'School Head') {
+            if (formData.role === 'School Head' || formData.role === 'Beta Tester') {
                 // CALL NEW ONE-SHOT ENDPOINT
                 console.log("SENDING REGISTRATION DATA:", {
                     ...selectedSchool
@@ -537,11 +539,11 @@ const Register = () => {
                 // Save to Firestore (Minimal user profile + schoolId link)
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
-                    role: 'School Head',
+                    role: formData.role, // Use formData.role to preserve Beta Tester or School Head
                     schoolId: selectedSchool.school_id,
                     loginId: selectedSchool.school_id,
                     contactNumber: contactDigits,
-                    firstName: "School Head",
+                    firstName: formData.role,
                     lastName: selectedSchool.school_id,
                     iern: regData.iern, // From Backend
                     authProvider: "email",
@@ -596,8 +598,10 @@ const Register = () => {
             }
 
             // STEP D: Success
-            if (formData.role === 'School Head' && regData?.iern) {
+            if ((formData.role === 'School Head' || formData.role === 'Beta Tester') && regData?.iern) {
                 setRegisteredIern(regData.iern);
+                // Set role in localStorage for immediate access by Dashboard/BottomNav when the user clicks 'Continue'
+                localStorage.setItem('userRole', formData.role);
                 setShowSuccessModal(true);
             } else {
                 // Set role in localStorage for immediate access by Dashboard/BottomNav
@@ -649,6 +653,7 @@ const Register = () => {
                                         <option value="Division Engineer">Division Engineer</option>
                                         <option value="Local Government Unit">Local Government Unit</option>
                                         <option value="Central Office Finance">Central Office Finance</option>
+                                        {/* <option value="Beta Tester">Beta Tester</option> */}
                                         {/* <option value="Super User" hidden>Super User</option> */}
                                         {/* Super User hidden from registration - managed internally */}
                                         {/* {<option value="Admin">Admin</option>} */}
@@ -683,8 +688,8 @@ const Register = () => {
                                 </div>
                             )}
 
-                            {/* === SCHOOL HEAD SPECIFIC FLOW === */}
-                            {formData.role === 'School Head' ? (
+                            {/* === SCHOOL HEAD & BETA TESTER SPECIFIC FLOW === */}
+                            {formData.role === 'School Head' || formData.role === 'Beta Tester' ? (
                                 <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4">
                                     <div className="bg-white p-5 rounded-2xl border-l-4 border-l-blue-500 shadow-sm border border-slate-100">
                                         <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -1270,7 +1275,7 @@ const Register = () => {
                             {/* <div className="pt-2 border-t border-slate-100 animate-in fade-in">
                                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
                                     <span className="bg-blue-100 text-blue-600 w-6 h-6 flex items-center justify-center rounded-full text-xs">
-                                        {formData.role === 'School Head' ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
+                                        {(formData.role === 'School Head' || formData.role === 'Beta Tester') ? 2 : (['Engineer'].includes(formData.role) ? 3 : 2)}
                                     </span>
                                     Account Security
                                 </h3>

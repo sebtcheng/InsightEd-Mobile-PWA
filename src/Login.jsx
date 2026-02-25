@@ -30,6 +30,7 @@ const getDashboardPath = (role) => {
         'Central Office': '/monitoring-dashboard',
         'Central Office Finance': '/finance-dashboard',
         'Super User': '/super-user-selector',
+        'Beta Tester': '/modular-dashboard',
     };
     return roleMap[role] || '/';
 };
@@ -456,7 +457,7 @@ const Login = () => {
                 // --- NAVIGATION ---
                 console.log("Navigating for role:", role);
                 // alert(`Login Success! Role: ${role}`); // Temporary Debug
-                if (role === 'School Head') {
+                if (role === 'School Head' || role === 'Beta Tester') {
                     // Try to fetch profile, but don't block navigation on it
                     fetch(`/api/school-by-user/${uid}`)
                         .then(res => res.json())
@@ -465,8 +466,14 @@ const Login = () => {
                         })
                         .catch(err => console.log("Profile check failed, proceeding anyway"));
 
-                    console.log("Navigating to SchoolHeadDashboard");
-                    navigate('/schoolhead-dashboard');
+                    if (role === 'School Head') {
+                        console.log("Navigating to SchoolHeadDashboard");
+                        navigate('/schoolhead-dashboard');
+                    } else {
+                        const path = getDashboardPath(role);
+                        console.log("Navigating to:", path);
+                        navigate(path);
+                    }
                 } else if (role === 'Local Government Unit') {
                     // --- LGU LOGIC: Redirect to LGU Dashboard ---
                     console.log("Redirecting LGU to Dashboard...");

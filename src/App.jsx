@@ -68,6 +68,10 @@ import DetailedProjInfo from './modules/DetailedProjInfo';
 import ProjectValidation from './modules/ProjectValidation';
 import Leaderboard from './modules/Leaderboard';
 
+// Beta Tester Modular Flow
+import ModularDashboard from './components/ModularDashboard';
+import Unit1SchoolIdentity from './components/modular/Unit1SchoolIdentity';
+
 // --- WRAPPER COMPONENT TO HANDLE LOCATION ---
 const AnimatedRoutes = () => {
   const location = useLocation();
@@ -141,6 +145,24 @@ const AnimatedRoutes = () => {
 
         <Route path="/dummy-forms" element={<DummyDashboard />} />
         <Route path="/psip" element={<PSIP />} />
+
+        {/* Beta Tester Modular Flow */}
+        <Route
+          path="/modular-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <ModularDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/modular/unit-1"
+          element={
+            <ProtectedRoute allowedRoles={['Beta Tester']}>
+              <Unit1SchoolIdentity />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Menus */}
         <Route path="/school-forms" element={<SchoolForms />} />

@@ -9,6 +9,7 @@ const PROJECTS_STORE = 'projects_cache'; // New store for caching projects
 const GALLERY_STORE = 'gallery_cache'; // New store for caching gallery images
 const DRAFT_SPACES_STORE = 'buildable_spaces_drafts'; // New store for draft spaces
 const REPAIRS_STORE = 'facility_repairs'; // Store for offline facility repairs
+const UNIT_1_DRAFT_STORE = 'unit_1_draft_store'; // New store for Unit 1 Beta Tester drafts
 
 const SCHOOLS_STORE = 'schools_cache'; // Define constant at top
 
@@ -47,6 +48,10 @@ export async function initDB() {
       if (!db.objectStoreNames.contains(REPAIRS_STORE)) {
         const repairStore = db.createObjectStore(REPAIRS_STORE, { keyPath: 'local_id', autoIncrement: true });
         repairStore.createIndex('iern', 'iern', { unique: false });
+      }
+      // Create Unit 1 Drafts store
+      if (!db.objectStoreNames.contains(UNIT_1_DRAFT_STORE)) {
+        db.createObjectStore(UNIT_1_DRAFT_STORE, { keyPath: 'iern' });
       }
     },
   });
@@ -281,4 +286,24 @@ export async function getLocalRepairs() {
 export async function deleteLocalRepair(localId) {
   const db = await initDB();
   return db.delete(REPAIRS_STORE, localId);
+}
+
+// ==========================================
+//        UNIT 1 MODULAR DRAFTS (Beta Tester)
+// ==========================================
+
+export async function saveUnit1Draft(iern, draftData) {
+  const db = await initDB();
+  return db.put(UNIT_1_DRAFT_STORE, { iern, data: draftData, timestamp: Date.now() });
+}
+
+export async function getUnit1Draft(iern) {
+  const db = await initDB();
+  const entry = await db.get(UNIT_1_DRAFT_STORE, iern);
+  return entry ? entry.data : null;
+}
+
+export async function clearUnit1Draft(iern) {
+  const db = await initDB();
+  return db.delete(UNIT_1_DRAFT_STORE, iern);
 }
