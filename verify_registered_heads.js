@@ -26,25 +26,23 @@ async function verify() {
     try {
         const region = 'Region II'; // Example Region
 
-        // 1. Manual Query
-        const userRes = await pool.query(`
-        SELECT COUNT(*) FROM users 
-        WHERE role = 'School Head' 
-        AND TRIM(region) = TRIM($1)
+        // 1. Manual Query: Count schools that have a profile
+        const profileRes = await pool.query(`
+        SELECT COUNT(sp.school_id) 
+        FROM schools s
+        LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
+        WHERE TRIM(s.region) = TRIM($1)
     `, [region]);
-        const manualCount = parseInt(userRes.rows[0].count);
-        console.log(`Manual DB Count for ${region}: ${manualCount}`);
+        const manualCount = parseInt(profileRes.rows[0].count);
+        console.log(`Manual DB Count (school_profiles) for ${region}: ${manualCount}`);
 
-        // 2. API SQL Logic
+        // 2. API SQL Logic Replication
         const statsRes = await pool.query(`
       SELECT 
         COUNT(s.school_id) as total_schools,
-        (
-            SELECT COUNT(*) FROM users u 
-            WHERE u.role = 'School Head' 
-            AND TRIM(u.region) = TRIM(s.region)
-        ) as registered_heads_count
+        COUNT(sp.school_id) as registered_schools_count
       FROM schools s
+      LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       WHERE TRIM(s.region) = TRIM($1)
       GROUP BY s.region
     `, [region]);
@@ -52,8 +50,8 @@ async function verify() {
         if (statsRes.rows.length === 0) {
             console.log("No schools found for this region in 'schools' table.");
         } else {
-            const apiCount = parseInt(statsRes.rows[0].registered_heads_count);
-            console.log(`API SQL Count for ${region}: ${apiCount}`);
+            const apiCount = parseInt(statsRes.rows[0].registered_schools_count);
+            console.log(`API SQL Count (registered_schools_count) for ${region}: ${apiCount}`);
 
             if (manualCount === apiCount) {
                 console.log("✅ SUCCESS: Counts match!");

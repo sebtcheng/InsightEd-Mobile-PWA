@@ -1334,12 +1334,12 @@ const MonitoringDashboard = () => {
                                         </div>
                                     )}
 
-                                    {/* NEW: Registered School Heads Count */}
+                                    {/* NEW: Registered Schools Count */}
                                     {(activeTab === 'all' || activeTab === 'home' || activeTab === 'accomplishment') && (
                                         <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl col-span-1">
                                             {(() => {
                                                 const displayTotal = jurisdictionTotal;
-                                                const registeredCount = parseInt(stats?.registered_heads_count || 0);
+                                                const registeredCount = parseInt(stats?.registered_schools_count || 0);
                                                 const percentage = displayTotal > 0 ? ((registeredCount / displayTotal) * 100).toFixed(1) : 0;
 
                                                 return (
@@ -1349,7 +1349,7 @@ const MonitoringDashboard = () => {
                                                                 {percentage}%
                                                             </span>
                                                             <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mt-1">
-                                                                Registered School Heads <br />
+                                                                Registered Schools <br />
                                                                 <span className="text-emerald-600 dark:text-emerald-300">({registeredCount} / {displayTotal})</span>
                                                             </p>
                                                         </div>

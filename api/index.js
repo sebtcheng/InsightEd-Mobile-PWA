@@ -3746,7 +3746,7 @@ app.post('/api/sdo/submit-school', async (req, res) => {
       if (existingStatus === 'pending' || existingStatus === 'approved') {
         return res.status(409).json({ error: "School ID already exists in pending submissions" });
       }
-      
+
       if (existingStatus === 'rejected') {
         const updateResult = await pool.query(`
           UPDATE pending_schools SET
@@ -3762,7 +3762,7 @@ app.post('/api/sdo/submit-school', async (req, res) => {
           barangay, street_address, mother_school_id, curricular_offering,
           latitude, longitude, submitted_by, submitted_by_name, special_order
         ]);
-        
+
         console.log(`✅ School resubmitted for approval: ${school_name} (${school_id})`);
         return res.json({ success: true, pending_id: updateResult.rows[0].pending_id });
       }
@@ -5623,7 +5623,7 @@ app.post('/api/save-enrolment', async (req, res) => {
       data.aral_math_g5 || 0, data.aral_read_g5 || 0, data.aral_sci_g5 || 0,
       data.aral_math_g6 || 0, data.aral_read_g6 || 0, data.aral_sci_g6 || 0,
       data.aral_total || 0,
-      
+
       // Inclusive Options
       data.sned_learners || 0, data.non_graded_learners || 0
     ];
@@ -7818,14 +7818,8 @@ app.get('/api/monitoring/stats', async (req, res) => {
         -- For Validation Count (Completed AND NOT Excellent from school_summary)
         COALESCE(COUNT(CASE WHEN sp.completion_percentage = 100 AND ss.data_health_description IS NOT NULL AND ss.data_health_description != 'Excellent' THEN 1 END), 0) as for_validation_count,
 
-        -- REGISTERED SCHOOL HEADS COUNT
-        (
-            SELECT COUNT(*) FROM users u 
-            WHERE u.role = 'School Head' 
-            AND TRIM(u.region) = TRIM(s.region)
-            ${division ? 'AND TRIM(u.division) = TRIM(s.division)' : ''}
-            ${req.query.district ? 'AND TRIM(u.office) = TRIM(s.district)' : ''}
-        ) as registered_heads_count
+        -- REGISTERED SCHOOLS COUNT (from school_profiles)
+        COUNT(sp.school_id) as registered_schools_count
       FROM schools s
       LEFT JOIN school_profiles sp ON s.school_id = sp.school_id
       LEFT JOIN school_summary ss ON s.school_id = ss.school_id
@@ -7863,7 +7857,7 @@ app.get('/api/monitoring/stats', async (req, res) => {
       learner_stats: parseInt(row.learner_stats || 0),
       completed_schools_count: parseInt(row.completed_schools_count || 0),
       validated_schools_count: parseInt(row.validated_schools_count || 0),
-      registered_heads_count: parseInt(row.registered_heads_count || 0)
+      registered_schools_count: parseInt(row.registered_schools_count || 0)
     };
 
     res.json(safeRow);
