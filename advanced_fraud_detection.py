@@ -749,7 +749,16 @@ def analyze_school_summary(engine, target_school_id=None):
         # Load school_summary
         print("Loading school_summary for analysis...")
         if target_school_id:
-            query = "SELECT * FROM school_summary WHERE school_id = %(school_id)s"
+            # Load the target school PLUS 300 perfect schools to act as a statistical baseline 
+            # for accurately calculating standard deviations, Z-scores, and correlation slopes
+            query = """
+                SELECT * FROM school_summary WHERE school_id = %(school_id)s
+                UNION ALL
+                (SELECT * FROM school_summary 
+                 WHERE data_health_score = 100 
+                 AND school_id != %(school_id)s 
+                 LIMIT 300)
+            """
             df = pd.read_sql(query, engine, params={"school_id": str(target_school_id)})
         else:
             query = "SELECT * FROM school_summary"
