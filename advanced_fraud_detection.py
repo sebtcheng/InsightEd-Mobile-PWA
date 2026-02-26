@@ -78,8 +78,12 @@ def clean_and_impute(df):
     ]
     granular_teacher_sum = get_numeric(df, granular_t_cols).sum(axis=1)
     
-    # Calculate max of summary vs granular
-    df['num_teachers'] = np.maximum(summary_teacher_sum, granular_teacher_sum)
+    # NEW fields addition for total teachers
+    extra_t_cols = ['non_advisory', 'sned_teachers']
+    extra_teacher_sum = get_numeric(df, extra_t_cols).sum(axis=1)
+
+    # Calculate max of summary vs granular, then add extra
+    df['num_teachers'] = np.maximum(summary_teacher_sum, granular_teacher_sum) + extra_teacher_sum
     
     # 2. Classrooms
     classroom_components = ['build_classrooms_good', 'build_classrooms_repair', 'build_classrooms_new']

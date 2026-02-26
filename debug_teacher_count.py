@@ -32,7 +32,8 @@ def debug_school(school_id):
     granular_t_cols = [
         'teach_kinder', 'teach_g1', 'teach_g2', 'teach_g3', 'teach_g4', 'teach_g5', 'teach_g6',
         'teach_g7', 'teach_g8', 'teach_g9', 'teach_g10', 'teach_g11', 'teach_g12',
-        'teach_multi_1_2', 'teach_multi_3_4', 'teach_multi_5_6', 'teach_multi_3plus_count'
+        'teach_multi_1_2', 'teach_multi_3_4', 'teach_multi_5_6', 'teach_multi_3plus_count',
+        'sned_teachers', 'non_advisory'
     ]
     print("\n--- Granular Columns ---")
     sum_granular = 0
