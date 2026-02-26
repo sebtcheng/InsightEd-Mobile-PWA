@@ -994,6 +994,55 @@ app.get('/api/schools', async (req, res) => {
   }
 });
 
+// --- 3b-1. GET: Fetch School Data Health Score ---
+app.get('/api/schools/:schoolId/health-score', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT 
+        (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
+        (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
+        (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+        (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
+        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+        (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+        (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
+        (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+        (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
+        (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status
+      FROM school_profiles sp
+      WHERE sp.school_id = $1
+    `, [schoolId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    const data = result.rows[0];
+    
+    const checklist = [
+      { module: 'School Profile', status: data.profile_status },
+      { module: 'School Head Information', status: data.head_status },
+      { module: 'Enrollment', status: data.enrollment_status },
+      { module: 'Organized Classes', status: data.classes_status },
+      { module: 'Learner Statistics', status: data.learner_stats_status },
+      { module: 'Shifting Modalities', status: data.shifting_status },
+      { module: 'Teaching Personnel', status: data.personnel_status },
+      { module: 'Teacher Specialization', status: data.specialization_status },
+      { module: 'School Resources', status: data.resources_status },
+      { module: 'Physical Facilities', status: data.facilities_status }
+    ];
+
+    const completedCount = checklist.filter(item => item.status).length;
+    const score = Math.round((completedCount / checklist.length) * 100);
+
+    res.json({ score, checklist, totalModules: checklist.length, completedCount });
+  } catch (err) {
+    console.error("Fetch Health Score Error:", err);
+    res.status(500).json({ error: "Failed to calculate health score" });
+  }
+});
+
 // --- 3c. POST: Check if School is Already Registered ---
 app.post('/api/check-existing-school', async (req, res) => {
   const { schoolId } = req.body;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiInfo, FiUsers, FiTrendingUp, FiLayout, FiBox, FiLayers, FiUser, FiActivity, FiServer } from 'react-icons/fi';
+import { FiArrowLeft, FiInfo, FiUsers, FiTrendingUp, FiLayout, FiBox, FiLayers, FiUser, FiActivity, FiServer, FiHeart } from 'react-icons/fi';
 import { TbSchool, TbReportAnalytics } from "react-icons/tb";
 
 import Enrolment from '../forms/Enrolment';
@@ -13,10 +13,11 @@ import TeachingPersonnel from '../forms/TeachingPersonnel';
 import TeacherSpecialization from '../forms/TeacherSpecialization';
 import SchoolResources from '../forms/SchoolResources';
 import PhysicalFacilities from '../forms/PhysicalFacilities';
+import DataHealthDashboard from '../components/DataHealthDashboard';
 
 const SchoolAuditView = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('profile');
+    const [activeTab, setActiveTab] = useState('health');
     const [schoolData, setSchoolData] = useState(null);
 
     useEffect(() => {
@@ -66,6 +67,7 @@ const SchoolAuditView = () => {
 
                     {/* Tabs */}
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        <TabButton active={activeTab === 'health'} onClick={() => setActiveTab('health')} icon={<FiHeart />} label="Data Health" />
                         <TabButton active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} icon={<TbSchool />} label="Profile" />
                         <TabButton active={activeTab === 'information'} onClick={() => setActiveTab('information')} icon={<FiInfo />} label="Head Info" />
                         <TabButton active={activeTab === 'enrolment'} onClick={() => setActiveTab('enrolment')} icon={<FiUsers />} label="Enrolment" />
@@ -89,6 +91,7 @@ const SchoolAuditView = () => {
                         <span className="text-9xl font-black -rotate-45 whitespace-nowrap">AUDIT MODE</span>
                     </div>
 
+                    {activeTab === 'health' && <DataHealthDashboard schoolId={schoolData.id} />}
                     {activeTab === 'profile' && <SchoolProfile embedded={true} />}
                     {activeTab === 'information' && <SchoolInformation embedded={true} />}
                     {activeTab === 'enrolment' && <Enrolment embedded={true} />}

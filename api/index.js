@@ -4505,6 +4505,54 @@ app.get('/api/school-profile/:schoolId', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch school profile" });
   }
 });
+// --- 3b-1. GET: Fetch School Data Health Score ---
+app.get('/api/schools/:schoolId/health-score', async (req, res) => {
+  const { schoolId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT 
+        (CASE WHEN sp.school_id IS NOT NULL THEN true ELSE false END) as profile_status,
+        (CASE WHEN sp.head_last_name IS NOT NULL AND sp.head_last_name != '' THEN true ELSE false END) as head_status,
+        (CASE WHEN sp.total_enrollment > 0 THEN true ELSE false END) as enrollment_status,
+        (CASE WHEN sp.classes_kinder > 0 THEN true ELSE false END) as classes_status,
+        (CASE WHEN sp.shift_kinder IS NOT NULL THEN true ELSE false END) as shifting_status,
+        (CASE WHEN sp.teach_kinder > 0 THEN true ELSE false END) as personnel_status,
+        (CASE WHEN sp.spec_math_major > 0 OR sp.spec_guidance > 0 THEN true ELSE false END) as specialization_status,
+        (CASE WHEN sp.res_water_source IS NOT NULL OR sp.res_toilets_male > 0 THEN true ELSE false END) as resources_status,
+        (CASE WHEN sp.stat_ip IS NOT NULL OR sp.stat_displaced IS NOT NULL THEN true ELSE false END) as learner_stats_status,
+        (CASE WHEN sp.build_classrooms_total IS NOT NULL THEN true ELSE false END) as facilities_status
+      FROM school_profiles sp
+      WHERE sp.school_id = $1
+    `, [schoolId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "School not found" });
+    }
+
+    const data = result.rows[0];
+    
+    const checklist = [
+      { module: 'School Profile', status: data.profile_status },
+      { module: 'School Head Information', status: data.head_status },
+      { module: 'Enrollment', status: data.enrollment_status },
+      { module: 'Organized Classes', status: data.classes_status },
+      { module: 'Learner Statistics', status: data.learner_stats_status },
+      { module: 'Shifting Modalities', status: data.shifting_status },
+      { module: 'Teaching Personnel', status: data.personnel_status },
+      { module: 'Teacher Specialization', status: data.specialization_status },
+      { module: 'School Resources', status: data.resources_status },
+      { module: 'Physical Facilities', status: data.facilities_status }
+    ];
+
+    const completedCount = checklist.filter(item => item.status).length;
+    const score = Math.round((completedCount / checklist.length) * 100);
+
+    res.json({ score, checklist, totalModules: checklist.length, completedCount });
+  } catch (err) {
+    console.error("Fetch Health Score Error:", err);
+    res.status(500).json({ error: "Failed to calculate health score" });
+  }
+});
 
 // --- 3b. GET: Fetch All Schools (For Admin Dashboard) ---
 app.get('/api/schools', async (req, res) => {
@@ -4546,16 +4594,20 @@ app.post('/api/check-existing-school', async (req, res) => {
 
 // --- 3d. POST: Register School (One-Shot with Geofencing verification) ---
 app.post('/api/register-school', async (req, res) => {
-  const { uid, email, schoolData, contactNumber } = req.body;
+  const { uid, email, schoolData, contactNumber, role } = req.body;
 
   if (!uid || !schoolData || !schoolData.school_id) {
     return res.status(400).json({ error: "Missing required registration data." });
   }
 
+  // Fallback to School Head if role not provided for backward compatibility
+  const userRole = role || 'School Head';
+
   // DEBUG LOG
   console.log("âœ… REGISTRATION DATA:", {
     uid,
-    school: schoolData.school_name
+    school: schoolData.school_name,
+    role: userRole
   });
 
   const client = await pool.connect();
@@ -4590,7 +4642,7 @@ app.post('/api/register-school', async (req, res) => {
     // 3. CREATE USER (Optional)
     try {
       await client.query('SAVEPOINT user_creation');
-      // Populate users table with School Head details and location from schoolData
+      // Populate users table with School Head or Beta Tester details and location from schoolData
       // schoolData keys: region, division, province, municipality (city), school_id, school_name
       await client.query(
         `INSERT INTO users (
@@ -4599,6 +4651,7 @@ app.post('/api/register-school', async (req, res) => {
             region, division, province, city
          ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (uid) DO UPDATE SET 
+            role = EXCLUDED.role,
             contact_number = EXCLUDED.contact_number,
             region = EXCLUDED.region,
             division = EXCLUDED.division,
@@ -4607,9 +4660,9 @@ app.post('/api/register-school', async (req, res) => {
         [
           uid,
           email,
-          'School Head',
+          userRole,
           valueOrNull(contactNumber),
-          'School Head', // first_name
+          userRole, // first_name (now using role name instead of hardcoded 'School Head')
           schoolData.school_id, // last_name (using ID as per convention or could use Name)
           valueOrNull(schoolData.region),
           valueOrNull(schoolData.division),
